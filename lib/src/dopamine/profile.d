@@ -19,23 +19,18 @@ enum Lang
     c,
 }
 
-enum DCompiler
-{
-    ldc,
-    dmd,
-}
-
-enum CppCompiler
-{
-    gcc,
-    clang,
-    vs, // version?
-}
-
 enum OS
 {
     linux,
     windows,
+}
+
+class Compiler
+{
+    Lang lang;
+    string name;
+    string desc;
+    string ver;
 }
 
 class Profile
@@ -43,16 +38,6 @@ class Profile
     Arch arch;
     OS os;
     BuildType buildType;
-    Lang lang;
-    string compilerVersion;
-}
-
-class DProfile : Profile
-{
-    DCompiler compiler;
-}
-
-class CppProfile : Profile
-{
-    CppCompiler compiler;
+    Compiler dcomp;
+    Compiler ccomp;
 }

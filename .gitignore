@@ -1,3 +1,5 @@
 .vscode/
 build/
 install/
+.dub/
+dub.selections.json

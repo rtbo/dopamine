@@ -1,0 +1,10 @@
+{
+    "name": "dopamine",
+    "authors": ["Rémi Thebault"],
+    "description": "D graphics rendering library",
+    "targetType": "library",
+    "license": "MIT",
+    "sourcePaths": [ "lib/src", "lua/src" ],
+    "importPaths": [ "lib/src", "lua/src" ],
+    "stringImportPaths": [ "lib/lua" ]
+}

@@ -2,15 +2,16 @@ module dopamine.source;
 
 interface Source
 {
-    string fetch(string dest);
+    string fetch(in string dest);
 }
 
-class GitSource
+class GitSource : Source
 {
     private string _url;
     private string _revId;
+    private string _subdir;
 
-    this(string url, string revId)
+    this(string url, string revId, string subdir)
     {
         import dopamine.util : findProgram;
         import std.exception : enforce;
@@ -21,6 +22,7 @@ class GitSource
 
         _url = url;
         _revId = revId;
+        _subdir = subdir;
     }
 
     override string fetch(in string dest)
@@ -33,7 +35,7 @@ class GitSource
         import std.process : pipeProcess, Redirect;
         import std.uri : decode;
 
-        const decoded = decode(url);
+        const decoded = decode(_url);
         auto dirName = urlLastComp(decoded);
 
         if (dirName.endsWith(".git"))
@@ -41,16 +43,16 @@ class GitSource
             dirName = dirName[0 .. $ - 4];
         }
 
-        const srcDir = buildPath(workDir, dirName);
+        const srcDir = buildPath(dest, dirName);
 
         if (!exists(srcDir))
         {
-            runCommand(["git", "clone", url, dirName], workDir, false);
+            runCommand(["git", "clone", _url, dirName], dest, false);
         }
 
         enforce(isDir(srcDir));
 
-        runCommand(["git", "checkout", commitRef], srcDir, false);
+        runCommand(["git", "checkout", _revId], srcDir, false);
 
         return srcDir;
     }
@@ -83,6 +85,7 @@ private ArchiveFormat archiveFormat(in string path)
 in (isSupportedArchiveExt(path))
 {
     import std.algorithm : endsWith;
+    import std.uni : toLower;
 
     const lpath = path.toLower;
 

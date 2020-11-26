@@ -15,5 +15,5 @@ d_lib = static_library('dlib', ['src/d/lib.d'],
 d_app = executable('dapp', ['src/d/app.d'],
     install: false,
     include_directories: ['src/d'],
-    link_with: d_lib
+    link_with: d_lib,
 )
