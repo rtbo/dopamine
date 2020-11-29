@@ -70,8 +70,6 @@ int buildMain(string[] args)
     assert(profile, "profile not set");
 
     string srcDir;
-    string buildDir;
-    string installDir;
 
     if (recipe.outOfTree)
     {
@@ -82,12 +80,8 @@ int buildMain(string[] args)
         srcDir = ".";
     }
 
-    const hash = profile.digestHash();
-
-    // check in which condition the profile name can appear in the directory.
-    // wild-guess: when in-tree to help developer find the right folder
-    buildDir = format(".dop/%s-%s/build", profile.name, hash[0 .. 10]);
-    installDir = format(".dop/%s-%s/install", profile.name, hash[0 .. 10]);
+    const buildDir = localBuildDir(profile);
+    const installDir = localInstallDir(profile);
 
     recipe.build.configure(srcDir, buildDir, installDir, profile);
     recipe.build.build();

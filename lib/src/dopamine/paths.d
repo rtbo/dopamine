@@ -1,5 +1,9 @@
 module dopamine.paths;
 
+import dopamine.pack;
+import dopamine.profile;
+import dopamine.recipe;
+
 import std.path;
 
 string userDopDir()
@@ -30,7 +34,7 @@ string userProfileFile(string name)
     return buildPath(userProfileDir(), name ~ ".ini");
 }
 
-/// Check if current working directory is a package definition directory.
+/// Check if current working directory is a package directory.
 /// This is defined as a directory containing a `dopamine.lua` file
 bool inPackageDefinitionDir()
 {
@@ -49,7 +53,7 @@ void enforcePackageDefinitionDir()
 }
 
 /// Get the local dopamine folder
-/// Only valid within a directory containing `dopamine.lua`
+/// Must be called from package dir.
 string localDopDir()
 in(inPackageDefinitionDir())
 {
@@ -58,7 +62,48 @@ in(inPackageDefinitionDir())
 
 /// Get the local profile file
 string localProfileFile()
-in(inPackageDefinitionDir())
 {
-    return buildPath(".dop", "profile.ini");
+    return buildPath(localDopDir, "profile.ini");
+}
+
+/// Get the working dir for the selected profile
+/// Must be called from the package dir
+string localProfileWorkDir(Profile profile)
+in(profile && inPackageDefinitionDir())
+{
+    import std.format : format;
+
+    return buildPath(localDopDir, format("%s-%s", profile.digestHash[0 .. 10],
+            profile.name));
+}
+
+/// Get the build dir for the selected profile
+/// Must be called from the package dir
+string localBuildDir(Profile profile)
+in(profile && inPackageDefinitionDir())
+{
+    import std.format : format;
+
+    return buildPath(localProfileWorkDir(profile), "build");
+}
+
+/// Get the install dir for the selected profile
+/// Must be called from the package dir
+string localInstallDir(Profile profile)
+in(profile && inPackageDefinitionDir())
+{
+    import std.format : format;
+
+    return buildPath(localProfileWorkDir(profile), "install");
+}
+
+/// Get the path to the packed archive
+/// Must be called from the package dir
+string localPackageArchiveFile(Profile profile, Recipe recipe)
+in(profile && recipe && inPackageDefinitionDir())
+{
+    import std.format : format;
+
+    const filename = format("%s-%s%s", recipe.name, recipe.ver, ArchiveBackend.archiveExt);
+    return buildPath(localProfileWorkDir(profile), filename);
 }

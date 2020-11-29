@@ -1,6 +1,7 @@
 
 dop_src = [
     'src/dopamine/build.d',
+    'src/dopamine/pack.d',
     'src/dopamine/paths.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',
