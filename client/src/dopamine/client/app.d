@@ -1,45 +1,84 @@
 module dopamine.client.app;
 
 import dopamine.client.build;
-import std.algorithm;
-import std.process;
-import std.stdio;
+import dopamine.client.install;
+import dopamine.client.pack;
+import dopamine.client.profile;
+import dopamine.client.source;
+import dopamine.client.upload;
 
 import bindbc.lua;
 
+import std.algorithm;
+import std.getopt;
+import std.file;
+import std.format;
+import std.process;
+import std.stdio;
+
 int main(string[] args)
 {
+    import dopamine.recipe : initLua;
 
-    version (LUA_53_DYNAMIC) {
-        LuaSupport ret = loadLua();
+    initLua();
 
-        if(ret != luaSupport) {
-            if(ret == luaSupport.noLibrary) {
-                throw new Exception("could not find lua library");
-            }
-            else if(luaSupport.badLibrary) {
-                throw new Exception("could not find the right lua library");
-            }
+    const commandHandlers = [
+        "build" : &buildMain, "install" : &installMain, "pack" : &packageMain,
+        "profile" : &profileMain, "source" : &sourceMain, "upload" : &uploadMain,
+    ];
+
+    const commandNames = commandHandlers.keys;
+
+    // processing a few global args here
+
+    string[] globalArgs = args;
+    string[] leftover;
+    for (size_t i = 1; i < args.length; i++)
+    {
+        if (commandNames.canFind(args[i]))
+        {
+            globalArgs = args[0 .. i];
+            leftover = args[i .. $];
+            break;
         }
     }
 
-    auto commandHandlers = [
-        "build": &buildMain,
-    ];
+    string changeDir;
 
-    string command = "build";
+    auto helpInfo = getopt(globalArgs, "change-dir|C", &changeDir,);
 
-    if (args.length > 1 && args[1][0] != '-')
+    if (helpInfo.helpWanted)
     {
-        command = args[1];
-        args = args.remove(1);
+        defaultGetoptPrinter("The Dopamine package manager", helpInfo.options);
+        return 0;
     }
+    if (changeDir.length)
+    {
+        writeln("changing current directory to ", changeDir);
+        chdir(changeDir);
+    }
+
+    args = globalArgs ~ leftover;
+
+    const command = args.length > 1 ? args[1] : null;
 
     auto handler = command in commandHandlers;
-    if (handler) {
-        return (*handler)(args);
+    if (!handler)
+    {
+        stderr.writeln("unknown command: ", command);
+        return 1;
     }
 
-    stderr.writeln("unknown command: ", command);
-    return 1;
+    // remove command name
+    args = args.remove(1);
+
+    try
+    {
+        return (*handler)(args);
+    }
+    catch (Exception ex)
+    {
+        stderr.writeln(format("Error occured during %s execution:\n%s", command, ex.msg));
+        return 1;
+    }
 }

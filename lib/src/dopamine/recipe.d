@@ -2,12 +2,12 @@ module dopamine.recipe;
 
 import dopamine.build;
 import dopamine.source;
-import dopamine.dependency;
 
 import bindbc.lua;
 
 import std.exception;
 import std.string;
+import std.stdio;
 
 class Recipe
 {
@@ -17,10 +17,29 @@ class Recipe
     string license;
     string copyright;
     string[] langs;
+    bool outOfTree;
 
-    Dependency[] dependencies;
     Source source;
     BuildSystem build;
+}
+
+void initLua()
+{
+    version (LUA_53_DYNAMIC)
+    {
+        const ret = loadLua();
+        if (ret != luaSupport)
+        {
+            if (ret == luaSupport.noLibrary)
+            {
+                throw new Exception("could not find lua library");
+            }
+            else if (luaSupport.badLibrary)
+            {
+                throw new Exception("could not find the right lua library");
+            }
+        }
+    }
 }
 
 Recipe parseRecipe(string path)
@@ -35,8 +54,12 @@ Recipe parseRecipe(string path)
     lua_pushcfunction(L, &dopModuleLoader);
     lua_setfield(L, -2, "dop");
 
-    if (luaL_dofile(L, path.toStringz)) {
-        throw new Exception ("cannot run Lua file: " ~ fromStringz(lua_tostring(L, -1)).idup);
+    // popping package.preload and dopModuleLoader
+    lua_pop(L, 2);
+
+    if (luaL_dofile(L, path.toStringz))
+    {
+        throw new Exception("cannot run Lua file: " ~ fromStringz(lua_tostring(L, -1)).idup);
     }
 
     auto r = new Recipe;
@@ -46,14 +69,18 @@ Recipe parseRecipe(string path)
     r.description = globalStringVar(L, "description");
     r.license = globalStringVar(L, "license");
     r.copyright = globalStringVar(L, "copyright");
-    r.langs = globalTableVar(L, "langs").values;
+    r.langs = globalArrayTableVar(L, "langs");
+    r.outOfTree = globalBoolVar(L, "out_of_tree");
 
-    r.source = source(globalTableVar(L, "source"));
-    r.build = buildSystem(globalTableVar(L, "source"));
+    r.source = source(globalDictTableVar(L, "source"));
+    r.build = buildSystem(globalDictTableVar(L, "build"));
+
+    assert(lua_gettop(L) == 0, "Lua stack not clean");
 
     lua_close(L);
 
     return r;
+
 }
 
 private:
@@ -67,11 +94,17 @@ int dopModuleLoader(lua_State* L) nothrow
 
 Source source(string[string] aa)
 {
-    enforce (aa["type"] == "source");
+    enforce(aa["type"] == "source");
 
-    switch (aa["method"]) {
-    case "git":
-        return new GitSource(aa["url"], aa["revId"], aa["subdir"]);
+    switch (aa["method"])
+    {
+    case "git": {
+        auto url = enforce("url" in aa, "url is mandatory for Git source");
+        auto revId = enforce("revId" in aa, "revId is mandatory for Git source");
+        auto subdir = "subdir" in aa;
+        return new GitSource(*url, *revId, subdir ? *subdir : "");
+    }
+
     default:
         break;
     }
@@ -81,9 +114,10 @@ Source source(string[string] aa)
 
 BuildSystem buildSystem(string[string] aa)
 {
-    enforce (aa["type"] == "build");
+    enforce(aa["type"] == "build");
 
-    switch (aa["method"]) {
+    switch (aa["method"])
+    {
     case "meson":
         return new MesonBuildSystem();
     default:
@@ -93,45 +127,84 @@ BuildSystem buildSystem(string[string] aa)
     return null;
 }
 
-string globalStringVar(lua_State* L, string varName)
+string globalStringVar(lua_State* L, string varName, string def = null)
 {
     lua_getglobal(L, toStringz(varName));
-    return getString(L, -1);
+
+    scope (success)
+        lua_pop(L, 1);
+
+    auto res = getString(L, -1);
+
+    return res ? res : def;
 }
 
-string[string] globalTableVar(lua_State* L, string varName)
+bool globalBoolVar(lua_State* L, string varName, bool def = false)
 {
     lua_getglobal(L, toStringz(varName));
-    return getStringTable(L, -1);
+
+    scope (success)
+        lua_pop(L, 1);
+
+    if (lua_type(L, -1) != LUA_TBOOLEAN)
+        return def;
+
+    return lua_toboolean(L, -1) != 0;
 }
 
+string[string] globalDictTableVar(lua_State* L, string varName)
+{
+    lua_getglobal(L, toStringz(varName));
+    scope(success)
+        lua_pop(L, 1);
+    return getStringDictTable(L, -1);
+}
+
+string[] globalArrayTableVar(lua_State* L, string varName)
+{
+    lua_getglobal(L, toStringz(varName));
+    scope(success)
+        lua_pop(L, 1);
+    return getStringArrayTable(L, -1);
+}
 
 /// Get a string at index ind in the stack.
 string getString(lua_State* L, int ind)
 {
-    if (lua_type(L, ind) != LUA_TSTRING) return null;
+    if (lua_type(L, ind) != LUA_TSTRING)
+        return null;
 
     size_t len;
     const ptr = lua_tolstring(L, ind, &len);
-    return ptr[ 0 .. len ].idup;
+    return ptr[0 .. len].idup;
 }
 
-/// Get a table with string values at index ind in the stack.
-string[string] getStringTable(lua_State* L, int ind)
+/// Get all strings in a table at stack index [ind] who have string keys.
+string[string] getStringDictTable(lua_State* L, int ind)
 {
-    import std.stdio;
-    if (lua_type(L, ind) != LUA_TTABLE) return null;
+    if (lua_type(L, ind) != LUA_TTABLE)
+        return null;
 
     string[string] aa;
 
-    lua_pushnil(L);  // first key
+    lua_pushnil(L); // first key
+
+    // fixing table ind if relative from top
+    if (ind < 0)
+        ind -= 1;
+
     while (lua_next(L, ind) != 0)
     {
+        if (lua_type(L, -2) != LUA_TSTRING)
+        {
+            lua_pop(L, 1);
+            continue;
+        }
+
         // uses 'key' (at index -2) and 'value' (at index -1)
         const key = getString(L, -2);
         const val = getString(L, -1);
 
-        writefln("%1 = %1", key, val);
         if (key && val)
             aa[key] = val;
 
@@ -142,6 +215,31 @@ string[string] getStringTable(lua_State* L, int ind)
     return aa;
 }
 
+/// Get all strings in a table at stack index [ind] who have integer keys.
+string[] getStringArrayTable(lua_State* L, int ind)
+{
+    if (lua_type(L, ind) != LUA_TTABLE)
+        return null;
+
+    const len = lua_rawlen(L, ind);
+
+    string[] arr;
+    arr.length = len;
+
+    foreach (i; 0 .. len)
+    {
+        const luaInd = i + 1;
+        lua_pushinteger(L, luaInd);
+        lua_gettable(L, -2);
+
+        arr[i] = getString(L, -1);
+
+        lua_pop(L, 1);
+    }
+
+    return arr;
+}
+
 // some debugging functions
 
 void printStack(lua_State* L)
@@ -149,49 +247,67 @@ void printStack(lua_State* L)
     import std.stdio : writefln;
     import std.string : fromStringz;
 
-    int n = lua_gettop(L);
-    foreach (i; 1 .. n+1) {
+    const n = lua_gettop(L);
+    writefln("Stack has %s elements", n);
+
+    foreach (i; 1 .. n + 1)
+    {
         const s = luaL_typename(L, i).fromStringz.idup;
-        writefln("%s = %s", i, s);
-        switch (lua_type(L, i)) {
+        writef("%s = %s", i, s);
+        switch (lua_type(L, i))
+        {
         case LUA_TNUMBER:
-            writefln("%g",lua_tonumber(L,i));
+            writefln(" %g", lua_tonumber(L, i));
             break;
         case LUA_TSTRING:
-            writefln("%s",lua_tostring(L,i));
+            writefln(" %s", fromStringz(lua_tostring(L, i)));
             break;
         case LUA_TBOOLEAN:
-            writefln("%s", (lua_toboolean(L, i) ? "true" : "false"));
+            writefln(" %s", (lua_toboolean(L, i) ? "true" : "false"));
             break;
         case LUA_TNIL:
-            writefln("%s", "nil");
+            writeln();
             break;
         case LUA_TTABLE:
-            printTable(L, i);
+            //printTable(L, i);
+            writefln(" %X", lua_topointer(L, i));
             break;
+        case LUA_TFUNCTION:
+            {
+
+                lua_Debug d;
+                lua_pushvalue(L, i);
+                lua_getinfo(L, ">n", &d);
+                writefln(" %X - %s", lua_topointer(L, i), d.name.fromStringz);
+                break;
+            }
         default:
-            writefln("%X",lua_topointer(L,i));
+            writefln(" %X", lua_topointer(L, i));
             break;
         }
     }
 
 }
 
-void printTable(lua_State *L, int ind)
+void printTable(lua_State* L, int ind)
 {
     import std.stdio : writefln;
 
-    /* table is in the stack at index 't' */
-     lua_pushnil(L);  /* first key */
-     while (lua_next(L, ind) != 0)
-     {
-       /* uses 'key' (at index -2) and 'value' (at index -1) */
+    lua_pushnil(L); // first key
+
+    // fixing table ind if relative from top
+    if (ind < 0)
+        ind -= 1;
+
+    while (lua_next(L, ind) != 0)
+    {
+        // uses 'key' (at index -2) and 'value' (at index -1)
         const key = getString(L, -2);
         const val = getString(L, -1);
 
         writefln("[%s] = %s", key, val);
 
-       /* removes 'value'; keeps 'key' for next iteration */
-       lua_pop(L, 1);
-     }
+        // removes 'value'; keeps 'key' for next iteration
+        lua_pop(L, 1);
+    }
 }

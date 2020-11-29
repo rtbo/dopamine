@@ -1,5 +1,36 @@
 module dopamine.util;
 
+import std.digest;
+import std.traits;
+
+void feedDigestData(D)(ref D digest, in string s)
+if (isDigest!D)
+{
+    digest.put(cast(ubyte[])s);
+    digest.put(0);
+}
+
+void feedDigestData(D)(ref D digest, in string[] ss)
+if (isDigest!D)
+{
+    import std.bitmanip : nativeToLittleEndian;
+
+    digest.put(nativeToLittleEndian(cast(uint)ss.length));
+    foreach (s; ss) {
+        digest.put(cast(ubyte[])s);
+        digest.put(0);
+    }
+}
+
+void feedDigestData(D, V)(ref D digest, in V val)
+if (isDigest!D && (isIntegral!V || is(V == enum)))
+{
+    import std.bitmanip : nativeToLittleEndian;
+
+    digest.put(nativeToLittleEndian(cast(uint)val));
+    digest.put(0);
+}
+
 string findProgram(in string name)
 {
     import std.process : environment;

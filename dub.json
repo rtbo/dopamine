@@ -6,5 +6,8 @@
     "license": "MIT",
     "sourcePaths": [ "lib/src", "lua/src" ],
     "importPaths": [ "lib/src", "lua/src" ],
-    "stringImportPaths": [ "lib/lua" ]
+    "stringImportPaths": [ "lib/lua" ],
+    "dependencies": {
+        "dini": "~>2.0.0"
+    }
 }

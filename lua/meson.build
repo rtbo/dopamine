@@ -16,10 +16,12 @@ dop_lua_inc = include_directories('src')
 dop_lua_lib = static_library('dop_lua', dop_lua_src,
     install: false,
     include_directories: dop_lua_inc,
-    d_module_versions: ['LUA_53', 'LUA_53_DYNAMIC'],
+    pic: true,
+    d_module_versions: lua_d_versions,
 )
 
 dop_lua_dep = declare_dependency(
     include_directories: dop_lua_inc,
     link_with: dop_lua_lib,
+    dependencies: lua_d_dep,
 )
