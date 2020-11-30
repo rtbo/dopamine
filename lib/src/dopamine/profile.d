@@ -35,6 +35,437 @@ enum BuildType
     debug_,
 }
 
+/// print human readable string of the profile enums
+template to(S : string)
+{
+    S to(A : Arch)(A val)
+    {
+        final switch (val)
+        {
+        case Arch.x86:
+            return "X86";
+        case Arch.x86_64:
+            return "X86-64";
+        }
+    }
+
+    S to(A : BuildType)(A val)
+    {
+        final switch (val)
+        {
+        case BuildType.release:
+            return "Release";
+        case BuildType.debug_:
+            return "Debug";
+        }
+    }
+
+    S to(A : OS)(A val)
+    {
+        final switch (val)
+        {
+        case OS.linux:
+            return "Linux";
+        case OS.windows:
+            return "Windows";
+        }
+    }
+
+    S to(A : Lang)(A val)
+    {
+        final switch (val)
+        {
+        case Lang.d:
+            return "D";
+        case Lang.cpp:
+            return "C++";
+        case Lang.c:
+            return "C";
+        }
+    }
+}
+
+alias DopDigest = SHA1;
+
+/// Profile host information
+class HostInfo
+{
+    private Arch _arch;
+    private OS _os;
+
+    this(Arch arch, OS os)
+    {
+        _arch = arch;
+        _os = os;
+    }
+
+    @property Arch arch() const
+    {
+        return _arch;
+    }
+
+    @property OS os() const
+    {
+        return _os;
+    }
+
+    private void feedDigest(ref DopDigest digest) const
+    {
+        feedDigestData(digest, _arch);
+        feedDigestData(digest, _os);
+    }
+
+    private void describe(ref Appender!string app, int indent) const
+    {
+        const ind = indentStr(indent);
+        app.put(format("%sArchitecture: %s\n", ind, arch.to!string));
+        app.put(format("%sOS:           %s\n", ind, os.to!string));
+    }
+
+    private void writeIniSection(ref Appender!string app) const
+    {
+        app.put("[host]\n");
+        app.put(format("arch=%s\n", _arch.toConfig()));
+        app.put(format("os=%s\n", _os.toConfig()));
+    }
+}
+
+/// Profile compiler information
+class Compiler
+{
+    private Lang _lang;
+    private string _name;
+    private string _ver;
+    private string _path;
+
+    this(Lang lang, string name, string ver, string path)
+    {
+        _lang = lang;
+        _name = name;
+        _ver = ver;
+        _path = path;
+    }
+
+    @property Lang lang() const
+    {
+        return _lang;
+    }
+
+    @property string name() const
+    {
+        return _name;
+    }
+
+    @property string ver() const
+    {
+        return _ver;
+    }
+
+    @property string path() const
+    {
+        return _path;
+    }
+
+    private void collectEnvironment(ref string[string] env) const
+    {
+        final switch (_lang)
+        {
+        case Lang.d:
+            env["DC"] = _path;
+            break;
+        case Lang.cpp:
+            env["CXX"] = _path;
+            break;
+        case Lang.c:
+            env["CC"] = _path;
+            break;
+        }
+    }
+
+    private void describe(ref Appender!string app, int indent) const
+    {
+        auto ind = indentStr(indent);
+        app.put(format("%s%s Compiler:\n", ind, lang.to!string));
+        ind = indentStr(indent + 1);
+        app.put(format("%sname:    %s\n", ind, name));
+        app.put(format("%sversion: %s\n", ind, ver));
+        app.put(format("%spath:    %s\n", ind, path));
+    }
+
+    private void feedDigest(ref DopDigest digest) const
+    {
+        feedDigestData(digest, lang);
+        feedDigestData(digest, name);
+        feedDigestData(digest, ver);
+    }
+
+    private void writeIniSection(ref Appender!string app) const
+    {
+        app.put(format("[compiler.%s]\n", _lang.toConfig()));
+        app.put(format("name=%s\n", _name));
+        app.put(format("ver=%s\n", _ver));
+        app.put(format("path=%s\n", _path));
+    }
+}
+
+final class Profile
+{
+    private string _name;
+    private HostInfo _hostInfo;
+    private BuildType _buildType;
+    private Compiler[] _compilers;
+
+    this(string name, HostInfo hostInfo, BuildType buildType, Compiler[] compilers)
+    {
+        _name = enforce(name, "A profile must have a name");
+        _hostInfo = hostInfo;
+        _buildType = buildType;
+        _compilers = compilers.sort!((a, b) => a.lang < b.lang).array;
+
+        auto langs = _compilers.map!(c => c.lang).array;
+        enforce(langs.equal(langs.uniq()), "cannot pass twice the same language to a profile");
+    }
+
+    @property string name() const
+    {
+        return _name;
+    }
+
+    @property const(HostInfo) hostInfo() const
+    {
+        return _hostInfo;
+    }
+
+    @property BuildType buildType() const
+    {
+        return _buildType;
+    }
+
+    void collectEnvironment(ref string[string] env) const
+    {
+        foreach (c; _compilers)
+        {
+            c.collectEnvironment(env);
+        }
+    }
+
+    void feedDigest(ref DopDigest digest) const
+    {
+        _hostInfo.feedDigest(digest);
+        feedDigestData(digest, _buildType);
+        foreach (c; _compilers)
+        {
+            c.feedDigest(digest);
+        }
+    }
+
+    string digestHash() const
+    {
+        DopDigest digest;
+        feedDigest(digest);
+        return toHexString!(LetterCase.lower)(digest.finish()).idup;
+    }
+
+    string describe() const
+    {
+        Appender!string app;
+
+        app.put(format("Profile %s\n", name));
+        _hostInfo.describe(app, 1);
+        app.put(format("%sBuild type:   %s\n", indentStr(1), _buildType.toConfig));
+
+        foreach (c; _compilers)
+        {
+            c.describe(app, 1);
+        }
+
+        app.put(format("%sDigest hash:  %s\n", indentStr(1), digestHash()));
+
+        return app.data();
+    }
+
+    void saveToFile(string path, bool withName = true, bool mkdir = false) const
+    {
+        import std.file : mkdirRecurse, write;
+        import std.path : dirName;
+
+        if (mkdir)
+        {
+            mkdirRecurse(dirName(path));
+        }
+
+        write(path, toIni(withName));
+    }
+
+    /// Load a [Profile] from ini file.
+    /// if ini do not have a name field, name will be assessed from the filename
+    static Profile loadFromFile(string filename)
+    {
+        import std.file : read;
+        import std.path : baseName, stripExtension;
+
+        const ini = cast(string) read(filename);
+        const nameFromFile = baseName(stripExtension(filename));
+
+        return Profile.fromIni(ini, nameFromFile);
+    }
+
+    private string toIni(bool withName) const
+    {
+        Appender!string app;
+
+        app.put("[main]\n");
+        if (withName)
+        {
+            app.put(format("name=%s\n", _name));
+        }
+        app.put(format("buildtype=%s\n", _buildType));
+
+        app.put("\n");
+        _hostInfo.writeIniSection(app);
+
+        foreach (c; _compilers)
+        {
+            app.put("\n");
+            c.writeIniSection(app);
+        }
+
+        app.put("\n");
+        app.put("[digest]\n");
+        app.put(format("hash=%s\n", digestHash()));
+
+        return app.data();
+    }
+
+    static Profile fromIni(string iniString, string defaultName)
+    {
+        import dini : Ini, IniSection;
+
+        auto ini = Ini.ParseString(iniString);
+
+        auto enforceSection(string name)
+        {
+            enforce(ini.hasSection(name),
+                    format("Ill-formed profile file: [%s] section is required", name));
+            return ini.getSection(name);
+        }
+
+        string enforceKey(ref IniSection section, string key)
+        {
+            enforce(section.hasKey(key),
+                    format("Ill-formed profile file: \"%s\" field is required in the [%s] section",
+                        key, section.name));
+            return section.getKey(key);
+        }
+
+        auto mainSec = enforceSection("main");
+        auto hostSec = enforceSection("host");
+
+        const name = mainSec.hasKey("name") ? mainSec.getKey("name") : defaultName;
+        const buildType = enforceKey(mainSec, "buildtype").fromConfig!BuildType();
+
+        const arch = enforceKey(hostSec, "arch").fromConfig!Arch();
+        const os = enforceKey(hostSec, "os").fromConfig!OS();
+        auto hostInfo = new HostInfo(arch, os);
+
+        Compiler[] compilers;
+        foreach (s; ini.sections)
+        {
+            enum prefix = "compiler.";
+            if (!s.name.startsWith(prefix))
+                continue;
+
+            const langS = s.name[prefix.length .. $];
+            const lang = fromConfig!Lang(langS);
+
+            const cname = enforceKey(s, "name");
+            const ver = enforceKey(s, "ver");
+            const path = enforceKey(s, "path");
+
+            compilers ~= new Compiler(lang, cname, ver, path);
+        }
+
+        auto p = new Profile(name, hostInfo, buildType, compilers);
+
+        if (ini.hasSection("digest"))
+        {
+            const hash = enforceKey(ini["digest"], "hash");
+            enforce(p.digestHash() == hash,
+                    "Digest hash do not match with the one of the profile file");
+        }
+
+        return p;
+    }
+}
+
+Lang[] toLangs(string[] langs)
+{
+    return langs.map!(l => l.fromConfig!Lang).array;
+}
+
+string defaultProfileName(Lang[] langs)
+{
+    enforce(langs.length, "at least one language is needed");
+    return "default-" ~ langs.sort().map!(l => l.toConfig()).join("-");
+}
+
+Profile detectDefaultProfile(Lang[] langs)
+{
+    const name = defaultProfileName(langs);
+    auto hostInfo = currentHostInfo();
+
+    enforce(langs.sort().uniq().equal(langs), "cannot build a profile with twice the same language");
+
+    Compiler[] compilers;
+    foreach (lang; langs)
+    {
+        compilers ~= enforce(detectDefaultCompiler(lang),
+                "could not find a compiler for %s language", lang.to!string);
+    }
+
+    return new Profile(name, hostInfo, BuildType.release, compilers);
+}
+
+private:
+
+import dopamine.util;
+
+import std.process;
+import std.regex;
+
+// import std.stdio;
+
+HostInfo currentHostInfo()
+{
+    version (X86_64)
+    {
+        const arch = Arch.x86_64;
+    }
+    else version (X86)
+    {
+        const arch = Arch.x86;
+    }
+    else
+    {
+        static assert(false, "unsupported architecture");
+    }
+
+    version (Windows)
+    {
+        const os = OS.windows;
+    }
+    else version (linux)
+    {
+        const os = OS.linux;
+    }
+    else
+    {
+        static assert(false, "unsupported OS");
+    }
+
+    return new HostInfo(arch, os);
+}
+
 /// Translate enums to config file string
 string toConfig(Arch val)
 {
@@ -139,309 +570,6 @@ BuildType fromConfig(T : BuildType)(string val)
     }
 }
 
-template to(S : string)
-{
-    S to(A : Arch)(A val)
-    {
-        final switch (val)
-        {
-        case Arch.x86:
-            return "X86";
-        case Arch.x86_64:
-            return "X86-64";
-        }
-    }
-
-    S to(A : BuildType)(A val)
-    {
-        final switch (val)
-        {
-        case BuildType.release:
-            return "Release";
-        case BuildType.debug_:
-            return "Debug";
-        }
-    }
-
-    S to(A : OS)(A val)
-    {
-        final switch (val)
-        {
-        case OS.linux:
-            return "Linux";
-        case OS.windows:
-            return "Windows";
-        }
-    }
-
-    S to(A : Lang)(A val)
-    {
-        final switch (val)
-        {
-        case Lang.d:
-            return "D";
-        case Lang.cpp:
-            return "C++";
-        case Lang.c:
-            return "C";
-        }
-    }
-}
-
-alias DopDigest = SHA1;
-
-class Compiler
-{
-    Lang lang;
-
-    string name;
-    string ver;
-    string path;
-
-    void collectEnvironment(ref string[string] env) const
-    {
-        final switch (lang)
-        {
-        case Lang.d:
-            env["DC"] = path;
-            break;
-        case Lang.cpp:
-            env["CXX"] = path;
-            break;
-        case Lang.c:
-            env["CC"] = path;
-            break;
-        }
-    }
-
-    private void describe(ref Appender!string app, int indent) const
-    {
-        auto ind = indentStr(indent);
-        app.put(format("%s%s Compiler:\n", ind, lang.to!string));
-        ind = indentStr(indent + 1);
-        app.put(format("%sname:    %s\n", ind, name));
-        app.put(format("%sversion: %s\n", ind, ver));
-    }
-
-    private void feedDigest(ref DopDigest digest) const
-    {
-        feedDigestData(digest, lang);
-        feedDigestData(digest, name);
-        feedDigestData(digest, ver);
-    }
-
-    private void writeIniSection(ref Appender!string app) const
-    {
-        app.put("\n");
-        app.put(format("[compiler.%s]\n", lang.toConfig));
-        app.put(format("name=%s\n", name));
-        app.put(format("version=%s\n", ver));
-        app.put(format("path=%s\n", path));
-    }
-}
-
-class Profile
-{
-    string name;
-    Arch arch;
-    OS os;
-    BuildType buildType;
-    Compiler[Lang] compilers;
-
-    void collectEnvironment(ref string[string] env) const
-    {
-        foreach (c; compilers)
-        {
-            c.collectEnvironment(env);
-        }
-    }
-
-    final string digestHash() const
-    {
-        DopDigest digest;
-        feedDigest(digest);
-        return toHexString!(LetterCase.lower)(digest.finish()).idup;
-    }
-
-    void feedDigest(ref DopDigest digest) const
-    {
-        feedDigestData(digest, arch);
-        feedDigestData(digest, os);
-        feedDigestData(digest, buildType);
-        foreach (c; compilers)
-        {
-            c.feedDigest(digest);
-        }
-    }
-
-    string describe() const
-    {
-        auto app = appender!string;
-
-        app.put(format("Profile: %s\n", name));
-
-        auto ind = indentStr(1);
-        app.put(format("%sArch:       %s\n", ind, arch.to!string));
-        app.put(format("%sOS:         %s\n", ind, os.to!string));
-        app.put(format("%sBuild type: %s\n", ind, buildType.to!string));
-
-        foreach (c; compilers)
-        {
-            c.describe(app, 1);
-        }
-
-        return app.data[0 .. $ - 1]; // remove last \n
-    }
-
-    string toIni(bool withName = true) const
-    {
-        auto app = appender!string;
-
-        app.put("[main]\n");
-        if (withName)
-            app.put(format("name=%s\n", name));
-        app.put(format("arch=%s\n", arch.toConfig));
-        app.put(format("os=%s\n", os.toConfig));
-        app.put(format("buildtype=%s\n", buildType.toConfig));
-
-        foreach (c; compilers)
-        {
-            c.writeIniSection(app);
-        }
-
-        app.put("\n");
-        app.put("[digest]\n");
-        app.put(format("hash=%s\n", digestHash()));
-
-        return app.data;
-    }
-
-    void saveToFile(string path, bool withName = true, bool mkdir = false) const
-    {
-        import std.file : mkdirRecurse, write;
-        import std.path : dirName;
-
-        if (mkdir)
-        {
-            mkdirRecurse(dirName(path));
-        }
-
-        write(path, toIni());
-    }
-
-    static Profile fromIni(string iniString)
-    {
-        import dini : Ini;
-
-        auto ini = Ini.ParseString(iniString);
-
-        enforce(ini.hasSection("main"), "Ill-formed profile file: [main] section is required");
-        auto mainSec = ini.getSection("main");
-
-        auto p = new Profile;
-
-        if (mainSec.hasKey("name"))
-        {
-            p.name = mainSec.getKey("name");
-        }
-
-        enforce(mainSec.hasKey("arch"),
-                "Ill-formed profile file: arch field is required in the main section");
-        enforce(mainSec.hasKey("os"),
-                "Ill-formed profile file: os field is required in the main section");
-        enforce(mainSec.hasKey("buildtype"),
-                "Ill-formed profile file: buildtype field is required in the main section");
-
-        p.arch = fromConfig!Arch(mainSec.getKey("arch"));
-        p.os = fromConfig!OS(mainSec.getKey("os"));
-        p.buildType = fromConfig!BuildType(mainSec.getKey("buildtype"));
-
-        foreach (s; ini.sections)
-        {
-            enum prefix = "compiler.";
-            if (!s.name.startsWith(prefix))
-                continue;
-
-            const langS = s.name[prefix.length .. $];
-            const lang = fromConfig!Lang(langS);
-
-            auto c = new Compiler;
-            c.lang = lang;
-
-            if (lang in p.compilers)
-                throw new Exception(
-                        "Can't define more than one compiler per language and per profile");
-
-            enforce(s.hasKey("name"),
-                    "Ill-formed profile file: name field is required in the compiler sections");
-            enforce(s.hasKey("version"),
-                    "Ill-formed profile file: version field is required in the compiler sections");
-            enforce(s.hasKey("path"),
-                    "Ill-formed profile file: path field is required in the compiler sections");
-            c.name = s.getKey("name");
-            c.ver = s.getKey("version");
-            c.path = s.getKey("path");
-
-            p.compilers[lang] = c;
-        }
-
-        if (ini.hasSection("digest"))
-        {
-            enforce(ini["digest"].hasKey("hash"),
-                    "Ill-formed profile file: hash field is required in the digest section");
-            enforce(p.digestHash() == ini["digest"].getKey("hash"),
-                    "Digest hash do not match with the one of the profile file");
-        }
-
-        return p;
-    }
-
-    /// Load a [Profile] from ini file.
-    /// if ini do not have a name field, name will be assessed from the filename
-    static Profile loadFromFile(string filename)
-    {
-        import std.file : read;
-        import std.path : baseName, stripExtension;
-
-        const ini = cast(string) read(filename);
-        auto p = Profile.fromIni(ini);
-
-        if (!p.name)
-            p.name = baseName(stripExtension(filename));
-
-        return p;
-    }
-}
-
-Profile detectDefaultProfile(Lang[] langs, BuildType buildType = BuildType.release)
-{
-    if (!langs.length)
-        throw new Exception("at least one language is needed");
-
-    auto p = new Profile;
-    p.name = "default";
-    p.arch = currentArch();
-    p.os = currentOS();
-    p.buildType = buildType;
-    foreach (l; langs)
-    {
-        auto comp = detectDefaultCompiler(l);
-        if (comp)
-            p.compilers[l] = comp;
-    }
-
-    return p;
-}
-
-private:
-
-import dopamine.util;
-
-import std.process;
-import std.regex;
-
-// import std.stdio;
-
 Compiler detectDefaultCompiler(Lang lang)
 {
     foreach (detectF; defaultDetectOrder[lang])
@@ -462,7 +590,7 @@ shared static this()
 {
     CompilerDetectF[][Lang] order;
 
-    order[Lang.d] = [&detectDmd, &detectLdc];
+    order[Lang.d] = [&detectLdc, &detectDmd];
 
     version (OSX)
     {
@@ -484,38 +612,6 @@ shared static this()
     defaultDetectOrder = assumeUnique(order);
 }
 
-Arch currentArch()
-{
-    version (X86_64)
-    {
-        return Arch.x86_64;
-    }
-    else version (X86)
-    {
-        return Arch.x86;
-    }
-    else
-    {
-        static assert(false, "unsupported architecture");
-    }
-}
-
-OS currentOS()
-{
-    version (Windows)
-    {
-        return OS.windows;
-    }
-    else version (linux)
-    {
-        return OS.linux;
-    }
-    else
-    {
-        static assert(false, "unsupported OS");
-    }
-}
-
 string indentStr(int indent)
 {
     return replicate("  ", indent);
@@ -532,20 +628,16 @@ in(command.length >= 1)
     if (result.status != 0)
         return null;
 
-    auto res = new Compiler;
-    res.lang = lang;
-    res.name = name;
-    auto ver = matchFirst(result.output, regex(re, "m"));
-    if (ver.length < 2)
+    auto verMatch = matchFirst(result.output, regex(re, "m"));
+    if (verMatch.length < 2)
     {
         throw new Exception(format("Could not determine %s version. Command output:\n%s",
                 name, result.output));
     }
-    res.ver = ver[1];
-    res.path = command[0];
+    const ver = verMatch[1];
+    const path = command[0];
 
-    return res;
-
+    return new Compiler(lang, name, ver, path);
 }
 
 Compiler detectLdc()

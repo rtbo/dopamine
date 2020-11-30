@@ -34,6 +34,11 @@ string userProfileFile(string name)
     return buildPath(userProfileDir(), name ~ ".ini");
 }
 
+string userProfileFile(Profile profile)
+{
+    return userProfileFile(profile.name);
+}
+
 /// Check if current working directory is a package directory.
 /// This is defined as a directory containing a `dopamine.lua` file
 bool inPackageDefinitionDir()

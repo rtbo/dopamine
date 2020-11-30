@@ -2,6 +2,7 @@ module dopamine.client.profile;
 
 import dopamine.paths;
 import dopamine.profile;
+import dopamine.recipe;
 
 import std.exception;
 import std.getopt;
@@ -10,15 +11,16 @@ import std.format;
 import std.path;
 import std.stdio;
 
-Profile detectAndWriteDefault()
+Profile detectAndWriteDefault(Lang[] langs)
 {
     writeln("Detecting default profile");
 
-    auto profile = detectDefaultProfile([Lang.d, Lang.cpp, Lang.c], BuildType.release);
+    auto profile = detectDefaultProfile(langs);
     writeln(profile.describe());
 
-    const path = userProfileFile("default");
-    profile.saveToFile(path, false);
+    const name = profile.name;
+    const path = userProfileFile(name);
+    profile.saveToFile(path, false, true);
     writeln("Default profile saved to " ~ path);
 
     return profile;
@@ -36,43 +38,43 @@ int profileMain(string[] args)
         return 0;
     }
 
+    enforcePackageDefinitionDir();
+
+    writeln("parsing recipe");
+    auto recipe = parseRecipe("dopamine.lua");
+
+    auto langs = recipe.langs.toLangs();
+
     if (detectDef)
     {
         // detecting default profile and write it in user dir
-        detectAndWriteDefault();
+        detectAndWriteDefault(langs);
     }
+
+    const defaultName = defaultProfileName(langs);
 
     const clProfileName = args.length > 1 ? args[1] : null;
 
-    if (!inPackageDefinitionDir())
-    {
-        // a few operations are possible out a package directory
-        if (detectDef && !clProfileName)
-            return 0;
-        enforcePackageDefinitionDir();
-    }
-
-    const profileName = clProfileName ? clProfileName : "default";
-    const profileFile = buildPath(userProfileDir(), profileName ~ ".ini");
+    const profileName = clProfileName ? clProfileName : defaultName;
+    const profileFile = userProfileFile(profileName);
 
     Profile profile;
 
-    if (profileName == "default" && !exists(profileFile))
+    if (profileName == defaultName && !exists(profileFile))
     {
-        profile = detectAndWriteDefault();
+        profile = detectAndWriteDefault(langs);
     }
 
-    if (!profile && !exists(profileFile))
-    {
-        throw new Exception("could not find profile matching name " ~ profileName);
-    }
-    else
+    enforce(profile || exists(profileFile),
+            format(`could not find profile matching name "%s"`, profileName));
+
+    if (!profile)
     {
         profile = Profile.loadFromFile(profileFile);
     }
 
-    writeln(format("Setting profile %s for %s", profileName, getcwd()));
-    profile.saveToFile(localProfileFile(), true);
+    writeln(format(`Setting profile "%s" for %s`, profileName, getcwd()));
+    profile.saveToFile(localProfileFile(), true, true);
 
     return 0;
 }

@@ -29,18 +29,23 @@ int buildMain(string[] args)
 
     enforcePackageDefinitionDir();
 
-    if (!exists(userProfileFile("default")))
-    {
-        writeln("Default profile does not exist. Will create it.");
-        auto p = detectDefaultProfile([Lang.d, Lang.cpp, Lang.c], BuildType.release);
-        writeln(p.describe());
-
-        p.saveToFile(userProfileFile("default"), false, true);
-        writeln("Default profile saved to " ~ userProfileFile("default"));
-    }
-
     writeln("parsing recipe");
     auto recipe = parseRecipe("dopamine.lua");
+
+    auto langs = recipe.langs.toLangs();
+
+    const defaultName = defaultProfileName(langs);
+    const defaultFile = userProfileFile(defaultName);
+
+    if (!exists(defaultFile))
+    {
+        writeln("Default profile does not exist. Will create it.");
+        auto p = detectDefaultProfile(langs);
+        writeln(p.describe());
+
+        p.saveToFile(defaultFile, false, true);
+        writeln("Default profile saved to " ~ defaultFile);
+    }
 
     Profile profile;
 
@@ -57,7 +62,7 @@ int buildMain(string[] args)
         if (!exists(filename))
         {
             writeln("No profile is set, assuming and setting default");
-            profile = Profile.loadFromFile(userProfileFile("default"));
+            profile = Profile.loadFromFile(defaultFile);
             profile.saveToFile(filename, true, true);
         }
         else
