@@ -23,7 +23,7 @@ int main(string[] args)
     initLua();
 
     const commandHandlers = [
-        "build" : &buildMain, "install" : &installMain, "pack" : &packageMain,
+        "build" : &buildMain, "install" : &installMain, "package" : &packageMain,
         "profile" : &profileMain, "source" : &sourceMain, "upload" : &uploadMain,
     ];
 
