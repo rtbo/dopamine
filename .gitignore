@@ -1,4 +1,7 @@
+#general
 .vscode/
+
+#client
 build/
 install/
 .dub/
