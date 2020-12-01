@@ -1,9 +1,17 @@
 #general
 .vscode/
 
-#client
+#meson
 build/
 install/
+
+#dub
 .dub/
-.dop/
 dub.selections.json
+*.a
+*.lib
+*.exe
+client/dop
+
+#dop
+.dop/

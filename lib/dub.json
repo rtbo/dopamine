@@ -1,0 +1,23 @@
+{
+  "name": "lib",
+  "authors": ["Rémi Thebault"],
+  "description": "The Dopamine package manager",
+  "targetType": "library",
+  "targetName": "dopamine",
+  "license": "MIT",
+  "stringImportPaths": [ "lua" ],
+  "dependencies": {
+    "dini": "~>2.0.0"
+  },
+  "configurations": [
+    {
+      "name": "lua53-static",
+      "versions": ["LUA_53", "BindBC_Static"],
+      "libs": ["lua53"]
+    },
+    {
+      "name": "lua53-dynamic",
+      "versions": ["LUA_53"]
+    }
+  ]
+}

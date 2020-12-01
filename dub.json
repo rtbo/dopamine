@@ -1,13 +1,8 @@
 {
-    "name": "dopamine",
-    "authors": ["Rémi Thebault"],
-    "description": "D graphics rendering library",
-    "targetType": "library",
-    "license": "MIT",
-    "sourcePaths": [ "lib/src", "lua/src" ],
-    "importPaths": [ "lib/src", "lua/src" ],
-    "stringImportPaths": [ "lib/lua" ],
-    "dependencies": {
-        "dini": "~>2.0.0"
-    }
+  "name": "dopamine",
+  "authors": ["Rémi Thebault"],
+  "description": "The Dopamine package manager",
+  "targetType": "none",
+  "license": "MIT",
+  "subPackages": ["client", "lib"]
 }
