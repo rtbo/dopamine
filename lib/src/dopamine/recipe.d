@@ -25,7 +25,10 @@ class Recipe
 
 void initLua()
 {
-    version (LUA_53_DYNAMIC)
+    version (BindBC_Static)
+    {
+    }
+    else
     {
         const ret = loadLua();
         if (ret != luaSupport)
@@ -98,12 +101,13 @@ Source source(string[string] aa)
 
     switch (aa["method"])
     {
-    case "git": {
-        auto url = enforce("url" in aa, "url is mandatory for Git source");
-        auto revId = enforce("revId" in aa, "revId is mandatory for Git source");
-        auto subdir = "subdir" in aa;
-        return new GitSource(*url, *revId, subdir ? *subdir : "");
-    }
+    case "git":
+        {
+            auto url = enforce("url" in aa, "url is mandatory for Git source");
+            auto revId = enforce("revId" in aa, "revId is mandatory for Git source");
+            auto subdir = "subdir" in aa;
+            return new GitSource(*url, *revId, subdir ? *subdir : "");
+        }
 
     default:
         break;
@@ -155,7 +159,7 @@ bool globalBoolVar(lua_State* L, string varName, bool def = false)
 string[string] globalDictTableVar(lua_State* L, string varName)
 {
     lua_getglobal(L, toStringz(varName));
-    scope(success)
+    scope (success)
         lua_pop(L, 1);
     return getStringDictTable(L, -1);
 }
@@ -163,7 +167,7 @@ string[string] globalDictTableVar(lua_State* L, string varName)
 string[] globalArrayTableVar(lua_State* L, string varName)
 {
     lua_getglobal(L, toStringz(varName));
-    scope(success)
+    scope (success)
         lua_pop(L, 1);
     return getStringArrayTable(L, -1);
 }

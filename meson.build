@@ -2,16 +2,24 @@ project('dopamine', 'd',
     version: '0.1.0',
 )
 
-lua_dep = dependency('lua53')
+lua_bindings = get_option('lua_bindings')
+lua_version = get_option('lua_version')
 
-lua_d_versions = ['LUA_53', 'BindBC_Static']
-lua_d_dep = [lua_dep] # only needed if static
+lua_d_versions = ['LUA_'+lua_version ]
+lua_d_dep = []
+
+if (lua_bindings == 'static')
+    lua_dep_name = 'lua' + lua_version
+    lua_dep = dependency(lua_dep_name)
+
+    lua_d_versions += [ 'BindBC_Static' ]
+    lua_d_dep += [ lua_dep ]
+endif
 
 dini_dep = dependency('dini',
     version: '~>2.0.0',
     method: 'dub'
 )
 
-subdir('lua')
 subdir('lib')
 subdir('client')

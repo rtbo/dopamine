@@ -1,5 +1,14 @@
 
 dop_src = [
+    'src/bindbc/loader/package.d',
+    'src/bindbc/loader/sharedlib.d',
+    'src/bindbc/loader/system.d',
+    'src/bindbc/lua/config.d',
+    'src/bindbc/lua/package.d',
+    'src/bindbc/lua/v53/binddynamic.d',
+    'src/bindbc/lua/v53/bindstatic.d',
+    'src/bindbc/lua/v53/package.d',
+    'src/bindbc/lua/v53/types.d',
     'src/dopamine/build.d',
     'src/dopamine/pack.d',
     'src/dopamine/paths.d',
@@ -10,7 +19,7 @@ dop_src = [
 ]
 
 dop_inc = include_directories('src')
-dop_deps = [ dop_lua_dep, dini_dep ]
+dop_deps = [ dini_dep ] + lua_d_dep
 
 dop_lib = library('dopamine', dop_src,
     install: true,
