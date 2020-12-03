@@ -1,0 +1,11 @@
+{
+  "name": "server",
+  "description": "The Dopamine package manager",
+  "authors": ["Rémi Thebault"],
+  "copyright": "Copyright © 2020, Rémi Thebault",
+  "targetType": "executable",
+  "dependencies": {
+    "vibe-d": "~>0.9"
+  },
+  "license": "MIT"
+}

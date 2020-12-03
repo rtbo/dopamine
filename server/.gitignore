@@ -1,0 +1,11 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/dopamine_server
+*.exe
+*.o
+*.obj
+*.lst
+
+.env
