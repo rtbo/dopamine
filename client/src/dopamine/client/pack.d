@@ -48,8 +48,8 @@ int packageMain(string[] args)
 
     assert(profile);
 
-    const installDir = localInstallDir(profile);
-    const archiveFile = localPackageArchiveFile(profile, recipe);
+    const dirs = localProfileDirs(profile);
+    const archiveFile = localPackageArchiveFile(dirs, recipe);
 
     if (exists(archiveFile))
     {
@@ -57,7 +57,7 @@ int packageMain(string[] args)
         remove(archiveFile);
     }
 
-    ArchiveBackend.get.create(installDir, archiveFile);
+    ArchiveBackend.get.create(dirs.install, archiveFile);
 
     return 0;
 }

@@ -1,5 +1,6 @@
 module dopamine.build;
 
+import dopamine.paths;
 import dopamine.profile;
 import dopamine.util;
 
@@ -7,30 +8,26 @@ import std.array;
 import std.exception;
 import std.file;
 import std.format;
+import std.path;
 import std.stdio;
-
-enum BuildId
-{
-    meson,
-}
 
 interface BuildSystem
 {
-    BuildId id();
-    void configure(string srcDir, string buildDir, string installDir, Profile profile);
-    void build();
-    void install();
+    string name();
+    void configure(string srcDir, ProfileDirs dirs, Profile profile);
+    void build(ProfileDirs dirs);
+    void install(ProfileDirs dirs);
+
+    final bool configured(ProfileDirs dirs)
+    {
+        return exists(configuredFlagPath(dirs));
+    }
 }
 
 class MesonBuildSystem : BuildSystem
 {
     private string _meson;
     private string _ninja;
-
-    private string _srcDir;
-    private string _buildDir;
-    private string _installDir;
-    private Profile _profile;
 
     this()
     {
@@ -43,46 +40,65 @@ class MesonBuildSystem : BuildSystem
         }
     }
 
-    override BuildId id()
+    override string name()
     {
-        return BuildId.meson;
+        return "meson";
     }
 
-    override void configure(string srcDir, string buildDir, string installDir, Profile profile)
+    override void configure(string srcDir, ProfileDirs dirs, Profile profile)
     {
         import std.path : asAbsolutePath, asRelativePath;
         import std.uni : toLower;
 
-        if (_srcDir || _buildDir || _installDir || _profile)
+        if (configured(dirs))
         {
-            stderr.writeln("Warning: Package already configured");
+            stderr.writeln("Warning: Package already configured, reconfiguring...");
         }
 
-        _srcDir = srcDir;
-        _buildDir = asAbsolutePath(buildDir).asRelativePath(srcDir).array;
-        _installDir = asAbsolutePath(installDir).array;
-        _profile = profile;
+        scope (success)
+            writeConfiguredFlag(dirs);
+        scope (failure)
+            removeConfiguredFlag(dirs);
+
+        const buildDir = assumeUnique(asAbsolutePath(dirs.build).asRelativePath(srcDir).array);
+        const installDir = asAbsolutePath(dirs.install).array;
 
         string[string] env;
         profile.collectEnvironment(env);
 
         runCommand([
-                _meson, "setup", _buildDir, format("--prefix=%s", _installDir),
-                format("--buildtype=%s", _profile.buildType.to!string.toLower),
-                ], _srcDir, false, env);
+                _meson, "setup", buildDir, format("--prefix=%s", installDir),
+                format("--buildtype=%s", profile.buildType.to!string.toLower),
+                ], srcDir, false, env);
     }
 
-    override void build()
+    override void build(ProfileDirs dirs)
     {
-        enforce(_srcDir && _buildDir && _installDir && _profile,
-                "cannot build a project that is not configured");
-        runCommand([_ninja], _buildDir);
+        enforce(configured(dirs), "cannot build a package that is not configured");
+        runCommand([_ninja], dirs.build);
     }
 
-    override void install()
+    override void install(ProfileDirs dirs)
     {
-        enforce(_srcDir && _buildDir && _installDir && _profile,
-                "cannot install a project that is not configured");
-        runCommand([_ninja, "install"], _buildDir);
+        enforce(configured(dirs), "cannot install a package that is not configured");
+        runCommand([_ninja, "install"], dirs.build);
     }
+}
+
+private string configuredFlagPath(ProfileDirs dirs)
+{
+    return buildPath(dirs.work, ".priv", "configured-ok");
+}
+
+private void writeConfiguredFlag(ProfileDirs dirs)
+{
+    import std.file : write;
+
+    mkdirRecurse(buildPath(dirs.work, ".priv"));
+    write(configuredFlagPath(dirs), "");
+}
+
+private void removeConfiguredFlag(ProfileDirs dirs)
+{
+    remove(configuredFlagPath(dirs));
 }

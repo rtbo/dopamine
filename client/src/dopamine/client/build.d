@@ -85,12 +85,11 @@ int buildMain(string[] args)
         srcDir = ".";
     }
 
-    const buildDir = localBuildDir(profile);
-    const installDir = localInstallDir(profile);
+    const dirs = localProfileDirs(profile);
 
-    recipe.build.configure(srcDir, buildDir, installDir, profile);
-    recipe.build.build();
-    recipe.build.install();
+    recipe.build.configure(srcDir, dirs, profile);
+    recipe.build.build(dirs);
+    recipe.build.install(dirs);
 
     return 0;
 }

@@ -71,44 +71,36 @@ string localProfileFile()
     return buildPath(localDopDir, "profile.ini");
 }
 
-/// Get the working dir for the selected profile
-/// Must be called from the package dir
-string localProfileWorkDir(Profile profile)
-in(profile && inPackageDefinitionDir())
+/// Structure gathering directories needed during a build
+struct ProfileDirs
 {
-    import std.format : format;
-
-    return buildPath(localDopDir, format("%s-%s", profile.digestHash[0 .. 10],
-            profile.name));
+    // dop working directory
+    string work;
+    // directory into which build happens
+    string build;
+    // directory into which files are installed
+    string install;
 }
 
-/// Get the build dir for the selected profile
-/// Must be called from the package dir
-string localBuildDir(Profile profile)
-in(profile && inPackageDefinitionDir())
+/// Get the paths to the local profile
+ProfileDirs localProfileDirs(Profile profile)
 {
     import std.format : format;
 
-    return buildPath(localProfileWorkDir(profile), "build");
-}
-
-/// Get the install dir for the selected profile
-/// Must be called from the package dir
-string localInstallDir(Profile profile)
-in(profile && inPackageDefinitionDir())
-{
-    import std.format : format;
-
-    return buildPath(localProfileWorkDir(profile), "install");
+    ProfileDirs dirs = void;
+    dirs.work = buildPath(localDopDir, format("%s-%s", profile.digestHash[0 .. 10], profile.name));
+    dirs.build = buildPath(dirs.work, "build");
+    dirs.install = buildPath(dirs.work, "install");
+    return dirs;
 }
 
 /// Get the path to the packed archive
 /// Must be called from the package dir
-string localPackageArchiveFile(Profile profile, Recipe recipe)
-in(profile && recipe && inPackageDefinitionDir())
+string localPackageArchiveFile(ProfileDirs dirs, Recipe recipe)
+in(recipe)
 {
     import std.format : format;
 
     const filename = format("%s-%s%s", recipe.name, recipe.ver, ArchiveBackend.archiveExt);
-    return buildPath(localProfileWorkDir(profile), filename);
+    return buildPath(dirs.work, filename);
 }
