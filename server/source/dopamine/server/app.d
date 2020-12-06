@@ -1,5 +1,7 @@
 module dopamine.server.app;
 
+import dopamine.server.middleware;
+
 import vibe.core.log;
 import vibe.db.mongo.mongo;
 import vibe.vibe;
@@ -67,12 +69,35 @@ void main()
     settings.port = config.httpPort;
     settings.bindAddresses = config.bindAddresses;
 
-    listenHTTP(settings, &hello);
+    auto apiRouter = new URLRouter("/api");
+    apiRouter.any("/*", &cors);
+    apiRouter.get("/*", &hello);
+
+    listenHTTP(settings, apiRouter);
 
     runApplication();
 }
 
+void cors(HTTPServerRequest req, HTTPServerResponse res)
+{
+    logInfo("%s cors %s", req.method, req.path);
+
+    const method = "Access-Control-Request-Method" in req.headers;
+    if (method)
+    {
+        logInfo("adding method %s", *method);
+    }
+
+    res.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT";
+    res.headers["Access-Control-Allow-Origin"] = "*";
+}
+
 void hello(HTTPServerRequest req, HTTPServerResponse res)
 {
+    logInfo("GET %s", req.path);
+
+    logInfo("  params = %s", req.params);
+    logInfo("  JSON = %s", req.json.toPrettyString());
+    logInfo("  form = %s", req.form.toString());
     res.writeBody("Hello, World!");
 }
