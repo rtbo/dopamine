@@ -8,10 +8,12 @@ install/
 #dub
 .dub/
 dub.selections.json
+#dub targets
 *.a
 *.lib
 *.exe
 client/dop
+lib/dopamine-lib-test-lua53-static
 
 #dop
 .dop/
