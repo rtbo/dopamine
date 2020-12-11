@@ -1,5 +1,7 @@
 module dopamine.source;
 
+@safe:
+
 interface Source
 {
     string fetch(in string dest);

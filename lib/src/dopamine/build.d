@@ -11,6 +11,8 @@ import std.format;
 import std.path;
 import std.stdio;
 
+@safe:
+
 interface BuildSystem
 {
     string name();
@@ -45,7 +47,7 @@ class MesonBuildSystem : BuildSystem
         return "meson";
     }
 
-    override void configure(string srcDir, ProfileDirs dirs, Profile profile)
+    override void configure(string srcDir, ProfileDirs dirs, Profile profile) @trusted
     {
         import std.path : asAbsolutePath, asRelativePath;
         import std.uni : toLower;

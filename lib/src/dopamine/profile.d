@@ -10,6 +10,8 @@ import std.exception;
 import std.format;
 import std.string;
 
+@safe:
+
 enum Arch
 {
     x86_64,
@@ -299,12 +301,13 @@ final class Profile
 
     /// Load a [Profile] from ini file.
     /// if ini do not have a name field, name will be assessed from the filename
-    static Profile loadFromFile(string filename)
+    static Profile loadFromFile(string filename) @trusted
     {
+        import std.exception : assumeUnique;
         import std.file : read;
         import std.path : baseName, stripExtension;
 
-        const ini = cast(string) read(filename);
+        const ini = cast(string) assumeUnique(read(filename));
         const nameFromFile = baseName(stripExtension(filename));
 
         return Profile.fromIni(ini, nameFromFile);
@@ -337,7 +340,7 @@ final class Profile
         return app.data();
     }
 
-    static Profile fromIni(string iniString, string defaultName)
+    static Profile fromIni(string iniString, string defaultName) @trusted
     {
         import dini : Ini, IniSection;
 
@@ -586,7 +589,7 @@ alias CompilerDetectF = Compiler function();
 
 immutable CompilerDetectF[][Lang] defaultDetectOrder;
 
-shared static this()
+shared static this() @trusted
 {
     CompilerDetectF[][Lang] order;
 

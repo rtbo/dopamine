@@ -6,6 +6,8 @@ import dopamine.recipe;
 
 import std.path;
 
+@safe:
+
 string userDopDir()
 {
     import std.process : environment;
@@ -37,6 +39,11 @@ string userProfileFile(string name)
 string userProfileFile(Profile profile)
 {
     return userProfileFile(profile.name);
+}
+
+string userLoginFile()
+{
+    return buildPath(userDopDir(), "login.json");
 }
 
 /// Check if current working directory is a package directory.
@@ -83,7 +90,7 @@ struct ProfileDirs
 }
 
 /// Get the paths to the local profile
-ProfileDirs localProfileDirs(Profile profile)
+ProfileDirs localProfileDirs(Profile profile) @trusted
 {
     import std.format : format;
 

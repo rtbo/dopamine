@@ -9,6 +9,8 @@ import std.exception;
 import std.string;
 import std.stdio;
 
+@safe:
+
 class Recipe
 {
     string name;
@@ -45,7 +47,7 @@ void initLua()
     }
 }
 
-Recipe parseRecipe(string path)
+Recipe parseRecipe(string path) @trusted
 {
     auto L = luaL_newstate();
     luaL_openlibs(L);
@@ -88,7 +90,7 @@ Recipe parseRecipe(string path)
 
 private:
 
-int dopModuleLoader(lua_State* L) nothrow
+int dopModuleLoader(lua_State* L) nothrow @trusted
 {
     auto dopMod = import("dop.lua");
     luaL_dostring(L, dopMod.ptr);
@@ -131,7 +133,7 @@ BuildSystem buildSystem(string[string] aa)
     return null;
 }
 
-string globalStringVar(lua_State* L, string varName, string def = null)
+string globalStringVar(lua_State* L, string varName, string def = null) @trusted
 {
     lua_getglobal(L, toStringz(varName));
 
@@ -143,7 +145,7 @@ string globalStringVar(lua_State* L, string varName, string def = null)
     return res ? res : def;
 }
 
-bool globalBoolVar(lua_State* L, string varName, bool def = false)
+bool globalBoolVar(lua_State* L, string varName, bool def = false) @trusted
 {
     lua_getglobal(L, toStringz(varName));
 
@@ -156,7 +158,7 @@ bool globalBoolVar(lua_State* L, string varName, bool def = false)
     return lua_toboolean(L, -1) != 0;
 }
 
-string[string] globalDictTableVar(lua_State* L, string varName)
+string[string] globalDictTableVar(lua_State* L, string varName) @trusted
 {
     lua_getglobal(L, toStringz(varName));
     scope (success)
@@ -164,7 +166,7 @@ string[string] globalDictTableVar(lua_State* L, string varName)
     return getStringDictTable(L, -1);
 }
 
-string[] globalArrayTableVar(lua_State* L, string varName)
+string[] globalArrayTableVar(lua_State* L, string varName) @trusted
 {
     lua_getglobal(L, toStringz(varName));
     scope (success)
@@ -173,7 +175,7 @@ string[] globalArrayTableVar(lua_State* L, string varName)
 }
 
 /// Get a string at index ind in the stack.
-string getString(lua_State* L, int ind)
+string getString(lua_State* L, int ind) @trusted
 {
     if (lua_type(L, ind) != LUA_TSTRING)
         return null;
@@ -184,7 +186,7 @@ string getString(lua_State* L, int ind)
 }
 
 /// Get all strings in a table at stack index [ind] who have string keys.
-string[string] getStringDictTable(lua_State* L, int ind)
+string[string] getStringDictTable(lua_State* L, int ind) @trusted
 {
     if (lua_type(L, ind) != LUA_TTABLE)
         return null;
@@ -220,7 +222,7 @@ string[string] getStringDictTable(lua_State* L, int ind)
 }
 
 /// Get all strings in a table at stack index [ind] who have integer keys.
-string[] getStringArrayTable(lua_State* L, int ind)
+string[] getStringArrayTable(lua_State* L, int ind) @trusted
 {
     if (lua_type(L, ind) != LUA_TTABLE)
         return null;
@@ -246,7 +248,7 @@ string[] getStringArrayTable(lua_State* L, int ind)
 
 // some debugging functions
 
-void printStack(lua_State* L)
+void printStack(lua_State* L) @trusted
 {
     import std.stdio : writefln;
     import std.string : fromStringz;
@@ -293,7 +295,7 @@ void printStack(lua_State* L)
 
 }
 
-void printTable(lua_State* L, int ind)
+void printTable(lua_State* L, int ind) @trusted
 {
     import std.stdio : writefln;
 

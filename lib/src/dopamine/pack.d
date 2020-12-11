@@ -6,6 +6,8 @@ import std.file;
 import std.path;
 import std.string;
 
+@safe:
+
 interface ArchiveBackend
 {
     enum archiveExt = ".tar.xz";
@@ -44,8 +46,8 @@ ArchiveBackend instance;
 
 // Get all files and folder contained by dir
 // No need for recursion, tar is doing it fine
-// Needed because a "*" wildcard is exansed by the shell, not by tar itself.
-string[] allFiles(string dir)
+// Needed because a "*" wildcard is exanded by the shell, not by tar itself.
+string[] allFiles(string dir) @trusted
 {
     import std.algorithm : map;
     import std.array : array;

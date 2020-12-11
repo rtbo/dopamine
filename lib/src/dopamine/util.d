@@ -3,10 +3,12 @@ module dopamine.util;
 import std.digest;
 import std.traits;
 
+@safe:
+
 void feedDigestData(D)(ref D digest, in string s)
 if (isDigest!D)
 {
-    digest.put(cast(ubyte[])s);
+    digest.put(cast(const(ubyte)[])s);
     digest.put(0);
 }
 
@@ -17,7 +19,7 @@ if (isDigest!D)
 
     digest.put(nativeToLittleEndian(cast(uint)ss.length));
     foreach (s; ss) {
-        digest.put(cast(ubyte[])s);
+        digest.put(cast(const(ubyte)[])s);
         digest.put(0);
     }
 }
@@ -69,7 +71,7 @@ string searchInEnvPath(in string envPath, in string filename, in char sep=envPat
 /// Search for filename pattern in the envPath variable content which can
 /// contain multiple paths separated with sep depending on platform.
 /// Returns: array of matching file names
-string[] searchPatternInEnvPath(in string envPath, in string pattern, in char sep=envPathSep)
+string[] searchPatternInEnvPath(in string envPath, in string pattern, in char sep=envPathSep) @trusted
 {
     import std.algorithm : map, splitter;
     import std.array : array;
@@ -86,12 +88,12 @@ string[] searchPatternInEnvPath(in string envPath, in string pattern, in char se
     return res;
 }
 
-void runCommand(in string[] command, string workDir = null, bool quiet = false, string[string] env = null)
+void runCommand(in string[] command, string workDir = null, bool quiet = false, string[string] env = null) @trusted
 {
     runCommands((&command)[0 .. 1], workDir, quiet, env);
 }
 
-void runCommands(in string[][] commands, string workDir = null, bool quiet = false, string[string] env = null)
+void runCommands(in string[][] commands, string workDir = null, bool quiet = false, string[string] env = null) @trusted
 {
     import std.conv : to;
     import std.exception : enforce;
