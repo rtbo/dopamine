@@ -51,7 +51,7 @@ unittest
     const key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoidGVzdGtleSIsImlhdCI6MTYwNzU1MzY2Miwic3ViIjoi"
         ~ "NWZjZmY1YjRlNmEzYTFjZWVkMTY4NjkwIn0.0SOgGOJnZY_JvwXAXrVG-PQ8HyN82aQ5f62y0fSiRCQ";
 
-    const lk = decodeKey(key);
+    const lk = decodeLoginKey(key);
     assert(lk.name == "testkey");
     assert(lk.key == key);
 }

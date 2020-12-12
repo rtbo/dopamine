@@ -33,6 +33,20 @@ if (isDigest!D && (isIntegral!V || is(V == enum)))
     digest.put(0);
 }
 
+/// Get all entries directly contained by dir
+string[] allEntries(string dir) @trusted
+{
+    import std.algorithm : map;
+    import std.array : array;
+    import std.file : dirEntries, SpanMode;
+    import std.path : asAbsolutePath, asRelativePath;
+
+    dir = asAbsolutePath(dir).array;
+    return dirEntries(dir, SpanMode.shallow, false).map!(d => d.name.asRelativePath(dir)
+            .array).array;
+}
+
+
 string findProgram(in string name)
 {
     import std.process : environment;

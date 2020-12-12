@@ -1,10 +1,34 @@
 module dopamine.source;
 
+import std.file;
+import std.path;
+import std.string;
+
 @safe:
+
+string readSourceFlagFile() @trusted
+{
+    import dopamine.paths : localSourceFlagFile;
+    import std.exception : assumeUnique;
+
+    if (!exists(localSourceFlagFile()))
+        return "";
+
+    return cast(string) assumeUnique(read(localSourceFlagFile()));
+}
+
+void writeSourceFlagFile(string sourcePath) @trusted
+{
+    import dopamine.paths : localSourceFlagFile;
+
+    write(localSourceFlagFile, cast(const(void)[]) sourcePath);
+}
 
 interface Source
 {
-    string fetch(in string dest);
+    string fetch(in string dest) const
+    in(isDir(dest))
+    out(res; res.startsWith(dest) && isDir(res));
 }
 
 class GitSource : Source
@@ -27,26 +51,20 @@ class GitSource : Source
         _subdir = subdir;
     }
 
-    override string fetch(in string dest)
+    override string fetch(in string dest) const
     {
         import dopamine.util : runCommand;
         import std.algorithm : endsWith;
         import std.exception : enforce;
-        import std.file : exists, isDir;
-        import std.path : buildPath;
         import std.process : pipeProcess, Redirect;
-        import std.uri : decode;
 
-        const decoded = decode(_url);
-        auto dirName = urlLastComp(decoded);
-
+        auto dirName = urlLastComp(_url);
         if (dirName.endsWith(".git"))
         {
             dirName = dirName[0 .. $ - 4];
         }
 
         const srcDir = buildPath(dest, dirName);
-
         if (!exists(srcDir))
         {
             runCommand(["git", "clone", _url, dirName], dest, false);
@@ -60,65 +78,181 @@ class GitSource : Source
     }
 }
 
-private enum ArchiveFormat
+struct Checksum
 {
-    targz,
-    tar,
-    zip,
-}
+    import std.digest : Digest;
 
-private immutable(string[]) supportedArchiveExts = [".zip", ".tar.gz", ".tar"];
-
-private bool isSupportedArchiveExt(in string path)
-{
-    import std.algorithm : endsWith;
-    import std.uni : toLower;
-
-    const lpath = path.toLower;
-    foreach (ext; supportedArchiveExts)
+    enum Type
     {
-        if (lpath.endsWith(ext))
-            return true;
+        md5,
+        sha1,
+        sha256,
     }
-    return false;
+
+    Type type;
+    string checksum;
+
+    void enforceFileCheck(const string filename) const @trusted
+    in(checksum.length)
+    {
+        import std.exception : enforce;
+
+        enforce(fileCheck(filename), format(`"%s" didn't check to "%s"`, filename, checksum));
+    }
+
+    bool fileCheck(const string filename) const @trusted
+    {
+        import std.digest : toHexString, LetterCase;
+        import std.stdio : File, writeln;
+
+        auto digest = createDigest();
+        ubyte[4096] buf = void;
+
+        auto f = File(filename, "rb");
+        size_t sum = 0;
+        foreach (c; f.byChunk(buf[]))
+        {
+            sum += c.length;
+            digest.put(c);
+        }
+
+        writeln("checked ", sum, " bytes");
+
+        const res = digest.finish().toHexString!(LetterCase.lower)();
+        return res == checksum.toLower();
+    }
+
+    private Digest createDigest() const
+    {
+        import std.digest.md : MD5Digest;
+        import std.digest.sha : SHA1Digest, SHA256Digest;
+
+        final switch (type)
+        {
+        case Checksum.Type.md5:
+            return new MD5Digest;
+        case Checksum.Type.sha1:
+            return new SHA1Digest;
+        case Checksum.Type.sha256:
+            return new SHA256Digest;
+        }
+    }
+
+    private bool opCast(T : bool)() const
+    {
+        return checksum.length != 0;
+    }
 }
 
-private ArchiveFormat archiveFormat(in string path)
-in (isSupportedArchiveExt(path))
+class ArchiveSource : Source
 {
-    import std.algorithm : endsWith;
-    import std.uni : toLower;
+    private string _url;
+    private Checksum _checksum;
 
-    const lpath = path.toLower;
+    this(string url, Checksum checksum = Checksum.init)
+    {
+        _url = url;
+        _checksum = checksum;
+    }
 
-    if (lpath.endsWith(".zip"))
-        return ArchiveFormat.zip;
-    if (lpath.endsWith(".tar.gz"))
-        return ArchiveFormat.targz;
-    if (lpath.endsWith(".tar"))
-        return ArchiveFormat.tar;
+    override string fetch(in string dest) const @trusted
+    {
+        import std.file : exists, isDir;
+        import std.path : buildPath;
+        import std.uri : decode;
 
-    assert(false);
+        const decoded = decode(_url);
+        const fn = urlLastComp(decoded);
+        const archive = buildPath(dest, fn);
+
+        const ldn = likelySrcDirName(archive);
+        if (exists(ldn) && isDir(ldn))
+        {
+            return ldn;
+        }
+
+        downloadArchive(archive);
+        return extractArchive(archive, dest);
+
+    }
+
+    private void downloadArchive(in string archive) const @trusted
+    {
+        import std.exception : enforce;
+        import std.file : exists, remove;
+        import std.net.curl : download;
+        import std.stdio : writefln;
+
+        if (!exists(archive) || !(_checksum && _checksum.fileCheck(archive)))
+        {
+            if (exists(archive))
+            {
+                remove(archive);
+            }
+
+            writefln("downloading %s", _url);
+            download(_url, archive);
+
+            if (_checksum)
+                _checksum.enforceFileCheck(archive);
+        }
+    }
+
+    private string extractArchive(in string archive, in string dest) const
+    {
+        import dopamine.archive : ArchiveBackend;
+        import dopamine.util : allEntries;
+        import std.algorithm : count, filter, map;
+        import std.array : array;
+
+        ArchiveBackend.get.extract(archive, dest);
+
+        // check whether the archive contained a dir or all files at root
+        const entries = allEntries(dest).map!(e => buildPath(dest, e))
+            .filter!(e => e != archive).array;
+        if (entries.length == 1 && isDir(entries[0])) {
+            return entries[0];
+        }
+        else {
+            return dest;
+        }
+    }
 }
 
 private string urlLastComp(in string url)
 in(url.length > 0)
 {
-    size_t ind = url.length - 1;
-    while (ind >= 0 && url[ind] != '/')
-    {
-        ind--;
-    }
-    return url[ind + 1 .. $];
+    import std.exception : enforce;
+    import std.format : format;
+    import std.string : lastIndexOf;
+    import std.uri : decode;
+
+    const pi = lastIndexOf(url, '/');
+    enforce(pi != -1, format(`"%s" does not appear to be a valid URL`, url));
+    enforce(pi != cast(ptrdiff_t) url.length - 1,
+            format(`"%s" does not appear to be a valid URL`, url));
+
+    const comp = url[pi + 1 .. $];
+
+    const qi = lastIndexOf(comp, '?');
+
+    return decode(qi == -1 ? comp : comp[0 .. qi]);
+}
+
+unittest
+{
+    assert(urlLastComp("https://github.com/rtbo/dopamine.git") == "dopamine.git");
+    assert(urlLastComp("http://some-site.test/archive-name.tar.gz?q=param") == "archive-name.tar.gz");
 }
 
 private string likelySrcDirName(in string archive)
-in(isSupportedArchiveExt(archive))
 {
+    import dopamine.archive : ArchiveBackend;
+
     import std.algorithm : endsWith;
     import std.uni : toLower;
 
-    foreach (ext; supportedArchiveExts)
+    foreach (ext; ArchiveBackend.get.supportedExts)
     {
         if (archive.toLower.endsWith(ext))
         {

@@ -13,16 +13,69 @@ import std.stdio;
 
 class Recipe
 {
-    string name;
-    string description;
-    string ver;
-    string license;
-    string copyright;
-    string[] langs;
-    bool outOfTree;
+    private
+    {
+        string _name;
+        string _description;
+        string _ver;
+        string _license;
+        string _copyright;
+        string[] _langs;
 
-    Source source;
-    BuildSystem build;
+        Source _repo;
+        Source _source;
+        BuildSystem _build;
+    }
+
+    @property string name() const
+    {
+        return _name;
+    }
+
+    @property string description() const
+    {
+        return _description;
+    }
+
+    @property string ver() const
+    {
+        return _ver;
+    }
+
+    @property string license() const
+    {
+        return _license;
+    }
+
+    @property string copyright() const
+    {
+        return _copyright;
+    }
+
+    @property const(string)[] langs() const
+    {
+        return _langs;
+    }
+
+    @property const(Source) repo() const
+    {
+        return _repo;
+    }
+
+    @property const(Source) source() const
+    {
+        return _source;
+    }
+
+    @property bool outOfTree() const
+    {
+        return _repo !is _source;
+    }
+
+    @property const(BuildSystem) build() const
+    {
+        return _build;
+    }
 }
 
 void initLua()
@@ -69,16 +122,23 @@ Recipe parseRecipe(string path) @trusted
 
     auto r = new Recipe;
 
-    r.name = enforce(globalStringVar(L, "name"), "name field is mandatory");
-    r.ver = enforce(globalStringVar(L, "version"), "version field is mandatory");
-    r.description = globalStringVar(L, "description");
-    r.license = globalStringVar(L, "license");
-    r.copyright = globalStringVar(L, "copyright");
-    r.langs = globalArrayTableVar(L, "langs");
-    r.outOfTree = globalBoolVar(L, "out_of_tree");
+    r._name = enforce(globalStringVar(L, "name"), "name field is mandatory");
+    r._ver = enforce(globalStringVar(L, "version"), "version field is mandatory");
+    r._description = globalStringVar(L, "description");
+    r._license = globalStringVar(L, "license");
+    r._copyright = globalStringVar(L, "copyright");
+    r._langs = globalArrayTableVar(L, "langs");
 
-    r.source = source(globalDictTableVar(L, "source"));
-    r.build = buildSystem(globalDictTableVar(L, "build"));
+    r._repo = source(globalDictTableVar(L, "repo"));
+    if (globalEqual(L, "repo", "source"))
+    {
+        r._source = r._repo;
+    }
+    else
+    {
+        r._source = source(globalDictTableVar(L, "source"));
+    }
+    r._build = buildSystem(globalDictTableVar(L, "build"));
 
     assert(lua_gettop(L) == 0, "Lua stack not clean");
 
@@ -92,8 +152,18 @@ private:
 
 int dopModuleLoader(lua_State* L) nothrow @trusted
 {
+    import core.stdc.stdio : fprintf, stderr;
+
     auto dopMod = import("dop.lua");
-    luaL_dostring(L, dopMod.ptr);
+
+    const res = luaL_dostring(L, dopMod.ptr);
+    if (res != LUA_OK)
+    {
+        fprintf(stderr, "Error during 'dop.lua' execution: %s\n", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return 0;
+    }
+
     return 1;
 }
 
@@ -111,6 +181,36 @@ Source source(string[string] aa)
             return new GitSource(*url, *revId, subdir ? *subdir : "");
         }
 
+    case "archive":
+        {
+            auto url = enforce("url" in aa, "url is mandator for Archive source");
+            auto md5 = "md5" in aa;
+            auto sha1 = "sha1" in aa;
+            auto sha256 = "sha256" in aa;
+
+            enforce(md5 || sha1 || sha256,
+                    "you must specify at least one of md5, sha1 or sha256 checksums for Archive");
+
+            Checksum checksum;
+            if (sha256)
+            {
+                checksum.type = Checksum.Type.sha256;
+                checksum.checksum = *sha256;
+            }
+            else if (sha1)
+            {
+                checksum.type = Checksum.Type.sha1;
+                checksum.checksum = *sha1;
+            }
+            else if (md5)
+            {
+                checksum.type = Checksum.Type.md5;
+                checksum.checksum = *md5;
+            }
+
+            return new ArchiveSource(*url, checksum);
+        }
+
     default:
         break;
     }
@@ -124,6 +224,8 @@ BuildSystem buildSystem(string[string] aa)
 
     switch (aa["method"])
     {
+    case "cmake":
+        return new CMakeBuildSystem();
     case "meson":
         return new MesonBuildSystem();
     default:
@@ -172,6 +274,15 @@ string[] globalArrayTableVar(lua_State* L, string varName) @trusted
     scope (success)
         lua_pop(L, 1);
     return getStringArrayTable(L, -1);
+}
+
+bool globalEqual(lua_State* L, string var1, string var2) @trusted
+{
+    lua_getglobal(L, toStringz(var1));
+    lua_getglobal(L, toStringz(var2));
+    scope (success)
+        lua_pop(L, 2);
+    return lua_equal(L, -2, -1) == 1;
 }
 
 /// Get a string at index ind in the stack.

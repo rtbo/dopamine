@@ -1,6 +1,6 @@
 module dopamine.client.pack;
 
-import dopamine.pack;
+import dopamine.archive;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
@@ -49,7 +49,7 @@ int packageMain(string[] args)
     assert(profile);
 
     const dirs = localProfileDirs(profile);
-    const archiveFile = localPackageArchiveFile(dirs, recipe);
+    const archiveFile = localPackageArchiveFile(dirs, profile, recipe);
 
     if (exists(archiveFile))
     {

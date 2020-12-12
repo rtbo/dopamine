@@ -401,7 +401,7 @@ final class Profile
     }
 }
 
-Lang[] toLangs(string[] langs)
+Lang[] toLangs(const(string)[] langs)
 {
     return langs.map!(l => l.fromConfig!Lang).array;
 }

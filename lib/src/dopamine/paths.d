@@ -1,6 +1,5 @@
 module dopamine.paths;
 
-import dopamine.pack;
 import dopamine.profile;
 import dopamine.recipe;
 
@@ -72,6 +71,20 @@ in(inPackageDefinitionDir())
     return ".dop";
 }
 
+/// Get the path to where the source is downloaded/extracted.
+/// Only relevant for out-of-tree packages
+string localSourceDest()
+{
+    return buildPath(localDopDir(), "source");
+}
+
+/// Get the path to the file that tracks
+/// the path of the source directory
+string localSourceFlagFile()
+{
+    return buildPath(localDopDir(), ".source");
+}
+
 /// Get the local profile file
 string localProfileFile()
 {
@@ -103,11 +116,23 @@ ProfileDirs localProfileDirs(Profile profile) @trusted
 
 /// Get the path to the packed archive
 /// Must be called from the package dir
-string localPackageArchiveFile(ProfileDirs dirs, Recipe recipe)
-in(recipe)
+string localPackageArchiveFile(ProfileDirs dirs, Profile profile, Recipe recipe)
+in(profile && recipe)
 {
+    import dopamine.archive : ArchiveBackend;
+
+    import std.algorithm : findAmong;
+    import std.exception : enforce;
     import std.format : format;
 
-    const filename = format("%s-%s%s", recipe.name, recipe.ver, ArchiveBackend.archiveExt);
+    const supportedFormats = ArchiveBackend.get.supportedExts;
+    const preferredFormats = [".tar.xz", ".tar.bz2", ".tar.gz"];
+
+    const archiveFormat = findAmong(preferredFormats, supportedFormats);
+
+    enforce(archiveFormat.length, "No archive capability");
+
+    const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
+            profile.digestHash[0 .. 10], archiveFormat[0]);
     return buildPath(dirs.work, filename);
 }
