@@ -19,8 +19,22 @@ FlagFile sourceFlagFile(string packageDir)
 interface Source
 {
     string fetch(in string dest) const
+
     in(isDir(dest))
     out(res; res.startsWith(dest) && isDir(res));
+
+    static bool fetchNeeded(string packageDir)
+    {
+        import dopamine.paths : localDopamineFile;
+
+        auto flagFile = sourceFlagFile(packageDir);
+        if (!flagFile.exists)
+            return true;
+        const sourceDir = flagFile.read();
+        if (!exists(sourceDir) || !isDir(sourceDir))
+            return true;
+        return flagFile.timeLastModified > timeLastModified(localDopamineFile(packageDir));
+    }
 
     /// print out JSON recipe representation
     JSONValue toJson() const;
@@ -78,8 +92,9 @@ class GitSource : Source
         json["type"] = "source";
         json["method"] = "git";
         json["url"] = _url;
-        json["revId"]= _revId;
-        if (_subdir) {
+        json["revId"] = _revId;
+        if (_subdir)
+        {
             json["subdir"] = _subdir;
         }
         return json;
@@ -192,7 +207,8 @@ class ArchiveSource : Source
         json["type"] = "source";
         json["method"] = "archive";
         json["url"] = _url;
-        if (_checksum) {
+        if (_checksum)
+        {
             const key = _checksum.type.to!string;
             json[key] = _checksum.checksum;
         }
@@ -232,11 +248,14 @@ class ArchiveSource : Source
 
         // check whether the archive contained a dir or all files at root
         const entries = allEntries(dest).map!(e => buildPath(dest, e))
-            .filter!(e => e != archive).array;
-        if (entries.length == 1 && isDir(entries[0])) {
+            .filter!(e => e != archive)
+            .array;
+        if (entries.length == 1 && isDir(entries[0]))
+        {
             return entries[0];
         }
-        else {
+        else
+        {
             return dest;
         }
     }

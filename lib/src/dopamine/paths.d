@@ -71,8 +71,14 @@ bool isPackageDefinitionDir(string packageDir)
     return exists(chainPath(packageDir, "dopamine.lua"));
 }
 
-/// Get the local dopamine folder
-/// Must be called from package dir.
+/// Get the path to the dopamine file of a package
+string localDopamineFile(string packageDir)
+in(isPackageDefinitionDir(packageDir))
+{
+    return buildNormalizedPath(buildPath(packageDir, "dopamine.lua"));
+}
+
+/// Get the local dopamine folder of a package
 string localDopDir(string packageDir)
 in(isPackageDefinitionDir(packageDir))
 {

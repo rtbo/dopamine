@@ -54,7 +54,7 @@ int buildMain(string[] args)
         const filename = userProfileFile(profileName);
         enforce(exists(filename), format("Profile %s does not exist", profileName));
         profile = Profile.loadFromFile(filename);
-        writeln("loading profile " ~ profile.name);
+        writeln("Loading profile " ~ profile.name);
     }
     else
     {
@@ -82,7 +82,7 @@ int buildMain(string[] args)
 
         srcDir = sourceFlagFile(".").read();
         enforce(srcDir && exists(srcDir) && isDir(srcDir),
-                "source code not available. Try to run `dop source`");
+                "Source code not available. Try to run `dop source`");
     }
     else
     {

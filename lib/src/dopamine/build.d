@@ -22,6 +22,63 @@ interface BuildSystem
     void install(ProfileDirs dirs) const;
 
     JSONValue toJson() const;
+
+    static bool configureNeeded(string packageDir, const(Profile) profile)
+    {
+        import dopamine.source : sourceFlagFile, Source;
+
+        assert(!Source.fetchNeeded(packageDir));
+
+        const dirs = localProfileDirs(packageDir, profile);
+        auto flagFile = configuredFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
+        if (!flagFile.exists)
+            return true;
+
+        auto srcFf = sourceFlagFile(packageDir);
+
+        const lastMtime = flagFile.timeLastModified;
+
+        return lastMtime < srcFf.timeLastModified
+            || lastMtime < timeLastModified(localDopamineFile(packageDir));
+    }
+
+    static bool buildNeeded(string packageDir, const(Profile) profile)
+    {
+        import dopamine.source : sourceFlagFile, Source;
+
+        assert(!configureNeeded(packageDir, profile));
+
+        const dirs = localProfileDirs(packageDir, profile);
+        auto flagFile = buildFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
+        if (!flagFile.exists)
+            return true;
+
+        auto confFf = configuredFlagFile(dirs);
+
+        const lastMtime = flagFile.timeLastModified;
+
+        return lastMtime < confFf.timeLastModified
+            || lastMtime < timeLastModified(localDopamineFile(packageDir));
+    }
+
+    static bool installNeeded(string packageDir, const(Profile) profile)
+    {
+        import dopamine.source : sourceFlagFile, Source;
+
+        assert(!buildNeeded(packageDir, profile));
+
+        const dirs = localProfileDirs(packageDir, profile);
+        auto flagFile = installFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
+        if (!flagFile.exists)
+            return true;
+
+        auto buildFf = buildFlagFile(dirs);
+
+        const lastMtime = flagFile.timeLastModified;
+
+        return lastMtime < buildFf.timeLastModified
+            || lastMtime < timeLastModified(localDopamineFile(packageDir));
+    }
 }
 
 abstract class NinjaBuildSystem : BuildSystem
