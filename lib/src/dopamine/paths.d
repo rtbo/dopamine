@@ -63,32 +63,42 @@ void enforcePackageDefinitionDir()
             "Out of package definition directory (containing dopamine.lua file)");
 }
 
+/// Checks whether the directory is a package direcotry.
+bool isPackageDefinitionDir(string packageDir)
+{
+    import std.file : exists;
+
+    return exists(chainPath(packageDir, "dopamine.lua"));
+}
+
 /// Get the local dopamine folder
 /// Must be called from package dir.
-string localDopDir()
-in(inPackageDefinitionDir())
+string localDopDir(string packageDir)
+in(isPackageDefinitionDir(packageDir))
 {
-    return ".dop";
+    return buildNormalizedPath(buildPath(packageDir, ".dop"));
 }
 
 /// Get the path to where the source is downloaded/extracted.
 /// Only relevant for out-of-tree packages
-string localSourceDest()
+string localSourceDest(string packageDir)
+in(isPackageDefinitionDir(packageDir))
 {
-    return buildPath(localDopDir(), "source");
+    return buildNormalizedPath(buildPath(localDopDir(packageDir), "source"));
 }
 
 /// Get the path to the file that tracks
 /// the path of the source directory
-string localSourceFlagFile()
+string localSourceFlagFile(string packageDir)
 {
-    return buildPath(localDopDir(), ".source");
+    return buildNormalizedPath(buildPath(localDopDir(packageDir), ".source"));
 }
 
 /// Get the local profile file
-string localProfileFile()
+string localProfileFile(string packageDir)
+in(isPackageDefinitionDir(packageDir))
 {
-    return buildPath(localDopDir, "profile.ini");
+    return buildNormalizedPath(buildPath(localDopDir(packageDir), "profile.ini"));
 }
 
 /// Structure gathering directories needed during a build
@@ -103,14 +113,15 @@ struct ProfileDirs
 }
 
 /// Get the paths to the local profile
-ProfileDirs localProfileDirs(const(Profile) profile) @trusted
+ProfileDirs localProfileDirs(string packageDir, const(Profile) profile) @trusted
 {
     import std.format : format;
 
     ProfileDirs dirs = void;
-    dirs.work = buildPath(localDopDir, format("%s-%s", profile.digestHash[0 .. 10], profile.name));
-    dirs.build = buildPath(dirs.work, "build");
-    dirs.install = buildPath(dirs.work, "install");
+    dirs.work = buildNormalizedPath(buildPath(localDopDir(packageDir),
+            format("%s-%s", profile.digestHash[0 .. 10], profile.name)));
+    dirs.build = buildNormalizedPath(buildPath(dirs.work, "build"));
+    dirs.install = buildNormalizedPath(buildPath(dirs.work, "install"));
     return dirs;
 }
 

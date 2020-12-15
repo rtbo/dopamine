@@ -40,7 +40,7 @@ int packageMain(string[] args)
     }
     else
     {
-        const filename = localProfileFile();
+        const filename = localProfileFile(".");
         enforce(exists(filename), "Profile not selected");
         profile = Profile.loadFromFile(filename);
         writeln("loading profile " ~ profile.name);
@@ -48,7 +48,7 @@ int packageMain(string[] args)
 
     assert(profile);
 
-    const dirs = localProfileDirs(profile);
+    const dirs = localProfileDirs(".", profile);
     const archiveFile = localPackageArchiveFile(dirs, profile, recipe);
 
     if (exists(archiveFile))

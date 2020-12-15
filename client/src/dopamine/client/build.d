@@ -58,7 +58,7 @@ int buildMain(string[] args)
     }
     else
     {
-        const filename = localProfileFile();
+        const filename = localProfileFile(".");
         if (!exists(filename))
         {
             writeln("No profile is set, assuming and setting default");
@@ -80,7 +80,7 @@ int buildMain(string[] args)
     {
         import dopamine.source : readSourceFlagFile;
 
-        srcDir = readSourceFlagFile();
+        srcDir = readSourceFlagFile(".");
         enforce(srcDir && exists(srcDir) && isDir(srcDir),
                 "source code not available. Try to run `dop source`");
     }
@@ -89,7 +89,7 @@ int buildMain(string[] args)
         srcDir = ".";
     }
 
-    const dirs = localProfileDirs(profile);
+    const dirs = localProfileDirs(".", profile);
 
     recipe.build.configure(srcDir, dirs, profile);
     recipe.build.build(dirs);

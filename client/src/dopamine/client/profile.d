@@ -74,7 +74,7 @@ int profileMain(string[] args)
     }
 
     writeln(format(`Setting profile "%s" for %s`, profileName, getcwd()));
-    profile.saveToFile(localProfileFile(), true, true);
+    profile.saveToFile(localProfileFile("."), true, true);
 
     return 0;
 }

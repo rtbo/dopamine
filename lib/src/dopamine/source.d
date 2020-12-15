@@ -7,22 +7,24 @@ import std.string;
 
 @safe:
 
-string readSourceFlagFile() @trusted
+string readSourceFlagFile(string packageDir) @trusted
 {
     import dopamine.paths : localSourceFlagFile;
     import std.exception : assumeUnique;
 
-    if (!exists(localSourceFlagFile()))
+    const flagFile = localSourceFlagFile(packageDir);
+
+    if (!exists(flagFile))
         return "";
 
-    return cast(string) assumeUnique(read(localSourceFlagFile()));
+    return cast(string) assumeUnique(read(flagFile));
 }
 
-void writeSourceFlagFile(string sourcePath) @trusted
+void writeSourceFlagFile(string packageDir, string sourcePath) @trusted
 {
     import dopamine.paths : localSourceFlagFile;
 
-    write(localSourceFlagFile, cast(const(void)[]) sourcePath);
+    write(localSourceFlagFile(packageDir), cast(const(void)[]) sourcePath);
 }
 
 interface Source

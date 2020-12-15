@@ -20,20 +20,20 @@ int sourceMain(string[] args)
         return 0;
     }
 
-    const previous = readSourceFlagFile();
+    const previous = readSourceFlagFile(".");
     if (previous && exists(previous) && isDir(previous))
     {
         writefln("Source was previously extracted to '%s'\nNothing to do.", previous);
         return 0;
     }
 
-    const dest = localSourceDest();
+    const dest = localSourceDest(".");
 
     mkdirRecurse(dest);
 
     const srcDir = recipe.source.fetch(dest);
 
-    writeSourceFlagFile(srcDir);
+    writeSourceFlagFile(".", srcDir);
 
     return 0;
 }
