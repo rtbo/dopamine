@@ -103,7 +103,7 @@ struct ProfileDirs
 }
 
 /// Get the paths to the local profile
-ProfileDirs localProfileDirs(Profile profile) @trusted
+ProfileDirs localProfileDirs(const(Profile) profile) @trusted
 {
     import std.format : format;
 

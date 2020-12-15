@@ -17,14 +17,9 @@ import std.stdio;
 interface BuildSystem
 {
     string name() const;
-    void configure(string srcDir, ProfileDirs dirs, Profile profile) const;
+    void configure(string srcDir, ProfileDirs dirs, const(Profile) profile) const;
     void build(ProfileDirs dirs) const;
     void install(ProfileDirs dirs) const;
-
-    final bool configured(ProfileDirs dirs) const
-    {
-        return exists(configuredFlagPath(dirs));
-    }
 
     JSONValue toJson() const;
 }
@@ -39,17 +34,28 @@ abstract class NinjaBuildSystem : BuildSystem
     }
 
     abstract override string name() const;
-    abstract override void configure(string srcDir, ProfileDirs dirs, Profile profile) const;
+    abstract override void configure(string srcDir, ProfileDirs dirs, const(Profile) profile) const;
 
     override void build(ProfileDirs dirs) const
     {
-        enforce(configured(dirs), "cannot build a package that is not configured");
+
+        auto flagFile = buildFlagFile(dirs);
+        scope (success)
+            flagFile.write();
+        scope (failure)
+            flagFile.remove();
+
         runCommand([_ninja], dirs.build);
     }
 
     override void install(ProfileDirs dirs) const
     {
-        enforce(configured(dirs), "cannot install a package that is not configured");
+        auto flagFile = installFlagFile(dirs);
+        scope (success)
+            flagFile.write();
+        scope (failure)
+            flagFile.remove();
+
         runCommand([_ninja, "install"], dirs.build);
     }
 
@@ -70,20 +76,17 @@ class CMakeBuildSystem : NinjaBuildSystem
         return "CMake";
     }
 
-    override void configure(string srcDir, ProfileDirs dirs, Profile profile) const @trusted
+    override void configure(string srcDir, ProfileDirs dirs, const(Profile) profile) const @trusted
     {
         import std.path : asAbsolutePath, asRelativePath;
         import std.uni : toLower;
 
-        if (configured(dirs))
-        {
-            stderr.writeln("Warning: Package already configured, reconfiguring...");
-        }
+        auto flagFile = configuredFlagFile(dirs);
 
         scope (success)
-            writeConfiguredFlag(dirs);
+            flagFile.write();
         scope (failure)
-            removeConfiguredFlag(dirs);
+            flagFile.remove();
 
         const installDir = asAbsolutePath(dirs.install).array;
         srcDir = assumeUnique(asAbsolutePath(srcDir).asRelativePath(dirs.build).array);
@@ -128,20 +131,16 @@ class MesonBuildSystem : NinjaBuildSystem
         return "Meson";
     }
 
-    override void configure(string srcDir, ProfileDirs dirs, Profile profile) const @trusted
+    override void configure(string srcDir, ProfileDirs dirs, const(Profile) profile) const @trusted
     {
         import std.path : asAbsolutePath, asRelativePath;
         import std.uni : toLower;
 
-        if (configured(dirs))
-        {
-            stderr.writeln("Warning: Package already configured, reconfiguring...");
-        }
-
+        auto flagFile = configuredFlagFile(dirs);
         scope (success)
-            writeConfiguredFlag(dirs);
+            flagFile.write();
         scope (failure)
-            removeConfiguredFlag(dirs);
+            flagFile.remove();
 
         const buildDir = assumeUnique(asAbsolutePath(dirs.build).asRelativePath(srcDir).array);
         const installDir = asAbsolutePath(dirs.install).array;
@@ -166,22 +165,52 @@ class MesonBuildSystem : NinjaBuildSystem
     }
 }
 
-private string configuredFlagPath(ProfileDirs dirs)
+struct FlagFile
 {
-    return buildPath(dirs.work, "configured-ok");
+    string path;
+
+    @property bool exists()
+    {
+        import std.file : exists;
+
+        return exists(path);
+    }
+
+    void write()
+    {
+        import std.file : write;
+        import std.path : dirName;
+
+        mkdirRecurse(dirName(path));
+        write(path, "");
+    }
+
+    void remove()
+    {
+        import std.file : remove;
+
+        remove(path);
+    }
+
+    @property auto timeLastModified()
+    {
+        import std.file : timeLastModified;
+
+        return timeLastModified(path);
+    }
 }
 
-private void writeConfiguredFlag(ProfileDirs dirs)
+FlagFile configuredFlagFile(ProfileDirs dirs)
 {
-    import std.file : write;
-
-    mkdirRecurse(dirs.work);
-    write(configuredFlagPath(dirs), "");
+    return FlagFile(buildPath(dirs.work, "configure-ok"));
 }
 
-private void removeConfiguredFlag(ProfileDirs dirs)
+FlagFile buildFlagFile(ProfileDirs dirs)
 {
-    const cfp = configuredFlagPath(dirs);
-    if (exists(cfp))
-        remove(cfp);
+    return FlagFile(buildPath(dirs.work, "build-ok"));
+}
+
+FlagFile installFlagFile(ProfileDirs dirs)
+{
+    return FlagFile(buildPath(dirs.work, "install-ok"));
 }
