@@ -165,41 +165,6 @@ class MesonBuildSystem : NinjaBuildSystem
     }
 }
 
-struct FlagFile
-{
-    string path;
-
-    @property bool exists()
-    {
-        import std.file : exists;
-
-        return exists(path);
-    }
-
-    void write()
-    {
-        import std.file : write;
-        import std.path : dirName;
-
-        mkdirRecurse(dirName(path));
-        write(path, "");
-    }
-
-    void remove()
-    {
-        import std.file : remove;
-
-        remove(path);
-    }
-
-    @property auto timeLastModified()
-    {
-        import std.file : timeLastModified;
-
-        return timeLastModified(path);
-    }
-}
-
 FlagFile configuredFlagFile(ProfileDirs dirs)
 {
     return FlagFile(buildPath(dirs.work, "configure-ok"));

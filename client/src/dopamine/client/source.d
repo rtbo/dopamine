@@ -20,7 +20,9 @@ int sourceMain(string[] args)
         return 0;
     }
 
-    const previous = readSourceFlagFile(".");
+    auto flagFile = sourceFlagFile(".");
+
+    const previous = flagFile.read();
     if (previous && exists(previous) && isDir(previous))
     {
         writefln("Source was previously extracted to '%s'\nNothing to do.", previous);
@@ -33,7 +35,7 @@ int sourceMain(string[] args)
 
     const srcDir = recipe.source.fetch(dest);
 
-    writeSourceFlagFile(".", srcDir);
+    flagFile.write(srcDir);
 
     return 0;
 }

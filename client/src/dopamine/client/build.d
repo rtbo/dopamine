@@ -78,9 +78,9 @@ int buildMain(string[] args)
 
     if (recipe.outOfTree)
     {
-        import dopamine.source : readSourceFlagFile;
+        import dopamine.source : sourceFlagFile;
 
-        srcDir = readSourceFlagFile(".");
+        srcDir = sourceFlagFile(".").read();
         enforce(srcDir && exists(srcDir) && isDir(srcDir),
                 "source code not available. Try to run `dop source`");
     }

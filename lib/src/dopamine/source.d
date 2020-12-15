@@ -1,5 +1,7 @@
 module dopamine.source;
 
+import dopamine.util;
+
 import std.file;
 import std.json;
 import std.path;
@@ -7,24 +9,11 @@ import std.string;
 
 @safe:
 
-string readSourceFlagFile(string packageDir) @trusted
-{
-    import dopamine.paths : localSourceFlagFile;
-    import std.exception : assumeUnique;
-
-    const flagFile = localSourceFlagFile(packageDir);
-
-    if (!exists(flagFile))
-        return "";
-
-    return cast(string) assumeUnique(read(flagFile));
-}
-
-void writeSourceFlagFile(string packageDir, string sourcePath) @trusted
+FlagFile sourceFlagFile(string packageDir)
 {
     import dopamine.paths : localSourceFlagFile;
 
-    write(localSourceFlagFile(packageDir), cast(const(void)[]) sourcePath);
+    return FlagFile(localSourceFlagFile(packageDir));
 }
 
 interface Source

@@ -33,6 +33,51 @@ if (isDigest!D && (isIntegral!V || is(V == enum)))
     digest.put(0);
 }
 
+/// An file written to flag that a condition is met
+struct FlagFile
+{
+    string path;
+
+    @property bool exists()
+    {
+        import std.file : exists;
+
+        return exists(path);
+    }
+
+    string read() @trusted
+    in(exists)
+    {
+        import std.exception : assumeUnique;
+        import std.file : read;
+
+        return cast(string) assumeUnique(read(path));
+    }
+
+    void write(string content = "")
+    {
+        import std.file : mkdirRecurse, write;
+        import std.path : dirName;
+
+        mkdirRecurse(dirName(path));
+        write(path, content);
+    }
+
+    void remove()
+    {
+        import std.file : remove;
+
+        remove(path);
+    }
+
+    @property auto timeLastModified()
+    {
+        import std.file : timeLastModified;
+
+        return timeLastModified(path);
+    }
+}
+
 /// Get all entries directly contained by dir
 string[] allEntries(string dir) @trusted
 {
