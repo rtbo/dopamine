@@ -8,6 +8,7 @@ import std.array;
 import std.exception;
 import std.file;
 import std.format;
+import std.json;
 import std.path;
 import std.stdio;
 
@@ -24,6 +25,8 @@ interface BuildSystem
     {
         return exists(configuredFlagPath(dirs));
     }
+
+    JSONValue toJson() const;
 }
 
 abstract class NinjaBuildSystem : BuildSystem
@@ -50,6 +53,7 @@ abstract class NinjaBuildSystem : BuildSystem
         runCommand([_ninja, "install"], dirs.build);
     }
 
+    abstract override JSONValue toJson() const;
 }
 
 class CMakeBuildSystem : NinjaBuildSystem
@@ -97,6 +101,16 @@ class CMakeBuildSystem : NinjaBuildSystem
                 ], dirs.build, false, env);
     }
 
+    override JSONValue toJson() const
+    {
+        import std.conv : to;
+
+        JSONValue json;
+        json["type"] = "build";
+        json["method"] = "cmake";
+        return json;
+    }
+
 }
 
 class MesonBuildSystem : NinjaBuildSystem
@@ -139,6 +153,16 @@ class MesonBuildSystem : NinjaBuildSystem
                 _meson, "setup", buildDir, format("--prefix=%s", installDir),
                 format("--buildtype=%s", profile.buildType.to!string.toLower),
                 ], srcDir, false, env);
+    }
+
+    override JSONValue toJson() const
+    {
+        import std.conv : to;
+
+        JSONValue json;
+        json["type"] = "build";
+        json["method"] = "meson";
+        return json;
     }
 }
 

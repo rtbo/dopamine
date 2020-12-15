@@ -6,6 +6,7 @@ import dopamine.source;
 import bindbc.lua;
 
 import std.exception;
+import std.json;
 import std.string;
 import std.stdio;
 
@@ -78,6 +79,60 @@ class Recipe
     }
 }
 
+const(Recipe) recipeParseJson(const ref JSONValue json)
+{
+    auto r = new Recipe;
+
+    r._name = json["name"].str;
+    r._ver = json["version"].str;
+    r._description = json["description"].str;
+    r._license = json["license"].str;
+    r._copyright = json["copyright"].str;
+    r._langs = jsonArray(json["langs"].arrayNoRef);
+
+    r._repo = source(jsonObject(json["repo"].objectNoRef));
+
+    if (!json["source"].isNull)
+    {
+        r._source = source(jsonObject(json["source"].objectNoRef));
+    }
+    else
+    {
+        r._source = r._repo;
+    }
+
+    r._build = buildSystem(jsonObject(json["build"].objectNoRef));
+
+    return r;
+}
+
+JSONValue recipeToJson(const(Recipe) recipe)
+{
+    JSONValue json;
+    if (recipe.name.length)
+        json["name"] = recipe.name;
+    if (recipe.ver.length)
+        json["version"] = recipe.ver;
+    if (recipe.description.length)
+        json["description"] = recipe.description;
+    if (recipe.license.length)
+        json["license"] = recipe.license;
+    if (recipe.copyright.length)
+        json["copyright"] = recipe.copyright;
+    if (recipe.langs.length)
+        json["langs"] = recipe.langs;
+    if (recipe.repo)
+        json["repo"] = recipe.repo.toJson();
+    if (recipe.source && !recipe.outOfTree)
+    {
+        json["source"] = recipe.source.toJson();
+    }
+    if (recipe.build)
+        json["build"] = recipe.build.toJson();
+
+    return json;
+}
+
 void initLua()
 {
     version (BindBC_Static)
@@ -100,7 +155,7 @@ void initLua()
     }
 }
 
-Recipe parseRecipe(string path) @trusted
+const(Recipe) recipeParseFile(string path) @trusted
 {
     auto L = luaL_newstate();
     luaL_openlibs(L);
@@ -130,7 +185,7 @@ Recipe parseRecipe(string path) @trusted
     r._langs = globalArrayTableVar(L, "langs");
 
     r._repo = source(globalDictTableVar(L, "repo"));
-    if (globalEqual(L, "repo", "source"))
+    if (globalIsNil(L, "source") || globalEqual(L, "repo", "source"))
     {
         r._source = r._repo;
     }
@@ -149,23 +204,6 @@ Recipe parseRecipe(string path) @trusted
 }
 
 private:
-
-int dopModuleLoader(lua_State* L) nothrow @trusted
-{
-    import core.stdc.stdio : fprintf, stderr;
-
-    auto dopMod = import("dop.lua");
-
-    const res = luaL_dostring(L, dopMod.ptr);
-    if (res != LUA_OK)
-    {
-        fprintf(stderr, "Error during 'dop.lua' execution: %s\n", lua_tostring(L, -1));
-        lua_pop(L, 1);
-        return 0;
-    }
-
-    return 1;
-}
 
 Source source(string[string] aa)
 {
@@ -235,6 +273,41 @@ BuildSystem buildSystem(string[string] aa)
     return null;
 }
 
+string[string] jsonObject(in JSONValue[string] obj)
+{
+    string[string] aa;
+    foreach (k, v; obj)
+    {
+        aa[k] = v.str;
+    }
+    return aa;
+}
+
+string[] jsonArray(in JSONValue[] arr)
+{
+    import std.algorithm : map;
+    import std.array : array;
+
+    return arr.map!(jv => jv.str).array;
+}
+
+int dopModuleLoader(lua_State* L) nothrow @trusted
+{
+    import core.stdc.stdio : fprintf, stderr;
+
+    auto dopMod = import("dop.lua");
+
+    const res = luaL_dostring(L, dopMod.ptr);
+    if (res != LUA_OK)
+    {
+        fprintf(stderr, "Error during 'dop.lua' execution: %s\n", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return 0;
+    }
+
+    return 1;
+}
+
 string globalStringVar(lua_State* L, string varName, string def = null) @trusted
 {
     lua_getglobal(L, toStringz(varName));
@@ -274,6 +347,14 @@ string[] globalArrayTableVar(lua_State* L, string varName) @trusted
     scope (success)
         lua_pop(L, 1);
     return getStringArrayTable(L, -1);
+}
+
+bool globalIsNil(lua_State* L, string var) @trusted
+{
+    lua_getglobal(L, toStringz(var));
+    scope (success)
+        lua_pop(L, 1);
+    return lua_isnil(L, -1);
 }
 
 bool globalEqual(lua_State* L, string var1, string var2) @trusted

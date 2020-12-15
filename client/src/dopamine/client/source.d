@@ -12,7 +12,7 @@ int sourceMain(string[] args)
     enforcePackageDefinitionDir();
 
     writeln("parsing recipe");
-    const recipe = parseRecipe("dopamine.lua");
+    const recipe = recipeParseFile("dopamine.lua");
 
     if (!recipe.outOfTree)
     {

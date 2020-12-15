@@ -27,7 +27,7 @@ int packageMain(string[] args)
     enforcePackageDefinitionDir();
 
     writeln("parsing recipe");
-    auto recipe = parseRecipe("dopamine.lua");
+    auto recipe = recipeParseFile("dopamine.lua");
 
     Profile profile;
 

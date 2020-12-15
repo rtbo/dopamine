@@ -14,10 +14,10 @@ int loginMain(string[] args)
 
     if (isLoggedIn()) {
         const current = readLoginKey();
-        writefln("replacing former login key: '%s'", current.name);
+        writefln("replacing former login key: '%s'", current.keyName);
     }
 
-    writefln("registering new login key: '%s'", loginKey.name);
+    writefln("registering new login key: '%s'", loginKey.keyName);
 
     writeLoginKey(loginKey);
 

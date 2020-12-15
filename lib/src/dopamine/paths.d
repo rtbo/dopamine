@@ -116,7 +116,7 @@ ProfileDirs localProfileDirs(Profile profile) @trusted
 
 /// Get the path to the packed archive
 /// Must be called from the package dir
-string localPackageArchiveFile(ProfileDirs dirs, Profile profile, Recipe recipe)
+string localPackageArchiveFile(ProfileDirs dirs, const(Profile) profile, const(Recipe) recipe)
 in(profile && recipe)
 {
     import dopamine.archive : ArchiveBackend;

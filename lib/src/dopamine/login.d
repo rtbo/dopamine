@@ -11,8 +11,14 @@ import std.string;
 
 struct LoginKey
 {
-    string name;
+    string userId;
+    string keyName;
     string key;
+
+    bool opCast(T: bool)() const
+    {
+        return userId.length && keyName.length && key.length;
+    }
 }
 
 @property bool isLoggedIn()
@@ -24,12 +30,12 @@ LoginKey readLoginKey() @trusted
 in(isLoggedIn)
 {
     const json = parseJSON(cast(char[])read(userLoginFile()));
-    return LoginKey(json["name"].str, json["key"].str);
+    return LoginKey(json["userId"].str, json["keyName"].str, json["key"].str);
 }
 
 void writeLoginKey(LoginKey lk)
 {
-    JSONValue jv = ["name" : lk.name, "key" : lk.key];
+    JSONValue jv = ["userId": lk.userId, "keyName" : lk.keyName, "key" : lk.key];
     const str = jv.toPrettyString();
     write(userLoginFile(), cast(const(void)[]) str);
 }
@@ -43,7 +49,7 @@ LoginKey decodeLoginKey(string key)
     const payload = parts[1];
     const str = cast(char[]) Base64URLNoPadding.decode(payload);
     const json = parseJSON(str);
-    return LoginKey(json["name"].str, key);
+    return LoginKey(json["sub"].str, json["name"].str, key);
 }
 
 unittest
@@ -52,6 +58,7 @@ unittest
         ~ "NWZjZmY1YjRlNmEzYTFjZWVkMTY4NjkwIn0.0SOgGOJnZY_JvwXAXrVG-PQ8HyN82aQ5f62y0fSiRCQ";
 
     const lk = decodeLoginKey(key);
-    assert(lk.name == "testkey");
+    assert(lk.userId == "joreijfi");
+    assert(lk.keyName == "testkey");
     assert(lk.key == key);
 }

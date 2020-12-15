@@ -5,6 +5,7 @@ import dopamine.client.install;
 import dopamine.client.login;
 import dopamine.client.pack;
 import dopamine.client.profile;
+import dopamine.client.publish;
 import dopamine.client.source;
 import dopamine.client.upload;
 
@@ -25,7 +26,7 @@ int main(string[] args)
 
     const commandHandlers = [
         "build" : &buildMain, "install" : &installMain, "login" : &loginMain,
-        "package" : &packageMain, "profile" : &profileMain,
+        "package" : &packageMain, "profile" : &profileMain, "publish": &publishMain,
         "source" : &sourceMain, "upload" : &uploadMain,
     ];
 

@@ -1,6 +1,7 @@
 module dopamine.source;
 
 import std.file;
+import std.json;
 import std.path;
 import std.string;
 
@@ -29,6 +30,9 @@ interface Source
     string fetch(in string dest) const
     in(isDir(dest))
     out(res; res.startsWith(dest) && isDir(res));
+
+    /// print out JSON recipe representation
+    JSONValue toJson() const;
 }
 
 class GitSource : Source
@@ -74,7 +78,20 @@ class GitSource : Source
 
         runCommand(["git", "checkout", _revId], srcDir, false);
 
-        return srcDir;
+        return _subdir ? buildPath(srcDir, _subdir) : srcDir;
+    }
+
+    override JSONValue toJson() const
+    {
+        JSONValue json;
+        json["type"] = "source";
+        json["method"] = "git";
+        json["url"] = _url;
+        json["revId"]= _revId;
+        if (_subdir) {
+            json["subdir"] = _subdir;
+        }
+        return json;
     }
 }
 
@@ -174,6 +191,21 @@ class ArchiveSource : Source
         downloadArchive(archive);
         return extractArchive(archive, dest);
 
+    }
+
+    override JSONValue toJson() const
+    {
+        import std.conv : to;
+
+        JSONValue json;
+        json["type"] = "source";
+        json["method"] = "archive";
+        json["url"] = _url;
+        if (_checksum) {
+            const key = _checksum.type.to!string;
+            json[key] = _checksum.checksum;
+        }
+        return json;
     }
 
     private void downloadArchive(in string archive) const @trusted
