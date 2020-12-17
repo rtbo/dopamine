@@ -9,10 +9,10 @@ import std.stdio;
 
 int sourceMain(string[] args)
 {
-    enforcePackageDefinitionDir();
+    const packageDir = PackageDir.enforced(".");
 
     writeln("parsing recipe");
-    const recipe = recipeParseFile("dopamine.lua");
+    const recipe = recipeParseFile(packageDir.dopamineFile());
 
     if (!recipe.outOfTree)
     {
@@ -20,7 +20,7 @@ int sourceMain(string[] args)
         return 0;
     }
 
-    auto flagFile = sourceFlagFile(".");
+    auto flagFile = packageDir.sourceFlag();
 
     const previous = flagFile.read();
     if (previous && exists(previous) && isDir(previous))
@@ -29,7 +29,7 @@ int sourceMain(string[] args)
         return 0;
     }
 
-    const dest = localSourceDest(".");
+    const dest = packageDir.sourceDest();
 
     mkdirRecurse(dest);
 

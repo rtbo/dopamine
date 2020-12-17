@@ -2,7 +2,10 @@ module dopamine.paths;
 
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.util;
 
+import std.file;
+import std.format;
 import std.path;
 
 @safe:
@@ -45,67 +48,6 @@ string userLoginFile()
     return buildPath(userDopDir(), "login.json");
 }
 
-/// Check if current working directory is a package directory.
-/// This is defined as a directory containing a `dopamine.lua` file
-bool inPackageDefinitionDir()
-{
-    import std.file : exists;
-
-    return exists("dopamine.lua");
-}
-
-/// Enforces that cwd is in a package directory.
-void enforcePackageDefinitionDir()
-{
-    import std.exception : enforce;
-
-    enforce(inPackageDefinitionDir(),
-            "Out of package definition directory (containing dopamine.lua file)");
-}
-
-/// Checks whether the directory is a package direcotry.
-bool isPackageDefinitionDir(string packageDir)
-{
-    import std.file : exists;
-
-    return exists(chainPath(packageDir, "dopamine.lua"));
-}
-
-/// Get the path to the dopamine file of a package
-string localDopamineFile(string packageDir)
-in(isPackageDefinitionDir(packageDir))
-{
-    return buildNormalizedPath(buildPath(packageDir, "dopamine.lua"));
-}
-
-/// Get the local dopamine folder of a package
-string localDopDir(string packageDir)
-in(isPackageDefinitionDir(packageDir))
-{
-    return buildNormalizedPath(buildPath(packageDir, ".dop"));
-}
-
-/// Get the path to where the source is downloaded/extracted.
-/// Only relevant for out-of-tree packages
-string localSourceDest(string packageDir)
-in(isPackageDefinitionDir(packageDir))
-{
-    return buildNormalizedPath(buildPath(localDopDir(packageDir), "source"));
-}
-
-/// Get the path to the file that tracks
-/// the path of the source directory
-string localSourceFlagFile(string packageDir)
-{
-    return buildNormalizedPath(buildPath(localDopDir(packageDir), ".source"));
-}
-
-/// Get the local profile file
-string localProfileFile(string packageDir)
-in(isPackageDefinitionDir(packageDir))
-{
-    return buildNormalizedPath(buildPath(localDopDir(packageDir), "profile.ini"));
-}
 
 /// Structure gathering directories needed during a build
 struct ProfileDirs
@@ -118,38 +60,116 @@ struct ProfileDirs
     string install;
 }
 
-/// Get the paths to the local profile
-ProfileDirs localProfileDirs(string packageDir, const(Profile) profile) @trusted
+struct PackageDir
 {
-    import std.format : format;
+    private string _dir;
 
-    ProfileDirs dirs = void;
-    dirs.work = buildNormalizedPath(buildPath(localDopDir(packageDir),
-            format("%s-%s", profile.digestHash[0 .. 10], profile.name)));
-    dirs.build = buildNormalizedPath(buildPath(dirs.work, "build"));
-    dirs.install = buildNormalizedPath(buildPath(dirs.work, "install"));
-    return dirs;
-}
+    @property string dir() const
+    {
+        return _dir;
+    }
 
-/// Get the path to the packed archive
-/// Must be called from the package dir
-string localPackageArchiveFile(ProfileDirs dirs, const(Profile) profile, const(Recipe) recipe)
-in(profile && recipe)
-{
-    import dopamine.archive : ArchiveBackend;
+    @property bool exists() const
+    {
+        import std.file : exists, isDir;
 
-    import std.algorithm : findAmong;
-    import std.exception : enforce;
-    import std.format : format;
+        return exists(dir) && isDir(dir);
+    }
 
-    const supportedFormats = ArchiveBackend.get.supportedExts;
-    const preferredFormats = [".tar.xz", ".tar.bz2", ".tar.gz"];
+    @property bool hasDopamineFile() const
+    {
+        import std.file : exists, isFile;
 
-    const archiveFormat = findAmong(preferredFormats, supportedFormats);
+        const df = _path("dopamine.lua");
+        return exists(df) && isFile(df);
+    }
 
-    enforce(archiveFormat.length, "No archive capability");
+    @property string dopamineFile() const
+    in(hasDopamineFile)
+    {
+        return _path("dopamine.lua");
+    }
 
-    const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
-            profile.digestHash[0 .. 10], archiveFormat[0]);
-    return buildPath(dirs.work, filename);
+    @property string dopDir() const
+    in(hasDopamineFile)
+    {
+        return _path(".dop");
+    }
+
+    @property string sourceDest() const
+    in(hasDopamineFile)
+    {
+        return _path(".dop", "source");
+    }
+
+    @property FlagFile sourceFlag() const
+    in(hasDopamineFile)
+    {
+        return FlagFile(_path(".dop", ".source"));
+    }
+
+    @property string profileFile() const
+    in(hasDopamineFile)
+    {
+        return _path(".dop", "profile.ini");
+    }
+
+    ProfileDirs profileDirs(const(Profile) profile) const @trusted
+    in(profile && hasDopamineFile)
+    {
+        const workDir = _workDirName(profile);
+
+        ProfileDirs dirs = void;
+        dirs.work = _path(".dop", workDir);
+        dirs.build = _path(".dop", workDir, "build");
+        dirs.install = _path(".dop", workDir, "install");
+        return dirs;
+    }
+
+    /// Get the path to the packed archive
+    /// Must be called from the package dir
+    string archiveFile(const(Profile) profile, const(Recipe) recipe) const
+    in(profile && recipe && hasDopamineFile)
+    {
+        import dopamine.archive : ArchiveBackend;
+
+        import std.algorithm : findAmong;
+        import std.exception : enforce;
+        import std.format : format;
+
+        const supportedFormats = ArchiveBackend.get.supportedExts;
+        const preferredFormats = [".tar.xz", ".tar.bz2", ".tar.gz"];
+
+        const archiveFormat = findAmong(preferredFormats, supportedFormats);
+
+        enforce(archiveFormat.length, "No archive capability");
+
+        const workDir = _workDirName(profile);
+        const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
+                profile.digestHash[0 .. 10], archiveFormat[0]);
+        return _path(workDir, filename);
+    }
+
+    static PackageDir enforced(string dir, lazy string msg = null)
+    {
+        import std.exception : enforce;
+
+        const pdir = PackageDir(dir);
+        enforce(pdir.hasDopamineFile, msg.length ? msg
+                : format("%s is not a Dopamine package directory", pdir.dir));
+        return pdir;
+    }
+
+    private string _path(Args...)(Args comps) const @trusted
+    {
+        import std.array : array;
+        import std.exception : assumeUnique;
+
+        return assumeUnique(asNormalizedPath(chainPath(dir, comps)).array);
+    }
+
+    private static string _workDirName(const(Profile) profile)
+    {
+        return format("%s-%s", profile.digestHash[0 .. 10], profile.name);
+    }
 }

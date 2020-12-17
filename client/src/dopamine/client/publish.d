@@ -25,10 +25,10 @@ int publishMain(string[] args)
         return 0;
     }
 
-    enforcePackageDefinitionDir();
+    const packageDir = PackageDir.enforced(".");
 
     writeln("parsing recipe");
-    auto recipe = recipeParseFile("dopamine.lua");
+    auto recipe = recipeParseFile(packageDir.dopamineFile());
 
     Profile profile;
 
@@ -41,7 +41,7 @@ int publishMain(string[] args)
     }
     else
     {
-        const filename = localProfileFile(".");
+        const filename = packageDir.profileFile();
         enforce(exists(filename), "Profile not selected");
         profile = Profile.loadFromFile(filename);
         writeln("loading profile " ~ profile.name);
@@ -49,8 +49,8 @@ int publishMain(string[] args)
 
     assert(profile);
 
-    const dirs = localProfileDirs(".", profile);
-    const archiveFile = localPackageArchiveFile(dirs, profile, recipe);
+    const dirs = packageDir.profileDirs(profile);
+    const archiveFile = packageDir.archiveFile(profile, recipe);
 
     enforce(exists(archiveFile), "The archive file does not exist. Maybe run `dop package` before?");
     enforce(timeLastModified(archiveFile) > timeLastModified("dopamine.lua"),
@@ -89,7 +89,7 @@ int publishMain(string[] args)
 
     const pack = packResp.payload;
 
-    const luaDef = cast(string) assumeUnique(read("dopamine.lua"));
+    const luaDef = cast(string) assumeUnique(read(packageDir.dopamineFile()));
 
     const pver = PackageVersion(pack.id, pack.name, recipe.ver, luaDef, recipe);
 

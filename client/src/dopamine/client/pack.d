@@ -24,10 +24,10 @@ int packageMain(string[] args)
         return 0;
     }
 
-    enforcePackageDefinitionDir();
+    const packageDir = PackageDir.enforced(".");
 
     writeln("parsing recipe");
-    auto recipe = recipeParseFile("dopamine.lua");
+    auto recipe = recipeParseFile(packageDir.dopamineFile());
 
     Profile profile;
 
@@ -40,7 +40,7 @@ int packageMain(string[] args)
     }
     else
     {
-        const filename = localProfileFile(".");
+        const filename = packageDir.profileFile();
         enforce(exists(filename), "Profile not selected");
         profile = Profile.loadFromFile(filename);
         writeln("loading profile " ~ profile.name);
@@ -48,8 +48,8 @@ int packageMain(string[] args)
 
     assert(profile);
 
-    const dirs = localProfileDirs(".", profile);
-    const archiveFile = localPackageArchiveFile(dirs, profile, recipe);
+    const dirs = packageDir.profileDirs(profile);
+    const archiveFile = packageDir.archiveFile(profile, recipe);
 
     if (exists(archiveFile))
     {

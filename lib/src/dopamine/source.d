@@ -1,5 +1,6 @@
 module dopamine.source;
 
+import dopamine.paths;
 import dopamine.util;
 
 import std.file;
@@ -9,13 +10,6 @@ import std.string;
 
 @safe:
 
-FlagFile sourceFlagFile(string packageDir)
-{
-    import dopamine.paths : localSourceFlagFile;
-
-    return FlagFile(localSourceFlagFile(packageDir));
-}
-
 interface Source
 {
     string fetch(in string dest) const
@@ -23,17 +17,15 @@ interface Source
     in(isDir(dest))
     out(res; res.startsWith(dest) && isDir(res));
 
-    static bool fetchNeeded(string packageDir)
+    static bool fetchNeeded(PackageDir packageDir)
     {
-        import dopamine.paths : localDopamineFile;
-
-        auto flagFile = sourceFlagFile(packageDir);
+        auto flagFile = packageDir.sourceFlag();
         if (!flagFile.exists)
             return true;
         const sourceDir = flagFile.read();
         if (!exists(sourceDir) || !isDir(sourceDir))
             return true;
-        return flagFile.timeLastModified > timeLastModified(localDopamineFile(packageDir));
+        return flagFile.timeLastModified > timeLastModified(packageDir.dopamineFile());
     }
 
     /// print out JSON recipe representation

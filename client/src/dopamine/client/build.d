@@ -27,10 +27,10 @@ int buildMain(string[] args)
         return 0;
     }
 
-    enforcePackageDefinitionDir();
+    const packageDir = PackageDir.enforced(".");
 
     writeln("parsing recipe");
-    auto recipe = recipeParseFile("dopamine.lua");
+    auto recipe = recipeParseFile(packageDir.dopamineFile());
 
     auto langs = recipe.langs.toLangs();
 
@@ -58,7 +58,7 @@ int buildMain(string[] args)
     }
     else
     {
-        const filename = localProfileFile(".");
+        const filename = packageDir.profileFile();
         if (!exists(filename))
         {
             writeln("No profile is set, assuming and setting default");
@@ -78,18 +78,16 @@ int buildMain(string[] args)
 
     if (recipe.outOfTree)
     {
-        import dopamine.source : sourceFlagFile;
-
-        srcDir = sourceFlagFile(".").read();
+        srcDir = packageDir.sourceFlag().read();
         enforce(srcDir && exists(srcDir) && isDir(srcDir),
                 "Source code not available. Try to run `dop source`");
     }
     else
     {
-        srcDir = ".";
+        srcDir = packageDir.dir;
     }
 
-    const dirs = localProfileDirs(".", profile);
+    const dirs = packageDir.profileDirs(profile);
 
     recipe.build.configure(srcDir, dirs, profile);
     recipe.build.build(dirs);

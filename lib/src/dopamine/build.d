@@ -23,32 +23,32 @@ interface BuildSystem
 
     JSONValue toJson() const;
 
-    static bool configureNeeded(string packageDir, const(Profile) profile)
+    static bool configureNeeded(PackageDir packageDir, const(Profile) profile)
     {
-        import dopamine.source : sourceFlagFile, Source;
+        import dopamine.source : Source;
 
         assert(!Source.fetchNeeded(packageDir));
 
-        const dirs = localProfileDirs(packageDir, profile);
+        const dirs = packageDir.profileDirs(profile);
         auto flagFile = configuredFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
         if (!flagFile.exists)
             return true;
 
-        auto srcFf = sourceFlagFile(packageDir);
+        auto srcFf = packageDir.sourceFlag();
 
         const lastMtime = flagFile.timeLastModified;
 
         return lastMtime < srcFf.timeLastModified
-            || lastMtime < timeLastModified(localDopamineFile(packageDir));
+            || lastMtime < timeLastModified(packageDir.dopamineFile());
     }
 
-    static bool buildNeeded(string packageDir, const(Profile) profile)
+    static bool buildNeeded(PackageDir packageDir, const(Profile) profile)
     {
-        import dopamine.source : sourceFlagFile, Source;
+        import dopamine.source : Source;
 
         assert(!configureNeeded(packageDir, profile));
 
-        const dirs = localProfileDirs(packageDir, profile);
+        const dirs = packageDir.profileDirs(profile);
         auto flagFile = buildFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
         if (!flagFile.exists)
             return true;
@@ -58,16 +58,16 @@ interface BuildSystem
         const lastMtime = flagFile.timeLastModified;
 
         return lastMtime < confFf.timeLastModified
-            || lastMtime < timeLastModified(localDopamineFile(packageDir));
+            || lastMtime < timeLastModified(packageDir.dopamineFile());
     }
 
-    static bool installNeeded(string packageDir, const(Profile) profile)
+    static bool installNeeded(PackageDir packageDir, const(Profile) profile)
     {
-        import dopamine.source : sourceFlagFile, Source;
+        import dopamine.source : Source;
 
         assert(!buildNeeded(packageDir, profile));
 
-        const dirs = localProfileDirs(packageDir, profile);
+        const dirs = packageDir.profileDirs(profile);
         auto flagFile = installFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
         if (!flagFile.exists)
             return true;
@@ -77,7 +77,7 @@ interface BuildSystem
         const lastMtime = flagFile.timeLastModified;
 
         return lastMtime < buildFf.timeLastModified
-            || lastMtime < timeLastModified(localDopamineFile(packageDir));
+            || lastMtime < timeLastModified(packageDir.dopamineFile());
     }
 }
 

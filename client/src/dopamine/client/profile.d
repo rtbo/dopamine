@@ -38,10 +38,10 @@ int profileMain(string[] args)
         return 0;
     }
 
-    enforcePackageDefinitionDir();
+    const packageDir = PackageDir.enforced(".");
 
     writeln("parsing recipe");
-    auto recipe = recipeParseFile("dopamine.lua");
+    auto recipe = recipeParseFile(packageDir.dopamineFile());
 
     auto langs = recipe.langs.toLangs();
 
@@ -74,7 +74,7 @@ int profileMain(string[] args)
     }
 
     writeln(format(`Setting profile "%s" for %s`, profileName, getcwd()));
-    profile.saveToFile(localProfileFile("."), true, true);
+    profile.saveToFile(packageDir.profileFile(), true, true);
 
     return 0;
 }
