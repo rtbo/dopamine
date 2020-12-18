@@ -30,7 +30,7 @@ interface BuildSystem
         assert(!Source.fetchNeeded(packageDir));
 
         const dirs = packageDir.profileDirs(profile);
-        auto flagFile = configuredFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
+        auto flagFile = dirs.configFlag(); // @suppress(dscanner.suspicious.unmodified)
         if (!flagFile.exists)
             return true;
 
@@ -49,11 +49,11 @@ interface BuildSystem
         assert(!configureNeeded(packageDir, profile));
 
         const dirs = packageDir.profileDirs(profile);
-        auto flagFile = buildFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
+        auto flagFile = dirs.buildFlag(); // @suppress(dscanner.suspicious.unmodified)
         if (!flagFile.exists)
             return true;
 
-        auto confFf = configuredFlagFile(dirs);
+        auto confFf = dirs.configFlag();
 
         const lastMtime = flagFile.timeLastModified;
 
@@ -68,11 +68,11 @@ interface BuildSystem
         assert(!buildNeeded(packageDir, profile));
 
         const dirs = packageDir.profileDirs(profile);
-        auto flagFile = installFlagFile(dirs); // @suppress(dscanner.suspicious.unmodified)
+        auto flagFile = dirs.installFlag(); // @suppress(dscanner.suspicious.unmodified)
         if (!flagFile.exists)
             return true;
 
-        auto buildFf = buildFlagFile(dirs);
+        auto buildFf = dirs.buildFlag();
 
         const lastMtime = flagFile.timeLastModified;
 
@@ -96,7 +96,7 @@ abstract class NinjaBuildSystem : BuildSystem
     override void build(ProfileDirs dirs) const
     {
 
-        auto flagFile = buildFlagFile(dirs);
+        auto flagFile = dirs.buildFlag();
         scope (success)
             flagFile.write();
         scope (failure)
@@ -107,7 +107,7 @@ abstract class NinjaBuildSystem : BuildSystem
 
     override void install(ProfileDirs dirs) const
     {
-        auto flagFile = installFlagFile(dirs);
+        auto flagFile = dirs.installFlag();
         scope (success)
             flagFile.write();
         scope (failure)
@@ -138,7 +138,7 @@ class CMakeBuildSystem : NinjaBuildSystem
         import std.path : asAbsolutePath, asRelativePath;
         import std.uni : toLower;
 
-        auto flagFile = configuredFlagFile(dirs);
+        auto flagFile = dirs.configFlag();
 
         scope (success)
             flagFile.write();
@@ -193,7 +193,7 @@ class MesonBuildSystem : NinjaBuildSystem
         import std.path : asAbsolutePath, asRelativePath;
         import std.uni : toLower;
 
-        auto flagFile = configuredFlagFile(dirs);
+        auto flagFile = dirs.configFlag();
         scope (success)
             flagFile.write();
         scope (failure)
@@ -220,19 +220,4 @@ class MesonBuildSystem : NinjaBuildSystem
         json["method"] = "meson";
         return json;
     }
-}
-
-FlagFile configuredFlagFile(ProfileDirs dirs)
-{
-    return FlagFile(buildPath(dirs.work, "configure-ok"));
-}
-
-FlagFile buildFlagFile(ProfileDirs dirs)
-{
-    return FlagFile(buildPath(dirs.work, "build-ok"));
-}
-
-FlagFile installFlagFile(ProfileDirs dirs)
-{
-    return FlagFile(buildPath(dirs.work, "install-ok"));
 }

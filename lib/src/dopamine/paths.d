@@ -48,18 +48,6 @@ string userLoginFile()
     return buildPath(userDopDir(), "login.json");
 }
 
-
-/// Structure gathering directories needed during a build
-struct ProfileDirs
-{
-    // dop working directory
-    string work;
-    // directory into which build happens
-    string build;
-    // directory into which files are installed
-    string install;
-}
-
 struct PackageDir
 {
     private string _dir;
@@ -171,5 +159,34 @@ struct PackageDir
     private static string _workDirName(const(Profile) profile)
     {
         return format("%s-%s", profile.digestHash[0 .. 10], profile.name);
+    }
+}
+
+/// Structure gathering directories needed during a build
+struct ProfileDirs
+{
+    /// dop working directory
+    string work;
+    /// directory into which build happens
+    string build;
+    /// directory into which files are installed
+    string install;
+
+    /// FlagFile that indicates that configuration is done
+    FlagFile configFlag() const
+    {
+        return FlagFile(buildPath(work, ".config-ok"));
+    }
+
+    /// FlagFile that indicates that build is done
+    FlagFile buildFlag() const
+    {
+        return FlagFile(buildPath(work, ".build-ok"));
+    }
+
+    /// FlagFile that indicates that install is done
+    FlagFile installFlag() const
+    {
+        return FlagFile(buildPath(work, ".install-ok"));
     }
 }
