@@ -12,8 +12,21 @@ import std.string;
 
 interface Source
 {
-    string fetch(in string dest) const
+    final string fetch(PackageDir packageDir) const
+    {
+        auto flag = packageDir.sourceFlag();
+        flag.remove();
 
+        const dest = packageDir.sourceDest();
+        mkdirRecurse(dest);
+        const dir = doFetch(dest);
+
+        flag.write(dir);
+
+        return dir;
+    }
+
+    protected string doFetch(in string dest) const
     in(isDir(dest))
     out(res; res.startsWith(dest) && isDir(res));
 
@@ -52,7 +65,7 @@ class GitSource : Source
         _subdir = subdir;
     }
 
-    override string fetch(in string dest) const
+    protected override string doFetch(in string dest) const
     {
         import dopamine.util : runCommand;
         import std.algorithm : endsWith;
@@ -170,7 +183,7 @@ class ArchiveSource : Source
         _checksum = checksum;
     }
 
-    override string fetch(in string dest) const @trusted
+    protected override string doFetch(in string dest) const @trusted
     {
         import std.file : exists, isDir;
         import std.path : buildPath;
