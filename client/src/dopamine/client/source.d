@@ -3,6 +3,7 @@ module dopamine.client.source;
 import dopamine.paths;
 import dopamine.recipe;
 import dopamine.source;
+import dopamine.state;
 
 import std.file;
 import std.stdio;
@@ -20,22 +21,16 @@ int sourceMain(string[] args)
         return 0;
     }
 
-    auto flagFile = packageDir.sourceFlag();
+    auto state = new FetchSourceState(packageDir, recipe);
 
-    const previous = flagFile.read();
-    if (previous && exists(previous) && isDir(previous))
+    if (state.reached)
     {
-        writefln("Source was previously extracted to '%s'\nNothing to do.", previous);
-        return 0;
+        writefln("Source was previously extracted to '%s'\nNothing to do.", state.sourceDir);
     }
-
-    const dest = packageDir.sourceDest();
-
-    mkdirRecurse(dest);
-
-    const srcDir = recipe.source.fetch(dest);
-
-    flagFile.write(srcDir);
+    else
+    {
+        state.reach();
+    }
 
     return 0;
 }

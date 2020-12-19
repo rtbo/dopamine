@@ -4,6 +4,7 @@ import dopamine.archive;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.state;
 
 import std.exception;
 import std.getopt;
@@ -48,16 +49,25 @@ int packageMain(string[] args)
 
     assert(profile);
 
-    const dirs = packageDir.profileDirs(profile);
-    const archiveFile = packageDir.archiveFile(profile, recipe);
+    auto profileState = new UseProfileState(packageDir, recipe, profile);
+    auto sourceState = new EnforcedSourceState(packageDir, recipe,
+            "Source code not available. Try to run `dop source`");
+    auto configState = new EnforcedConfigState(packageDir, recipe, profileState, sourceState,
+            format("Package not configured for profile '%s'. Try to run `dop build`", profile.name));
+    auto buildState = new EnforcedBuildState(packageDir, recipe, profileState, configState,
+            format("Package not built for profile '%s'. Try to run `dop build`", profile.name));
+    auto installState = new EnforcedInstallState(packageDir, recipe, profileState, buildState,
+            format("Package not installed for profile '%s'. Try to run `dop build`", profile.name));
 
-    if (exists(archiveFile))
+    auto archiveState = new CreateArchiveState(packageDir, recipe, profileState, installState);
+
+    if (archiveState.reached)
     {
-        writeln("warning: removing existing archive: ", archiveFile);
-        remove(archiveFile);
+        writefln("archive %s already created", archiveState.file);
     }
-
-    ArchiveBackend.get.create(dirs.install, archiveFile);
-
+    else {
+        archiveState.reach();
+        writefln("Created archive %s", archiveState.file);
+    }
     return 0;
 }

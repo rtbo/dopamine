@@ -4,6 +4,7 @@ import dopamine.api;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.state;
 
 import std.exception;
 import std.file;
@@ -49,12 +50,23 @@ int publishMain(string[] args)
 
     assert(profile);
 
-    const dirs = packageDir.profileDirs(profile);
+    auto profileState = new UseProfileState(packageDir, recipe, profile);
+    auto sourceState = new EnforcedSourceState(packageDir, recipe,
+            "Source code not available. Try to run `dop source`");
+    auto configState = new EnforcedConfigState(packageDir, recipe, profileState, sourceState,
+            format("Package not configured for profile '%s'. Try to run `dop build`", profile.name));
+    auto buildState = new EnforcedBuildState(packageDir, recipe, profileState, configState,
+            format("Package not built for profile '%s'. Try to run `dop build`", profile.name));
+    auto installState = new EnforcedInstallState(packageDir, recipe, profileState, buildState,
+            format("Package not installed for profile '%s'. Try to run `dop build`", profile.name));
+    auto archiveState = new EnforcedArchiveState(packageDir, recipe, profileState, installState);
+
     const archiveFile = packageDir.archiveFile(profile, recipe);
 
-    enforce(exists(archiveFile), "The archive file does not exist. Maybe run `dop package` before?");
-    enforce(timeLastModified(archiveFile) > timeLastModified("dopamine.lua"),
-            "Archive file was found, but is older than the package definition. Maybe run `dop package` before?");
+    enforce(archiveState.reached,
+            format("The archive file %s does not exist or is not up-to-date.\n"
+                ~ "Dop must check that the package actually builds with one profile before publishing.\n"
+                ~ "Maybe run `dop package` before?", archiveFile));
 
     writefln("found archive file: %s", archiveFile);
 

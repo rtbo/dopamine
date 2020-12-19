@@ -1,8 +1,9 @@
 module dopamine.client.build;
 
 import dopamine.profile;
-import dopamine.recipe;
 import dopamine.paths;
+import dopamine.recipe;
+import dopamine.state;
 
 import std.algorithm;
 import std.array;
@@ -74,24 +75,24 @@ int buildMain(string[] args)
 
     assert(profile, "profile not set");
 
-    string srcDir;
-
-    if (recipe.outOfTree)
-    {
-        srcDir = packageDir.sourceFlag().read();
-        enforce(srcDir && exists(srcDir) && isDir(srcDir),
-                "Source code not available. Try to run `dop source`");
-    }
-    else
-    {
-        srcDir = packageDir.dir;
-    }
+    auto profileState = new UseProfileState(packageDir, recipe, profile);
+    auto sourceState = new EnforcedSourceState(packageDir, recipe,
+            "Source code not available. Try to run `dop source`");
+    auto configState = new DoConfigState(packageDir, recipe, profileState, sourceState);
+    auto buildState = new DoBuildState(packageDir, recipe, profileState, configState);
+    auto installState = new DoInstallState(packageDir, recipe, profileState, buildState);
 
     const dirs = packageDir.profileDirs(profile);
 
-    recipe.build.configure(srcDir, dirs, profile);
-    recipe.build.build(dirs);
-    recipe.build.install(dirs);
+    if (installState.reached)
+    {
+        writefln("Target already installed in %s", dirs.install);
+    }
+    else
+    {
+        installState.reach();
+        writefln("Installed target in %s", dirs.install);
+    }
 
     return 0;
 }
