@@ -135,7 +135,7 @@ struct PackageDir
         const workDir = _workDirName(profile);
         const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
                 profile.digestHash[0 .. 10], archiveFormat[0]);
-        return _path(workDir, filename);
+        return _path(".dop", workDir, filename);
     }
 
     static PackageDir enforced(string dir, lazy string msg = null)
