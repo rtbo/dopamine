@@ -204,3 +204,38 @@ void runCommands(in string[][] commands, string workDir = null, bool quiet = fal
 
     return cmd.join(" ");
 }
+
+struct SizeOfStr
+{
+    size_t bytes;
+    double size;
+    string unit;
+
+    string toString() const
+    {
+        import std.format : format;
+
+        return format("%.1f %s", size, unit);
+    }
+}
+
+SizeOfStr convertBytesSizeOf(in size_t bytes) pure @nogc nothrow
+{
+    enum KiB = 1024;
+    enum MiB = KiB * 1024;
+    enum GiB = MiB * 1024;
+
+    if (bytes >= GiB)
+    {
+        return SizeOfStr(bytes, bytes / cast(double) GiB, "GiB");
+    }
+    if (bytes >= MiB)
+    {
+        return SizeOfStr(bytes, bytes / cast(double) MiB, "MiB");
+    }
+    if (bytes >= KiB)
+    {
+        return SizeOfStr(bytes, bytes / cast(double) KiB, "KiB");
+    }
+    return SizeOfStr(bytes, cast(double) bytes, "B");
+}
