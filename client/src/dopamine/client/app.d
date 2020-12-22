@@ -20,14 +20,16 @@ import std.stdio;
 
 int main(string[] args)
 {
+    import dopamine.log : error, info, logError, logInfo;
     import dopamine.recipe : initLua;
+    import dopamine.state : StateNotReachedException;
 
     initLua();
 
     const commandHandlers = [
         "build" : &buildMain, "install" : &installMain, "login" : &loginMain,
-        "package" : &packageMain, "profile" : &profileMain, "publish": &publishMain,
-        "source" : &sourceMain, "upload" : &uploadMain,
+        "package" : &packageMain, "profile" : &profileMain,
+        "publish" : &publishMain, "source" : &sourceMain, "upload" : &uploadMain,
     ];
 
     const commandNames = commandHandlers.keys;
@@ -57,7 +59,7 @@ int main(string[] args)
     }
     if (changeDir.length)
     {
-        writeln("changing current directory to ", changeDir);
+        logInfo("changing current directory to %s", info(changeDir));
         chdir(changeDir);
     }
 
@@ -68,20 +70,26 @@ int main(string[] args)
     auto handler = command in commandHandlers;
     if (!handler)
     {
-        stderr.writeln("unknown command: ", command);
+        logError("unknown command: %s", error(command));
         return 1;
     }
 
-    // remove command name
+    // merge command name
+    args[0] = format("dop-%s", command);
     args = args.remove(1);
 
     try
     {
         return (*handler)(args);
     }
+    catch (StateNotReachedException)
+    {
+        // Error already logged out.
+        return 1;
+    }
     catch (Exception ex)
     {
-        stderr.writeln(format("Error occured during %s execution:\n%s", command, ex.msg));
+        logError("%s: %s", error("Error"), ex.msg);
         return 1;
     }
 }

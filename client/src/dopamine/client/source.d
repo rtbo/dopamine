@@ -1,5 +1,7 @@
 module dopamine.client.source;
 
+import dopamine.client.util;
+
 import dopamine.paths;
 import dopamine.recipe;
 import dopamine.source;
@@ -12,8 +14,7 @@ int sourceMain(string[] args)
 {
     const packageDir = PackageDir.enforced(".");
 
-    writeln("parsing recipe");
-    const recipe = recipeParseFile(packageDir.dopamineFile());
+    const recipe = parseRecipe(packageDir);
 
     if (!recipe.outOfTree)
     {

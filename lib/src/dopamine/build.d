@@ -1,5 +1,6 @@
 module dopamine.build;
 
+import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.util;
@@ -158,7 +159,7 @@ class CMakeBuildSystem : NinjaBuildSystem
                 format("-DCMAKE_INSTALL_PREFIX=%s", installDir),
                 format("-DCMAKE_BUILD_TYPE=%s", profile.buildType.to!string),
                 srcDir
-                ], dirs.build, false, env);
+                ], dirs.build, LogLevel.verbose, env);
     }
 
     override JSONValue toJson() const
@@ -208,7 +209,7 @@ class MesonBuildSystem : NinjaBuildSystem
         runCommand([
                 _meson, "setup", buildDir, format("--prefix=%s", installDir),
                 format("--buildtype=%s", profile.buildType.to!string.toLower),
-                ], srcDir, false, env);
+                ], srcDir, LogLevel.verbose, env);
     }
 
     override JSONValue toJson() const

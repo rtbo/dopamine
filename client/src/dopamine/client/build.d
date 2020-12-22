@@ -1,5 +1,8 @@
 module dopamine.client.build;
 
+import dopamine.client.util;
+
+import dopamine.log;
 import dopamine.profile;
 import dopamine.paths;
 import dopamine.recipe;
@@ -30,8 +33,7 @@ int buildMain(string[] args)
 
     const packageDir = PackageDir.enforced(".");
 
-    writeln("parsing recipe");
-    auto recipe = recipeParseFile(packageDir.dopamineFile());
+    const recipe = parseRecipe(packageDir);
 
     auto langs = recipe.langs.toLangs();
 
@@ -40,12 +42,12 @@ int buildMain(string[] args)
 
     if (!exists(defaultFile))
     {
-        writeln("Default profile does not exist. Will create it.");
+        logInfo("Default profile does not exist. Will create it.");
         auto p = detectDefaultProfile(langs);
-        writeln(p.describe());
+        logInfo(p.describe());
 
         p.saveToFile(defaultFile, false, true);
-        writeln("Default profile saved to " ~ defaultFile);
+        logInfo("Default profile saved to %s", info(defaultFile));
     }
 
     Profile profile;
@@ -55,21 +57,19 @@ int buildMain(string[] args)
         const filename = userProfileFile(profileName);
         enforce(exists(filename), format("Profile %s does not exist", profileName));
         profile = Profile.loadFromFile(filename);
-        writeln("Loading profile " ~ profile.name);
     }
     else
     {
         const filename = packageDir.profileFile();
         if (!exists(filename))
         {
-            writeln("No profile is set, assuming and setting default");
+            logInfo("No profile is set, assuming and setting default");
             profile = Profile.loadFromFile(defaultFile);
             profile.saveToFile(filename, true, true);
         }
         else
         {
             profile = Profile.loadFromFile(filename);
-            writeln("loading profile " ~ profile.name);
         }
     }
 
@@ -77,7 +77,7 @@ int buildMain(string[] args)
 
     auto profileState = new UseProfileState(packageDir, recipe, profile);
     auto sourceState = new EnforcedSourceState(packageDir, recipe,
-            "Source code not available. Try to run `dop source`");
+            "Source code not available or not up-to-date. Try to run `dop source`");
     auto configState = new DoConfigState(packageDir, recipe, profileState, sourceState);
     auto buildState = new DoBuildState(packageDir, recipe, profileState, configState);
     auto installState = new DoInstallState(packageDir, recipe, profileState, buildState);
@@ -86,12 +86,12 @@ int buildMain(string[] args)
 
     if (installState.reached)
     {
-        writefln("Target already installed in %s", dirs.install);
+        logInfo("Target already installed in %s\nNothing to do.", info(dirs.install));
     }
     else
     {
         installState.reach();
-        writefln("Installed target in %s", dirs.install);
+        logInfo("Installed target in %s", info(dirs.install));
     }
 
     return 0;

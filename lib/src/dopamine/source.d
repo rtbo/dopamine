@@ -1,5 +1,6 @@
 module dopamine.source;
 
+import dopamine.log;
 import dopamine.paths;
 import dopamine.util;
 
@@ -81,12 +82,12 @@ class GitSource : Source
         const srcDir = buildPath(dest, dirName);
         if (!exists(srcDir))
         {
-            runCommand(["git", "clone", _url, dirName], dest, false);
+            runCommand(["git", "clone", _url, dirName], dest, LogLevel.info);
         }
 
         enforce(isDir(srcDir));
 
-        runCommand(["git", "checkout", _revId], srcDir, false);
+        runCommand(["git", "checkout", _revId], srcDir, LogLevel.info);
 
         return _subdir ? buildPath(srcDir, _subdir) : srcDir;
     }
@@ -131,7 +132,7 @@ struct Checksum
     bool fileCheck(const string filename) const @trusted
     {
         import std.digest : toHexString, LetterCase;
-        import std.stdio : File, writeln;
+        import std.stdio : File;
 
         auto digest = createDigest();
         ubyte[4096] buf = void;
@@ -144,10 +145,20 @@ struct Checksum
             digest.put(c);
         }
 
-        writeln("checked ", sum, " bytes");
-
         const res = digest.finish().toHexString!(LetterCase.lower)();
-        return res == checksum.toLower();
+        const ok = res == checksum.toLower();
+
+        if (ok)
+        {
+            logInfo("%s: %s - %s", filename,
+                    info(res[0 .. 8] ~ "..." ~ res[$ - 2 .. $]), success("OK"));
+        }
+        else
+        {
+            logError("%s: %s - %s (expected %s)", filename, info(res),
+                    error("NOK"), checksum.toLower());
+        }
+        return ok;
     }
 
     private Digest createDigest() const
@@ -225,7 +236,6 @@ class ArchiveSource : Source
         import std.exception : enforce;
         import std.file : exists, remove;
         import std.net.curl : download;
-        import std.stdio : writefln;
 
         if (!exists(archive) || !(_checksum && _checksum.fileCheck(archive)))
         {
@@ -234,8 +244,13 @@ class ArchiveSource : Source
                 remove(archive);
             }
 
-            writefln("downloading %s", _url);
+            logInfo("%s %s", info("Downloading"), _url);
+
             download(_url, archive);
+
+            const sz = convertBytesSizeOf(getSize(archive));
+
+            logInfo("%s: %s (%s)", success("Done"), info(archive), sz);
 
             if (_checksum)
                 _checksum.enforceFileCheck(archive);

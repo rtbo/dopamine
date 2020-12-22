@@ -1,5 +1,6 @@
 module dopamine.client.login;
 
+import dopamine.log;
 import dopamine.login;
 
 import std.exception;
@@ -14,10 +15,10 @@ int loginMain(string[] args)
 
     if (isLoggedIn()) {
         const current = readLoginKey();
-        writefln("replacing former login key: '%s'", current.keyName);
+        logInfo("replacing former login key: '%s'", warning(current.keyName));
     }
 
-    writefln("registering new login key: '%s'", loginKey.keyName);
+    logInfo("registering new login key: '%s'", success(loginKey.keyName));
 
     writeLoginKey(loginKey);
 

@@ -172,7 +172,7 @@ const(Recipe) recipeParseFile(string path) @trusted
 
     if (luaL_dofile(L, path.toStringz))
     {
-        throw new Exception("cannot run Lua file: " ~ fromStringz(lua_tostring(L, -1)).idup);
+        throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L, -1)).idup);
     }
 
     auto r = new Recipe;

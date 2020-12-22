@@ -1,6 +1,9 @@
 module dopamine.client.pack;
 
+import dopamine.client.util;
+
 import dopamine.archive;
+import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
@@ -27,8 +30,7 @@ int packageMain(string[] args)
 
     const packageDir = PackageDir.enforced(".");
 
-    writeln("parsing recipe");
-    auto recipe = recipeParseFile(packageDir.dopamineFile());
+    const recipe = parseRecipe(packageDir);
 
     Profile profile;
 
@@ -37,14 +39,12 @@ int packageMain(string[] args)
         const filename = userProfileFile(profileName);
         enforce(exists(filename), format("Profile %s does not exist", profileName));
         profile = Profile.loadFromFile(filename);
-        writeln("loading profile " ~ profile.name);
     }
     else
     {
         const filename = packageDir.profileFile();
         enforce(exists(filename), "Profile not selected");
         profile = Profile.loadFromFile(filename);
-        writeln("loading profile " ~ profile.name);
     }
 
     assert(profile);
@@ -63,11 +63,11 @@ int packageMain(string[] args)
 
     if (archiveState.reached)
     {
-        writefln("archive %s already created", archiveState.file);
+        logInfo("archive %s already created\nNothing to do.", archiveState.file);
     }
     else {
         archiveState.reach();
-        writefln("Created archive %s", archiveState.file);
+        logInfo("Created archive %s", archiveState.file);
     }
     return 0;
 }

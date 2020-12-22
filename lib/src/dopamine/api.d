@@ -238,13 +238,14 @@ struct API
         HTTP.StatusLine status;
         http.onReceiveStatusLine = (HTTP.StatusLine sl) { status = sl; };
 
-        writef("%s%s ...", methodString(method), url);
         http.perform();
-        writefln(" %s", status.code);
 
-        if (bodi.length)
         {
-            writefln("sent: %s", cast(const(char)[]) bodi);
+            import dopamine.log : logInfo, info, success, error;
+
+            const codeText = format("%s", status.code);
+            logInfo("%s%s ... %s", info(methodString(method)), url,
+                    status.code >= 400 ? error(codeText) : success(codeText));
         }
 
         string error;

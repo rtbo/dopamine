@@ -1,5 +1,7 @@
 module dopamine.client.publish;
 
+import dopamine.client.util;
+
 import dopamine.api;
 import dopamine.paths;
 import dopamine.profile;
@@ -28,8 +30,7 @@ int publishMain(string[] args)
 
     const packageDir = PackageDir.enforced(".");
 
-    writeln("parsing recipe");
-    auto recipe = recipeParseFile(packageDir.dopamineFile());
+    const recipe = parseRecipe(packageDir);
 
     Profile profile;
 

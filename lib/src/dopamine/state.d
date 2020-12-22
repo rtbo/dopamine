@@ -5,6 +5,7 @@ module dopamine.state;
 
 import dopamine.archive;
 import dopamine.build;
+import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
@@ -18,16 +19,25 @@ abstract class PackageState
 {
     import std.algorithm : all;
 
+    private string _name;
     private PackageDir _packageDir;
     private const(Recipe) _recipe;
     private PackageState[] _prereq;
+    private bool _logged;
 
-    this(PackageDir packageDir, const(Recipe) recipe, PackageState[] prerequisites = null)
+    this(string name, PackageDir packageDir, const(Recipe) recipe,
+            PackageState[] prerequisites = null)
     in(packageDir.hasDopamineFile())
     {
+        _name = name;
         _packageDir = packageDir;
         _recipe = recipe;
         _prereq = prerequisites;
+    }
+
+    final @property string name() const
+    {
+        return _name;
     }
 
     final @property PackageDir packageDir() const
@@ -56,13 +66,42 @@ abstract class PackageState
         }
         if (!reached)
         {
-            doReach();
+            try
+            {
+                doReach();
+            }
+            catch (StateNotReachedException err)
+            {
+                if (!_logged)
+                {
+                    logNotReached(err.msg);
+                    _logged = true;
+                }
+                throw err;
+            }
+        }
+        if (!_logged)
+        {
+            logReached();
+            _logged = true;
         }
     }
 
     final @property PackageState[] prerequisites()
     {
         return _prereq;
+    }
+
+    protected void logReached()
+    in(reached)
+    {
+        logInfo("%s: %s", info(name), success("OK"));
+    }
+
+    protected void logNotReached(string msg)
+    in(!reached)
+    {
+        logError("%s: %s - %s", info(name), error("NOK"), msg);
     }
 
     protected abstract bool checkReached()
@@ -102,7 +141,7 @@ abstract class ProfileState : PackageState
 
     this(PackageDir packageDir, const(Recipe) recipe)
     {
-        super(packageDir, recipe);
+        super("Profile", packageDir, recipe);
     }
 
     @property const(Profile) profile()
@@ -113,6 +152,11 @@ abstract class ProfileState : PackageState
     protected override bool checkReached()
     {
         return _profile !is null;
+    }
+
+    protected override void logReached()
+    {
+        logInfo("%s: %s - %s", info(name), success("OK"), profile.name);
     }
 }
 
@@ -130,7 +174,7 @@ class UseProfileState : ProfileState
     }
 }
 
-class UsePackageProfile : ProfileState
+class UsePackageProfileState : ProfileState
 {
     this(PackageDir packageDir, const(Recipe) recipe)
     {
@@ -151,7 +195,7 @@ abstract class SourceState : PackageState
 
     this(PackageDir packageDir, const(Recipe) recipe)
     {
-        super(packageDir, recipe);
+        super("Source", packageDir, recipe);
     }
 
     @property string sourceDir()
@@ -184,6 +228,11 @@ abstract class SourceState : PackageState
 
         _sourceDir = sourceDir;
         return true;
+    }
+
+    protected override void logReached()
+    {
+        logInfo("%s: %s - %s", info(name), success("OK"), sourceDir);
     }
 }
 
@@ -219,7 +268,7 @@ abstract class ConfigState : PackageState
 
     this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, SourceState source)
     {
-        super(packageDir, recipe, [profile, source]);
+        super("Configuration", packageDir, recipe, [profile, source]);
         _profile = profile;
         _source = source;
     }
@@ -280,7 +329,7 @@ abstract class BuildState : PackageState
 
     this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, ConfigState config)
     {
-        super(packageDir, recipe, [profile, config]);
+        super("Build", packageDir, recipe, [profile, config]);
         _profile = profile;
     }
 
@@ -300,6 +349,12 @@ abstract class BuildState : PackageState
 
         return flagFile.timeLastModified > dirs.configFlag().timeLastModified
             && flagFile.timeLastModified > timeLastModified(packageDir.dopamineFile());
+    }
+
+    protected override void logReached()
+    {
+        const dirs = packageDir.profileDirs(profile);
+        logInfo("%s: %s - %s", info(name), success("OK"), dirs.build);
     }
 }
 
@@ -334,7 +389,7 @@ abstract class InstallState : PackageState
 
     this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, BuildState build)
     {
-        super(packageDir, recipe, [profile, build]);
+        super("Install", packageDir, recipe, [profile, build]);
         _profile = profile;
     }
 
@@ -354,6 +409,12 @@ abstract class InstallState : PackageState
 
         return flagFile.timeLastModified > dirs.buildFlag().timeLastModified
             && flagFile.timeLastModified > timeLastModified(packageDir.dopamineFile());
+    }
+
+    protected override void logReached()
+    {
+        const dirs = packageDir.profileDirs(profile);
+        logInfo("%s: %s - %s", info(name), success("OK"), dirs.install);
     }
 }
 
@@ -389,7 +450,7 @@ abstract class ArchiveState : PackageState
 
     this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, InstallState install)
     {
-        super(packageDir, recipe, [profile, install]);
+        super("Archive", packageDir, recipe, [profile, install]);
         _profile = profile;
     }
 
@@ -423,6 +484,12 @@ abstract class ArchiveState : PackageState
             _file = file;
 
         return res;
+    }
+
+    protected override void logReached()
+    {
+        const file = packageDir.archiveFile(profile, recipe);
+        logInfo("%s: %s - %s", info(name), success("OK"), file);
     }
 }
 

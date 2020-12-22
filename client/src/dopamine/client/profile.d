@@ -1,5 +1,8 @@
 module dopamine.client.profile;
 
+import dopamine.client.util;
+
+import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
@@ -13,15 +16,15 @@ import std.stdio;
 
 Profile detectAndWriteDefault(Lang[] langs)
 {
-    writeln("Detecting default profile");
+    logInfo("Detecting default profile");
 
     auto profile = detectDefaultProfile(langs);
-    writeln(profile.describe());
+    logInfo(profile.describe());
 
     const name = profile.name;
     const path = userProfileFile(name);
     profile.saveToFile(path, false, true);
-    writeln("Default profile saved to " ~ path);
+    logInfo("Default profile saved to %s", info(path));
 
     return profile;
 }
@@ -40,8 +43,7 @@ int profileMain(string[] args)
 
     const packageDir = PackageDir.enforced(".");
 
-    writeln("parsing recipe");
-    auto recipe = recipeParseFile(packageDir.dopamineFile());
+    const recipe = parseRecipe(packageDir);
 
     auto langs = recipe.langs.toLangs();
 
@@ -73,7 +75,7 @@ int profileMain(string[] args)
         profile = Profile.loadFromFile(profileFile);
     }
 
-    writeln(format(`Setting profile "%s" for %s`, profileName, getcwd()));
+    logInfo("Setting profile %s for %s", info(profileName), info(getcwd()));
     profile.saveToFile(packageDir.profileFile(), true, true);
 
     return 0;

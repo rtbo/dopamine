@@ -1,5 +1,7 @@
 module dopamine.util;
 
+import dopamine.log;
+
 import std.digest;
 import std.traits;
 
@@ -155,14 +157,14 @@ string[] searchPatternInEnvPath(in string envPath, in string pattern, in char se
     return res;
 }
 
-void runCommand(in string[] command, string workDir = null, bool quiet = false,
-        string[string] env = null) @trusted
+void runCommand(in string[] command, string workDir = null,
+        LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
 {
-    runCommands((&command)[0 .. 1], workDir, quiet, env);
+    runCommands((&command)[0 .. 1], workDir, logLevel, env);
 }
 
-void runCommands(in string[][] commands, string workDir = null, bool quiet = false,
-        string[string] env = null) @trusted
+void runCommands(in string[][] commands, string workDir = null,
+        LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
 {
     import std.conv : to;
     import std.exception : enforce;
@@ -180,17 +182,22 @@ void runCommands(in string[][] commands, string workDir = null, bool quiet = fal
     auto childStderr = stderr;
     auto config = Config.retainStdout | Config.retainStderr;
 
-    if (quiet)
+    // TODO buffer stdout and stderr to populate e.g. CommandFailedException
+
+    if (minLogLevel > logLevel)
     {
         childStdout = File(nullFile, "w");
+        childStderr = File(nullFile, "w");
+    }
+
+    if (workDir)
+    {
+        log(logLevel, "Running from %s", info(workDir));
     }
 
     foreach (cmd; commands)
     {
-        if (!quiet)
-        {
-            stdout.writeln("running ", cmd.commandRep);
-        }
+        log(logLevel, cmd.commandRep);
         auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
         auto exitcode = pid.wait();
         enforce(exitcode == 0,
