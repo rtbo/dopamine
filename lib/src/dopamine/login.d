@@ -58,7 +58,7 @@ unittest
         ~ "NWZjZmY1YjRlNmEzYTFjZWVkMTY4NjkwIn0.0SOgGOJnZY_JvwXAXrVG-PQ8HyN82aQ5f62y0fSiRCQ";
 
     const lk = decodeLoginKey(key);
-    assert(lk.userId == "joreijfi");
+    assert(lk.userId == "5fcff5b4e6a3a1ceed168690");
     assert(lk.keyName == "testkey");
     assert(lk.key == key);
 }
