@@ -120,6 +120,15 @@ struct Semver
             && prerelease == rhs.prerelease;
     }
 
+    size_t toHash() const pure nothrow
+    {
+        // exclude metadata from hash to be consiste with opEqual
+        auto hash = major.hashOf();
+        hash = minor.hashOf(hash);
+        hash = patch.hashOf(hash);
+        return prerelease.hashOf(hash);
+    }
+
     int opCmp(const Semver rhs) const pure
     {
         import std.algorithm : min;
