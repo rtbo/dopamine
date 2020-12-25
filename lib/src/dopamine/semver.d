@@ -1,39 +1,73 @@
-/// Semantic vertioning implementation
+/// Semantic versioning implementation
 module dopamine.semver;
 
 @safe:
 
 /// Exception thrown when parsing invalid Semver
-class SemverParseException : Exception
+class InvalidSemverException : Exception
 {
-    /// The semver string being parsed
+    /// The invalid semver string being parsed
     string semver;
+    /// The reason of the parse error
+    string reason;
 
-    this(string semver, string msg) pure
+    this(string semver, string reason) pure
     {
         import std.format : format;
 
+        super(format("'%s' is not a valid Semantic Version: %s", semver, reason));
         this.semver = semver;
-        super(format("'%s' is not a valid Semantic Version: %s", semver, msg));
+        this.reason = reason;
     }
 }
 
 /// Semantic version representation
 struct Semver
 {
-    /// major version
-    int major;
-    /// minor version
-    int minor;
-    /// patch version
-    int patch;
-    /// prerelease info
-    string[] prerelease;
-    /// build metadata
-    string[] metadata;
+    private
+    {
+        int _major;
+        int _minor;
+        int _patch;
+        string[] _prerelease;
+        string[] _metadata;
+    }
 
+    /// major version
+    @property int major() const pure nothrow @nogc
+    {
+        return _major;
+    }
+
+    /// minor version
+    @property int minor() const pure nothrow @nogc
+    {
+        return _minor;
+    }
+
+    /// patch version
+    @property int patch() const pure nothrow @nogc
+    {
+        return _patch;
+    }
+
+    /// prerelease info
+    @property const(string)[] prerelease() const pure nothrow @nogc
+    {
+        return _prerelease;
+    }
+
+    /// build metadata
+    @property const(string)[] metadata() const pure nothrow @nogc
+    {
+        return _metadata;
+    }
+
+    /// Initialize from string representation
     this(string semver) pure
     {
+        import dopamine.util : indexOrLast;
+
         import std.algorithm : min;
         import std.conv : ConvException, to;
         import std.format : format;
@@ -44,54 +78,64 @@ struct Semver
         const plus = indexOrLast(semver, '+');
 
         enforce(hyp == semver.length || hyp <= plus,
-                new SemverParseException(semver, "metadata MUST come last"));
+                new InvalidSemverException(semver, "metadata MUST come last"));
 
         const main = semver[0 .. min(hyp, plus)].split('.');
 
-        enforce(main.length == 3, new SemverParseException(semver,
+        enforce(main.length == 3, new InvalidSemverException(semver,
                 "Expected 3 parts in main section"));
         try
         {
-            this.major = main[0].to!int;
-            this.minor = main[1].to!int;
-            this.patch = main[2].to!int;
+            _major = main[0].to!int;
+            _minor = main[1].to!int;
+            _patch = main[2].to!int;
         }
         catch (ConvException ex)
         {
-            throw new SemverParseException(semver, ex.msg);
+            throw new InvalidSemverException(semver, ex.msg);
         }
 
         if (hyp < semver.length)
         {
             const prerelease = semver[hyp + 1 .. plus];
-            enforce(prerelease.length > 0, new SemverParseException(semver,
+            enforce(prerelease.length > 0, new InvalidSemverException(semver,
                     "Pre-release section may not be empty"));
-            enforce(allValidChars(prerelease, true), new SemverParseException(semver,
+            enforce(allValidChars(prerelease, true), new InvalidSemverException(semver,
                     "Pre-release section contain invalid character"));
-            this.prerelease = prerelease.split('.');
+            _prerelease = prerelease.split('.');
         }
 
         if (plus < semver.length)
         {
             const metadata = semver[plus + 1 .. $];
-            enforce(metadata.length > 0, new SemverParseException(semver,
+            enforce(metadata.length > 0, new InvalidSemverException(semver,
                     "Build-metadata section may not be empty"));
-            enforce(allValidChars(metadata, true), new SemverParseException(semver,
+            enforce(allValidChars(metadata, true), new InvalidSemverException(semver,
                     "Pre-release section contain invalid character"));
-            this.metadata = metadata.split('.');
+            _metadata = metadata.split('.');
         }
+    }
+
+    /// Initialize from fields
+    this(int major, int minor, int patch, string[] prerelease = null, string[] metadata = null)
+    {
+        _major = major;
+        _minor = minor;
+        _patch = patch;
+        _prerelease = prerelease;
+        _metadata = metadata;
     }
 
     invariant()
     {
         import std.algorithm : all;
 
-        assert(major >= 0, "major must be positive");
-        assert(minor >= 0, "minor must be positive");
-        assert(patch >= 0, "patch must be positive");
-        assert(prerelease.all!(s => allValidChars(s, false)),
+        assert(_major >= 0, "major must be positive");
+        assert(_minor >= 0, "minor must be positive");
+        assert(_patch >= 0, "patch must be positive");
+        assert(_prerelease.all!(s => allValidChars(s, false)),
                 "prerelease contain invalid characters");
-        assert(metadata.all!(s => allValidChars(s, false)), "metadata contain invalid characters");
+        assert(_metadata.all!(s => allValidChars(s, false)), "metadata contain invalid characters");
     }
 
     string toString() const pure
@@ -101,11 +145,11 @@ struct Semver
 
         auto res = format("%s.%s.%s", major, minor, patch);
 
-        if (prerelease)
+        if (_prerelease)
         {
             res ~= "-" ~ prerelease.join(".");
         }
-        if (metadata)
+        if (_metadata)
         {
             res ~= "+" ~ metadata.join(".");
         }
@@ -113,47 +157,47 @@ struct Semver
         return res;
     }
 
-    bool opEquals(const Semver rhs) const pure
+    bool opEquals(const Semver rhs) const pure nothrow
     {
         // metadata is out of the equation
-        return major == rhs.major && minor == rhs.minor && patch == rhs.patch
-            && prerelease == rhs.prerelease;
+        return _major == rhs._major && _minor == rhs._minor
+            && _patch == rhs._patch && _prerelease == rhs._prerelease;
     }
 
     size_t toHash() const pure nothrow
     {
         // exclude metadata from hash to be consiste with opEqual
-        auto hash = major.hashOf();
-        hash = minor.hashOf(hash);
-        hash = patch.hashOf(hash);
-        return prerelease.hashOf(hash);
+        auto hash = _major.hashOf();
+        hash = _minor.hashOf(hash);
+        hash = _patch.hashOf(hash);
+        return _prerelease.hashOf(hash);
     }
 
-    int opCmp(const Semver rhs) const pure
+    int opCmp(const Semver rhs) const pure nothrow
     {
         import std.algorithm : min;
         import std.conv : to;
 
         // §11.2
-        if (major != rhs.major)
-            return major < rhs.major ? -1 : 1;
-        if (minor != rhs.minor)
-            return minor < rhs.minor ? -1 : 1;
-        if (patch != rhs.patch)
-            return patch < rhs.patch ? -1 : 1;
+        if (_major != rhs._major)
+            return _major < rhs._major ? -1 : 1;
+        if (_minor != rhs._minor)
+            return minor < rhs._minor ? -1 : 1;
+        if (_patch != rhs._patch)
+            return _patch < rhs._patch ? -1 : 1;
 
         // §11.3
-        if (prerelease && !rhs.prerelease)
+        if (_prerelease && !rhs._prerelease)
             return -1;
-        if (!prerelease && rhs.prerelease)
+        if (!_prerelease && rhs._prerelease)
             return 1;
 
         // §11.4
-        const len = min(prerelease.length, rhs.prerelease.length);
+        const len = min(_prerelease.length, rhs._prerelease.length);
         for (size_t i; i < len; i++)
         {
-            const l = prerelease[i];
-            const r = rhs.prerelease[i];
+            const l = _prerelease[i];
+            const r = rhs._prerelease[i];
 
             if (l == r)
                 continue;
@@ -164,7 +208,14 @@ struct Semver
             // §11.4.1
             if (lAllNum && rAllNum)
             {
-                return l.to!int < r.to!int ? -1 : 1;
+                try
+                {
+                    return l.to!int < r.to!int ? -1 : 1;
+                }
+                catch (Exception)
+                {
+                    assert(false);
+                }
             }
             // §11.4.2
             else if (lAllNum == rAllNum) // both false
@@ -175,11 +226,11 @@ struct Semver
             return lAllNum ? -1 : 1;
         }
 
-        if (prerelease.length == rhs.prerelease.length)
+        if (_prerelease.length == rhs._prerelease.length)
             return 0;
 
         // §11.4.4
-        return prerelease.length < rhs.prerelease.length ? -1 : 1;
+        return _prerelease.length < rhs._prerelease.length ? -1 : 1;
     }
 }
 
@@ -215,14 +266,14 @@ unittest
 {
     import std.exception : assertThrown;
 
-    assertThrown!SemverParseException(Semver("1"));
-    assertThrown!SemverParseException(Semver("1.2"));
-    assertThrown!SemverParseException(Semver("1.2.3.4"));
-    assertThrown!SemverParseException(Semver("1.2a.3"));
-    assertThrown!SemverParseException(Semver("1.a2.3"));
-    assertThrown!SemverParseException(Semver("1.2.3+meta-prerel"));
-    assertThrown!SemverParseException(Semver("1.2.3-prerel[]"));
-    assertThrown!SemverParseException(Semver("1.2.3r+meta(bla)"));
+    assertThrown!InvalidSemverException(Semver("1"));
+    assertThrown!InvalidSemverException(Semver("1.2"));
+    assertThrown!InvalidSemverException(Semver("1.2.3.4"));
+    assertThrown!InvalidSemverException(Semver("1.2a.3"));
+    assertThrown!InvalidSemverException(Semver("1.a2.3"));
+    assertThrown!InvalidSemverException(Semver("1.2.3+meta-prerel"));
+    assertThrown!InvalidSemverException(Semver("1.2.3-prerel[]"));
+    assertThrown!InvalidSemverException(Semver("1.2.3r+meta(bla)"));
 }
 
 ///
@@ -275,24 +326,15 @@ unittest
 
 private:
 
-size_t indexOrLast(string s, char c) pure
-{
-    import std.string : indexOf;
-
-    const ind = s.indexOf(c);
-    return ind >= 0 ? ind : s.length;
-}
-
 bool allValidChars(string s, bool allowDot = false) pure
 {
     foreach (c; s)
     {
-        const ascii = cast(int) c;
-        if (ascii >= cast(int) 'a' && ascii <= cast(int) 'z')
+        if (c >= 'a' && c <= 'z')
             continue;
-        if (ascii >= cast(int) 'A' && ascii <= cast(int) 'Z')
+        if (c >= 'A' && c <= 'Z')
             continue;
-        if (ascii >= cast(int) '0' && ascii <= cast(int) '9')
+        if (c >= '0' && c <= '9')
             continue;
         if (c == '-')
             continue;
@@ -305,7 +347,7 @@ bool allValidChars(string s, bool allowDot = false) pure
     return true;
 }
 
-bool allNum(string s) pure
+bool allNum(string s) pure nothrow
 {
     foreach (c; s)
     {
