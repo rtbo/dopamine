@@ -16,6 +16,7 @@ d_app = executable('dapp', ['src/d/app.d'],
     install: true,
     include_directories: ['src/d'],
     link_with: d_lib,
+    d_import_dirs: include_directories('views'),
 )
 
 pkgc = import('pkgconfig')
