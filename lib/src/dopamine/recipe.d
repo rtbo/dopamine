@@ -1,6 +1,7 @@
 module dopamine.recipe;
 
 import dopamine.build;
+import dopamine.dependency;
 import dopamine.source;
 
 import bindbc.lua;
@@ -9,8 +10,6 @@ import std.exception;
 import std.json;
 import std.string;
 import std.stdio;
-
-@safe:
 
 class Recipe
 {
@@ -23,63 +22,70 @@ class Recipe
         string _copyright;
         string[] _langs;
 
+        Dependency[] _dependencies;
+
         Source _repo;
         Source _source;
         BuildSystem _build;
     }
 
-    @property string name() const
+    @property string name() const @safe
     {
         return _name;
     }
 
-    @property string description() const
+    @property string description() const @safe
     {
         return _description;
     }
 
-    @property string ver() const
+    @property string ver() const @safe
     {
         return _ver;
     }
 
-    @property string license() const
+    @property string license() const @safe
     {
         return _license;
     }
 
-    @property string copyright() const
+    @property string copyright() const @safe
     {
         return _copyright;
     }
 
-    @property const(string)[] langs() const
+    @property const(string)[] langs() const @safe
     {
         return _langs;
     }
 
-    @property const(Source) repo() const
+    @property const(Source) repo() const @safe
     {
         return _repo;
     }
 
-    @property const(Source) source() const
+    @property const(Dependency)[] dependencies() const @safe
+    {
+        return _dependencies;
+    }
+
+    @property const(Source) source() const @safe
     {
         return _source;
     }
 
-    @property bool outOfTree() const
+    @property bool outOfTree() const @safe
     {
         return _repo !is _source;
     }
 
-    @property const(BuildSystem) build() const
+    @property const(BuildSystem) build() const @safe
     {
         return _build;
     }
 }
 
-const(Recipe) recipeParseJson(const ref JSONValue json)
+const(Recipe) recipeParseJson(const ref JSONValue json) @safe
 {
     auto r = new Recipe;
 
@@ -89,6 +95,18 @@ const(Recipe) recipeParseJson(const ref JSONValue json)
     r._license = json["license"].str;
     r._copyright = json["copyright"].str;
     r._langs = jsonArray(json["langs"].arrayNoRef);
+
+    if (!json["dependencies"].isNull)
+    {
+        const deps = json["dependencies"].arrayNoRef;
+        foreach (dep; deps)
+        {
+            Dependency d;
+            d.name = dep["name"].str;
+            d.spec = VersionSpec(dep["version"].str);
+            r._dependencies ~= d;
+        }
+    }
 
     r._repo = source(jsonObject(json["repo"].objectNoRef));
 
@@ -106,7 +124,7 @@ const(Recipe) recipeParseJson(const ref JSONValue json)
     return r;
 }
 
-JSONValue recipeToJson(const(Recipe) recipe)
+JSONValue recipeToJson(const(Recipe) recipe) @safe
 {
     JSONValue json;
     if (recipe.name.length)
@@ -121,6 +139,18 @@ JSONValue recipeToJson(const(Recipe) recipe)
         json["copyright"] = recipe.copyright;
     if (recipe.langs.length)
         json["langs"] = recipe.langs;
+    if (recipe.dependencies)
+    {
+        JSONValue[] deps;
+        foreach (dep; recipe.dependencies)
+        {
+            JSONValue val;
+            val["name"] = dep.name;
+            val["version"] = dep.spec.toString();
+            deps ~= val;
+        }
+        json["dependencies"] = deps;
+    }
     if (recipe.repo)
         json["repo"] = recipe.repo.toJson();
     if (recipe.source && !recipe.outOfTree)
@@ -133,7 +163,7 @@ JSONValue recipeToJson(const(Recipe) recipe)
     return json;
 }
 
-void initLua()
+void initLua() @trusted
 {
     version (BindBC_Static)
     {
@@ -172,7 +202,8 @@ const(Recipe) recipeParseFile(string path) @trusted
 
     if (luaL_dofile(L, path.toStringz))
     {
-        throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L, -1)).idup);
+        throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                -1)).idup);
     }
 
     auto r = new Recipe;
@@ -183,6 +214,8 @@ const(Recipe) recipeParseFile(string path) @trusted
     r._license = globalStringVar(L, "license");
     r._copyright = globalStringVar(L, "copyright");
     r._langs = globalArrayTableVar(L, "langs");
+
+    r._dependencies = readDependencies(L);
 
     r._repo = source(globalDictTableVar(L, "repo"));
     if (globalIsNil(L, "source") || globalEqual(L, "repo", "source"))
@@ -205,7 +238,7 @@ const(Recipe) recipeParseFile(string path) @trusted
 
 private:
 
-Source source(string[string] aa)
+Source source(string[string] aa) @safe
 {
     enforce(aa["type"] == "source");
 
@@ -256,7 +289,7 @@ Source source(string[string] aa)
     return null;
 }
 
-BuildSystem buildSystem(string[string] aa)
+BuildSystem buildSystem(string[string] aa) @safe
 {
     enforce(aa["type"] == "build");
 
@@ -273,7 +306,7 @@ BuildSystem buildSystem(string[string] aa)
     return null;
 }
 
-string[string] jsonObject(in JSONValue[string] obj)
+string[string] jsonObject(in JSONValue[string] obj) @safe
 {
     string[string] aa;
     foreach (k, v; obj)
@@ -283,7 +316,7 @@ string[string] jsonObject(in JSONValue[string] obj)
     return aa;
 }
 
-string[] jsonArray(in JSONValue[] arr)
+string[] jsonArray(in JSONValue[] arr) @safe
 {
     import std.algorithm : map;
     import std.array : array;
@@ -291,7 +324,7 @@ string[] jsonArray(in JSONValue[] arr)
     return arr.map!(jv => jv.str).array;
 }
 
-int dopModuleLoader(lua_State* L) nothrow @trusted
+int dopModuleLoader(lua_State* L) nothrow
 {
     import core.stdc.stdio : fprintf, stderr;
 
@@ -308,7 +341,59 @@ int dopModuleLoader(lua_State* L) nothrow @trusted
     return 1;
 }
 
-string globalStringVar(lua_State* L, string varName, string def = null) @trusted
+Dependency[] readDependencies(lua_State* L)
+{
+    lua_getglobal(L, "dependencies");
+
+    scope (success)
+        lua_pop(L, 1);
+
+    const typ = lua_type(L, -1);
+    if (typ == LUA_TNIL)
+        return null;
+
+    enforce(typ == LUA_TTABLE, "Invalid dependencies declaration");
+
+    Dependency[] res;
+
+    // first key
+    lua_pushnil(L);
+
+    while (lua_next(L, -2))
+    {
+        scope(failure)
+            lua_pop(L, 1);
+
+        Dependency dep;
+        dep.name = enforce(getString(L, -2),
+                // probably a number key (dependencies specified as array)
+                // relying on lua_tostring for having a correct string inference
+                format("Invalid dependency name: %s", lua_tostring(L, -2)));
+
+        const vtyp = lua_type(L, -1);
+        switch (vtyp)
+        {
+        case LUA_TSTRING:
+            dep.spec = VersionSpec(getString(L, -1));
+            break;
+        case LUA_TTABLE:
+            {
+                const aa = getStringDictTable(L, -1);
+                dep.spec = VersionSpec(enforce(aa["version"],
+                        format("'version' not specified for '%s' dependency", dep.name)));
+                break;
+            }
+        default:
+            throw new Exception(format("Invalid dependency specification for '%s'", dep.name));
+        }
+        res ~= dep;
+
+        lua_pop(L, 1);
+    }
+    return res;
+}
+
+string globalStringVar(lua_State* L, string varName, string def = null)
 {
     lua_getglobal(L, toStringz(varName));
 
@@ -320,7 +405,7 @@ string globalStringVar(lua_State* L, string varName, string def = null) @trusted
     return res ? res : def;
 }
 
-bool globalBoolVar(lua_State* L, string varName, bool def = false) @trusted
+bool globalBoolVar(lua_State* L, string varName, bool def = false)
 {
     lua_getglobal(L, toStringz(varName));
 
@@ -333,7 +418,7 @@ bool globalBoolVar(lua_State* L, string varName, bool def = false) @trusted
     return lua_toboolean(L, -1) != 0;
 }
 
-string[string] globalDictTableVar(lua_State* L, string varName) @trusted
+string[string] globalDictTableVar(lua_State* L, string varName)
 {
     lua_getglobal(L, toStringz(varName));
     scope (success)
@@ -341,7 +426,7 @@ string[string] globalDictTableVar(lua_State* L, string varName) @trusted
     return getStringDictTable(L, -1);
 }
 
-string[] globalArrayTableVar(lua_State* L, string varName) @trusted
+string[] globalArrayTableVar(lua_State* L, string varName)
 {
     lua_getglobal(L, toStringz(varName));
     scope (success)
@@ -349,7 +434,7 @@ string[] globalArrayTableVar(lua_State* L, string varName) @trusted
     return getStringArrayTable(L, -1);
 }
 
-bool globalIsNil(lua_State* L, string var) @trusted
+bool globalIsNil(lua_State* L, string var)
 {
     lua_getglobal(L, toStringz(var));
     scope (success)
@@ -357,7 +442,7 @@ bool globalIsNil(lua_State* L, string var) @trusted
     return lua_isnil(L, -1);
 }
 
-bool globalEqual(lua_State* L, string var1, string var2) @trusted
+bool globalEqual(lua_State* L, string var1, string var2)
 {
     lua_getglobal(L, toStringz(var1));
     lua_getglobal(L, toStringz(var2));
@@ -378,7 +463,7 @@ string getString(lua_State* L, int ind) @trusted
 }
 
 /// Get all strings in a table at stack index [ind] who have string keys.
-string[string] getStringDictTable(lua_State* L, int ind) @trusted
+string[string] getStringDictTable(lua_State* L, int ind)
 {
     if (lua_type(L, ind) != LUA_TTABLE)
         return null;
@@ -414,7 +499,7 @@ string[string] getStringDictTable(lua_State* L, int ind) @trusted
 }
 
 /// Get all strings in a table at stack index [ind] who have integer keys.
-string[] getStringArrayTable(lua_State* L, int ind) @trusted
+string[] getStringArrayTable(lua_State* L, int ind)
 {
     if (lua_type(L, ind) != LUA_TTABLE)
         return null;
@@ -440,7 +525,7 @@ string[] getStringArrayTable(lua_State* L, int ind) @trusted
 
 // some debugging functions
 
-void printStack(lua_State* L) @trusted
+void printStack(lua_State* L)
 {
     import std.stdio : writefln;
     import std.string : fromStringz;
@@ -487,7 +572,7 @@ void printStack(lua_State* L) @trusted
 
 }
 
-void printTable(lua_State* L, int ind) @trusted
+void printTable(lua_State* L, int ind)
 {
     import std.stdio : writefln;
 
