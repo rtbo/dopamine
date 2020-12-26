@@ -117,7 +117,7 @@ struct Semver
     }
 
     /// Initialize from fields
-    this(int major, int minor, int patch, string[] prerelease = null, string[] metadata = null)
+    this(int major, int minor, int patch, string[] prerelease = null, string[] metadata = null) pure
     {
         _major = major;
         _minor = minor;
@@ -162,6 +162,11 @@ struct Semver
         // metadata is out of the equation
         return _major == rhs._major && _minor == rhs._minor
             && _patch == rhs._patch && _prerelease == rhs._prerelease;
+    }
+
+    bool opEquals(const string rhs) const pure
+    {
+        return opEquals(Semver(rhs));
     }
 
     size_t toHash() const pure nothrow
@@ -231,6 +236,11 @@ struct Semver
 
         // §11.4.4
         return _prerelease.length < rhs._prerelease.length ? -1 : 1;
+    }
+
+    int opCmp(const string rhs) const pure
+    {
+        return opCmp(Semver(rhs));
     }
 }
 
