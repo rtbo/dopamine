@@ -5,6 +5,15 @@ import dopamine.semver;
 import std.exception;
 import std.string;
 
+/// Dependency specification
+struct Dependency
+{
+    /// name of the package
+    string name;
+    /// version specification
+    VersionSpec spec;
+}
+
 /// Exception thrown when parsing invalid Version Specification
 class InvalidVersionSpecException : Exception
 {
@@ -13,7 +22,7 @@ class InvalidVersionSpecException : Exception
     /// The reason of the parse error
     string reason;
 
-    this(string spec, string reason)
+    this(string spec, string reason) @safe pure
     {
         super(format("'%s': invalid version specification - %s", spec, reason));
         this.spec = spec;
@@ -27,22 +36,28 @@ struct VersionSpec
     private
     {
         Semver _lower;
-        bool _lowerIncluded = true;
+        bool _lowerIncluded;
         Semver _upper;
         bool _upperIncluded;
+
+        // cache the original spec for easier toString()
+        string _spec;
     }
 
     /// Initialize version specification.
     /// Semantics are compatible with DUB
-    this(in string spec)
+    this(in string spec) pure @trusted
     {
         enforce(spec.length, new InvalidVersionSpecException(spec, "Cannot be empty"));
+
+        _spec = spec;
 
         try
         {
             if (spec == "*")
             {
                 // special "match-all" upper check when includeUpper is true and upper == Semver.init
+                _lowerIncluded = true;
                 _upperIncluded = true;
             }
             else if (spec.startsWith("~>"))
@@ -53,6 +68,7 @@ struct VersionSpec
                 enforce(comps == 2 || comps == 3,
                         spec ~ " is not a valid dependency version specification");
 
+                _lowerIncluded = true;
                 _lower = Semver(s);
 
                 if (comps == 2)
@@ -72,6 +88,7 @@ struct VersionSpec
                 enforce(comps == 2 || comps == 3,
                         spec ~ " is not a valid dependency version specification");
 
+                _lowerIncluded = true;
                 _lower = Semver(s);
                 if (_lower.major == 0)
                 {
@@ -89,6 +106,7 @@ struct VersionSpec
                 size_t comps;
                 const s = expandMainSection(spec[2 .. $], &comps);
 
+                _lowerIncluded = true;
                 _lower = Semver(s);
                 _upper = _lower;
                 _upperIncluded = true;
@@ -137,12 +155,14 @@ struct VersionSpec
 
                 enforce(spec.length > 1, new InvalidVersionSpecException(spec, "Empty version"));
 
+                _lowerIncluded = true; // also match 0.0.0
                 _upperIncluded = spec[1] == '=';
                 const beg = _upperIncluded ? 2 : 1;
                 _upper = Semver(spec[beg .. $]);
             }
             else if (spec[0] >= '0' && spec[0] <= '9')
             {
+                _lowerIncluded = true;
                 _lower = Semver(expandMainSection(spec));
                 _upper = _lower;
                 _upperIncluded = true;
@@ -159,27 +179,32 @@ struct VersionSpec
         }
     }
 
-    @property const(Semver) lower() const nothrow pure
+    @property const(Semver) lower() const nothrow pure @safe
     {
         return _lower;
     }
 
-    @property bool lowerIncluded() const nothrow pure
+    @property bool lowerIncluded() const nothrow pure @safe
     {
         return _lowerIncluded;
     }
 
-    @property const(Semver) upper() const nothrow pure
+    @property const(Semver) upper() const nothrow pure @safe
     {
         return _upper;
     }
 
-    @property bool upperIncluded() const nothrow pure
+    @property bool upperIncluded() const nothrow pure @safe
     {
         return _upperIncluded;
     }
 
-    bool matchVersion(const(Semver) ver) const nothrow pure
+    string toString() const nothrow pure @safe
+    {
+        return _spec;
+    }
+
+    bool matchVersion(const(Semver) ver) const nothrow pure @safe
     {
         // disallow prerelease if none was specified
         if (!_lower.prerelease && ver.prerelease)
@@ -273,6 +298,7 @@ unittest
     assert(!VersionSpec("1.2.3").matchVersion("1.2.3-beta"));
 }
 
+
 private:
 
 // [major, (minor), (patch)]
@@ -294,7 +320,7 @@ string[] mainSection(string ver, size_t* outEnd = null)
 }
 
 /// Complete main section of a version so that it has 3 components
-string expandMainSection(string ver, size_t* numComps = null)
+string expandMainSection(string ver, size_t* numComps = null) pure
 {
     size_t end = ver.length;
     size_t dots;
