@@ -67,10 +67,16 @@ int main(string[] args)
 
     const command = args.length > 1 ? args[1] : null;
 
+    if (!command)
+    {
+        logError("%s: no command specified", error("Error"));
+        return 1;
+    }
+
     auto handler = command in commandHandlers;
     if (!handler)
     {
-        logError("unknown command: %s", error(command));
+        logError("%s: unknown command: %s", error("Error"), info(command));
         return 1;
     }
 
