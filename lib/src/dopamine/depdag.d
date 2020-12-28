@@ -120,7 +120,7 @@ class DepPack
 
     /// Remove node matching with ver.
     /// Do not perform any cleanup in up/down edges
-    private void removeNode(Semver ver)
+    private void removeNode(Semver ver) @safe
     {
         import std.algorithm : remove;
 
@@ -418,6 +418,7 @@ void checkDepDAGCompat(DepPack root) @safe
 
 /// Resolves a DAG such as each package has a resolved version
 void resolveDepDAG(DepPack root, CacheRepo cacheRepo, Heuristics heuristics)
+out(; dagIsResolved(root))
 {
     void resolveDeps(DepPack pack)
     in(pack.resolvedNode)
@@ -446,7 +447,297 @@ void resolveDepDAG(DepPack root, CacheRepo cacheRepo, Heuristics heuristics)
     resolveDeps(root);
 }
 
+/// Check whether a DAG is fully resolved
+bool dagIsResolved(DepPack root) @safe
+{
+    bool resolved = true;
 
+    traversePacksTopDown(root, (p) @safe {
+        if (p.resolvedNode is null)
+            resolved = false;
+    });
+
+    return resolved;
+}
+
+/// Serialize a resolved DAG to lock-file content
+string dagToLockFile(DepPack root, bool emitAllVersions = true) @safe
+in(emitAllVersions || !dagIsResolved(root))
+{
+    // using own writing logic because std.json do not preserve any field
+    // ordering
+
+    import std.algorithm : map;
+    import std.array : appender, join, replicate;
+    import std.format : format;
+
+    auto w = appender!string;
+    int indent = 0;
+
+    void line(Args...)(string lfmt, Args args) @safe
+    {
+        static if (Args.length == 0)
+        {
+            w.put(replicate("  ", indent) ~ lfmt ~ "\n");
+        }
+        else
+        {
+            w.put(replicate("  ", indent) ~ format(lfmt, args) ~ "\n");
+        }
+    }
+
+    line("# AUTO GENERATED FILE - DO NOT EDIT!!!");
+    line("# dop lock-file v1");
+
+    traversePacksTopDown(root, (DepPack pack) @trusted {
+        line("");
+        line("package: %s", pack.name);
+
+        foreach (v; pack.allVersions)
+        {
+            indent++;
+            scope (success)
+                indent--;
+
+            auto n = pack.getNode(v);
+
+            if (n is null && !emitAllVersions)
+                continue;
+
+            string attr;
+            if (n is null)
+            {
+                attr = " [excluded]";
+            }
+            else if (n is pack.resolvedNode)
+            {
+                attr = " [resolved]";
+            }
+
+            line("version: %s%s", v, attr);
+
+            if (n !is null)
+            {
+                foreach (e; n.downEdges)
+                {
+                    indent++;
+                    scope (success)
+                        indent--;
+
+                    line("dependency: %s %s", e.down.name, e.spec);
+                }
+            }
+        }
+    });
+
+    return w.data;
+}
+
+/// Serialize a resolved DAG to a lock-file
+void dagToLockFile(DepPack root, string filename, bool emitAllVersions = true) @safe
+{
+    import std.file : write;
+
+    const content = dagToLockFile(root, emitAllVersions);
+    write(filename, content);
+}
+
+class InvalidLockFileException : Exception
+{
+    string filename;
+    int line;
+    string reason;
+
+    this(string filename, int line, string reason) @safe
+    {
+        import std.format : format;
+
+        this.filename = filename;
+        this.line = line;
+        this.reason = reason;
+
+        const fn = filename ? filename ~ ":" : "lock-file:";
+        super(format("%s(%s): Error: invalid lock-file - %s", fn, line, reason));
+    }
+}
+
+/// Deserialize a lock-file content to a DAG
+///
+/// Params:
+///     content: the content of a lock-file
+///     filename: optional filename for error reporting
+/// Returns: The deserialized DAG
+DepPack dagFromLockFileContent(string content, string filename = null) @safe
+{
+    import std.algorithm : map;
+    import std.array : split;
+    import std.conv : to;
+    import std.exception : enforce;
+    import std.string : endsWith, indexOf, lineSplitter, startsWith, strip;
+
+    struct Ver
+    {
+        string pack;
+        Semver ver;
+        bool resolved;
+        bool excluded;
+    }
+
+    struct Dep
+    {
+        string pack;
+        Semver ver;
+        string down;
+        VersionSpec spec;
+    }
+
+    string curpack;
+    Semver curver;
+    bool seenver;
+
+    string[] packs;
+    Ver[] vers;
+    Dep[] deps;
+
+    int line;
+    foreach (l; lineSplitter(content).map!(l => l.strip()))
+    {
+        enum lockfilemark = "# dop lock-file v";
+        enum pmark = "package: ";
+        enum vmark = "version: ";
+        enum dmark = "dependency: ";
+        enum resolvedmark = " [resolved]";
+        enum excludedmark = " [excluded]";
+
+        line++;
+
+        try
+        {
+            if (l.startsWith(lockfilemark))
+            {
+                l = l[lockfilemark.length .. $];
+                enforce(l.to!int == 1, new InvalidLockFileException(filename,
+                        line, "Unsupported lock-file version " ~ l));
+            }
+            else if (l.length == 0 || l.startsWith('#'))
+            {
+                continue;
+            }
+            else if (l.startsWith(pmark))
+            {
+                curpack = l[pmark.length .. $];
+                seenver = false;
+                packs ~= curpack;
+            }
+            else if (l.startsWith(vmark))
+            {
+                enforce(curpack, new InvalidLockFileException(filename, line,
+                        "Ill-formed lock-file"));
+                l = l[vmark.length .. $];
+                bool resolved;
+                bool excluded;
+                if (l.endsWith(resolvedmark))
+                {
+                    resolved = true;
+                    l = l[0 .. $ - resolvedmark.length];
+                }
+                else if (l.endsWith(excludedmark))
+                {
+                    excluded = true;
+                    l = l[0 .. $ - excludedmark.length];
+                }
+                curver = Semver(l);
+                seenver = true;
+                vers ~= Ver(curpack, curver, resolved, excluded);
+            }
+            else if (l.startsWith(dmark))
+            {
+                enforce(curpack && seenver, new InvalidLockFileException(filename,
+                        line, "Ill-formed lock-file"));
+
+                l = l[dmark.length .. $];
+                const splt = indexOf(l, " ");
+                enforce(l.length >= 3 && splt > 0 && splt < l.length - 1, // @suppress(dscanner.suspicious.length_subtraction)
+                        new InvalidLockFileException(filename, line, "Can't parse dependency"));
+
+                deps ~= Dep(curpack, curver, l[0 .. splt], VersionSpec(l[splt + 1 .. $]));
+            }
+            else
+            {
+                throw new InvalidLockFileException(filename, line, "Unexpected input: " ~ l);
+            }
+        }
+        catch (InvalidSemverException ex)
+        {
+            throw new InvalidLockFileException(filename, line, ex.msg);
+        }
+        catch (InvalidVersionSpecException ex)
+        {
+            throw new InvalidLockFileException(filename, line, ex.msg);
+        }
+    }
+
+    DepPack[string] depacks;
+    DepPack root;
+
+    foreach (p; packs)
+    {
+        Semver[] allVers;
+
+        // all structs are ordered, so we can always expect match at start of vers and none after
+        uint count;
+        foreach (v; vers)
+        {
+            if (v.pack == p)
+            {
+                allVers ~= v.ver;
+                count++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        auto pack = new DepPack(p, allVers);
+
+        foreach (v; vers[0 .. count])
+        {
+            if (v.resolved)
+            {
+                pack.resolvedNode = pack.getNode(v.ver);
+            }
+            else if (v.excluded)
+            {
+                pack.removeNode(v.ver);
+            }
+        }
+        vers = vers[count .. $];
+
+        depacks[p] = pack;
+        if (root is null)
+            root = pack;
+    }
+
+    foreach (d; deps)
+    {
+        auto up = depacks[d.pack].getNode(d.ver);
+        auto down = depacks[d.down];
+        DepEdge.create(up, down, d.spec);
+    }
+
+    return root;
+}
+
+/// Deserialize DAG from lock-file [filename]
+DepPack dagFromLockFile(string filename) @trusted
+{
+    import std.file : read;
+    import std.exception : assumeUnique;
+
+    const content = cast(string) assumeUnique(read(filename));
+    return dagFromLockFileContent(content, filename);
+}
 
 /// Issue a GraphViz' Dot representation of a DAG
 string dagToDot(DepPack root) @safe
@@ -640,7 +931,9 @@ unittest
     resolveDepDAG(dag, cacheRepo, Heuristics.preferCached);
 
     Semver[string] resolvedVersions;
-    traverseResolvedNodesTopDown(dag, (n) @safe { resolvedVersions[n.pack.name] = n.ver; });
+    traverseResolvedNodesTopDown(dag, (n) @safe {
+        resolvedVersions[n.pack.name] = n.ver;
+    });
 
     assert(resolvedVersions["a"] == "1.1.0");
     assert(resolvedVersions["b"] == "0.0.1");
@@ -659,13 +952,30 @@ unittest
     resolveDepDAG(dag, cacheRepo, Heuristics.pickHighest);
 
     Semver[string] resolvedVersions;
-    traverseResolvedNodesTopDown(dag, (n) @safe { resolvedVersions[n.pack.name] = n.ver; });
+    traverseResolvedNodesTopDown(dag, (n) @safe {
+        resolvedVersions[n.pack.name] = n.ver;
+    });
 
     assert(resolvedVersions["a"] == "2.0.0");
     assert(resolvedVersions["b"] == "0.0.2");
     assert(resolvedVersions["c"] == "2.0.0");
     assert(resolvedVersions["d"] == "1.1.0");
     assert(resolvedVersions["e"] == "1.0.0");
+}
+
+@("Test Serialization")
+unittest {
+    auto cacheRepo = TestCacheRepo.withBase();
+
+    auto dag1 = prepareDepDAG("e", Semver("1.0.0"), cacheRepo);
+    checkDepDAGCompat(dag1);
+    resolveDepDAG(dag1, cacheRepo, Heuristics.pickHighest);
+
+    const lock = dagToLockFile(dag1, true);
+    auto dag2 = dagFromLockFileContent(lock);
+
+    assert(lock == dagToLockFile(dag2, true));
+    assert(dagToDot(dag1) == dagToDot(dag2));
 }
 
 private:
