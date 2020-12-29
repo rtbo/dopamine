@@ -31,17 +31,6 @@ interface Source
     in(isDir(dest))
     out(res; res.startsWith(dest) && isDir(res));
 
-    static bool fetchNeeded(PackageDir packageDir)
-    {
-        auto flagFile = packageDir.sourceFlag();
-        if (!flagFile.exists)
-            return true;
-        const sourceDir = flagFile.read();
-        if (!exists(sourceDir) || !isDir(sourceDir))
-            return true;
-        return flagFile.timeLastModified > timeLastModified(packageDir.dopamineFile());
-    }
-
     /// print out JSON recipe representation
     JSONValue toJson() const;
 }

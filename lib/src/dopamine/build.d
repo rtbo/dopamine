@@ -23,63 +23,6 @@ interface BuildSystem
     void install(ProfileDirs dirs) const;
 
     JSONValue toJson() const;
-
-    static bool configureNeeded(PackageDir packageDir, const(Profile) profile)
-    {
-        import dopamine.source : Source;
-
-        assert(!Source.fetchNeeded(packageDir));
-
-        const dirs = packageDir.profileDirs(profile);
-        auto flagFile = dirs.configFlag(); // @suppress(dscanner.suspicious.unmodified)
-        if (!flagFile.exists)
-            return true;
-
-        auto srcFf = packageDir.sourceFlag();
-
-        const lastMtime = flagFile.timeLastModified;
-
-        return lastMtime < srcFf.timeLastModified
-            || lastMtime < timeLastModified(packageDir.dopamineFile());
-    }
-
-    static bool buildNeeded(PackageDir packageDir, const(Profile) profile)
-    {
-        import dopamine.source : Source;
-
-        assert(!configureNeeded(packageDir, profile));
-
-        const dirs = packageDir.profileDirs(profile);
-        auto flagFile = dirs.buildFlag(); // @suppress(dscanner.suspicious.unmodified)
-        if (!flagFile.exists)
-            return true;
-
-        auto confFf = dirs.configFlag();
-
-        const lastMtime = flagFile.timeLastModified;
-
-        return lastMtime < confFf.timeLastModified
-            || lastMtime < timeLastModified(packageDir.dopamineFile());
-    }
-
-    static bool installNeeded(PackageDir packageDir, const(Profile) profile)
-    {
-        import dopamine.source : Source;
-
-        assert(!buildNeeded(packageDir, profile));
-
-        const dirs = packageDir.profileDirs(profile);
-        auto flagFile = dirs.installFlag(); // @suppress(dscanner.suspicious.unmodified)
-        if (!flagFile.exists)
-            return true;
-
-        auto buildFf = dirs.buildFlag();
-
-        const lastMtime = flagFile.timeLastModified;
-
-        return lastMtime < buildFf.timeLastModified
-            || lastMtime < timeLastModified(packageDir.dopamineFile());
-    }
 }
 
 abstract class NinjaBuildSystem : BuildSystem
