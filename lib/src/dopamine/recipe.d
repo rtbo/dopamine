@@ -324,8 +324,7 @@ Source source(string[string] aa) @safe
         {
             auto url = enforce("url" in aa, "url is mandatory for Git source");
             auto revId = enforce("revId" in aa, "revId is mandatory for Git source");
-            auto subdir = "subdir" in aa;
-            return new GitSource(*url, *revId, subdir ? *subdir : "");
+            return new GitSource(*url, *revId);
         }
 
     case "archive":
@@ -362,7 +361,7 @@ Source source(string[string] aa) @safe
         break;
     }
 
-    return null;
+    throw new Exception("Invalid source method: " ~ aa["method"]);
 }
 
 BuildSystem buildSystem(string[string] aa) @safe
@@ -437,7 +436,7 @@ Dependency[] readDependencies(lua_State* L)
 
     while (lua_next(L, -2))
     {
-        scope(failure)
+        scope (failure)
             lua_pop(L, 1);
 
         Dependency dep;

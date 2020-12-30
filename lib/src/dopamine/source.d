@@ -39,9 +39,8 @@ class GitSource : Source
 {
     private string _url;
     private string _revId;
-    private string _subdir;
 
-    this(string url, string revId, string subdir)
+    this(string url, string revId)
     {
         import dopamine.util : findProgram;
         import std.exception : enforce;
@@ -52,7 +51,6 @@ class GitSource : Source
 
         _url = url;
         _revId = revId;
-        _subdir = subdir;
     }
 
     protected override string doFetch(in string dest) const
@@ -78,7 +76,7 @@ class GitSource : Source
 
         runCommand(["git", "checkout", _revId], srcDir, LogLevel.info);
 
-        return _subdir ? buildPath(srcDir, _subdir) : srcDir;
+        return srcDir;
     }
 
     override JSONValue toJson() const
@@ -88,10 +86,6 @@ class GitSource : Source
         json["method"] = "git";
         json["url"] = _url;
         json["revId"] = _revId;
-        if (_subdir)
-        {
-            json["subdir"] = _subdir;
-        }
         return json;
     }
 }
