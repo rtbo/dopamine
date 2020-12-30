@@ -11,8 +11,18 @@ import std.string;
 
 @safe:
 
+enum SourceType
+{
+    git,
+    archive,
+}
+
 interface Source
 {
+    @property SourceType type() const;
+
+    /// Fetch source code for package [packageDir]
+    /// It writes source flag file when done
     final string fetch(PackageDir packageDir) const
     {
         auto flag = packageDir.sourceFlag();
@@ -51,6 +61,11 @@ class GitSource : Source
 
         _url = url;
         _revId = revId;
+    }
+
+    @property SourceType type() const
+    {
+        return SourceType.git;
     }
 
     protected override string doFetch(in string dest) const
@@ -175,6 +190,11 @@ class ArchiveSource : Source
     {
         _url = url;
         _checksum = checksum;
+    }
+
+    @property SourceType type() const
+    {
+        return SourceType.archive;
     }
 
     protected override string doFetch(in string dest) const @trusted
