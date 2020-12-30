@@ -10,6 +10,7 @@ import std.exception;
 import std.json;
 import std.net.curl;
 
+@safe:
 
 /// An error that correspond to a server response code >= 400
 class ErrorResponseException : Exception
@@ -120,15 +121,20 @@ struct PackageVersion
     string name;
     string ver;
     /// Content of dopamine.lua file. Only needed to display it in frontend.
+    /// It is sent when the version is published, but not sent back in the GET
+    /// requests
     string luaDef;
     const(Recipe) recipe;
 }
 
 private PackageVersion packageVersionFromJson(const(JSONValue) json)
 {
+    import std.stdio;
+
+    writeln(json.toPrettyString());
     const recipe = recipeParseJson(json["recipe"]);
     return PackageVersion(json["packageId"].str, json["name"].str,
-            json["version"].str, json["luaDef"].str, recipe);
+            json["version"].str, null, recipe);
 }
 
 struct API
@@ -242,7 +248,7 @@ struct API
     }
 
     private Response!(ubyte[]) rawReq(string url, HTTP.Method method,
-            scope const(void)[] bodi, bool json)
+            scope const(void)[] bodi, bool json) @trusted
     {
         import std.algorithm : min;
         import std.conv : to;
@@ -288,8 +294,9 @@ struct API
         HTTP.StatusLine status;
         http.onReceiveStatusLine = (HTTP.StatusLine sl) { status = sl; };
 
-        try {
-        http.perform();
+        try
+        {
+            http.perform();
         }
         catch (CurlException ex)
         {
@@ -314,7 +321,7 @@ struct API
     }
 }
 
-private JSONValue toJson(ubyte[] raw)
+private JSONValue toJson(ubyte[] raw) @trusted
 {
     import std.exception : assumeUnique;
 
