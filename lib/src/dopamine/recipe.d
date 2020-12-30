@@ -89,14 +89,21 @@ const(Recipe) recipeParseJson(const ref JSONValue json) @safe
 {
     auto r = new Recipe;
 
+    string optionalStr(JSONValue jv, string key) @safe
+    {
+        if (key in jv)
+            return jv[key].str;
+        return null;
+    }
+
     r._name = json["name"].str;
     r._ver = json["version"].str;
     r._description = json["description"].str;
     r._license = json["license"].str;
-    r._copyright = json["copyright"].str;
+    r._copyright = optionalStr(json, "copyright");
     r._langs = jsonArray(json["langs"].arrayNoRef);
 
-    if (!json["dependencies"].isNull)
+    if ("dependencies" in json)
     {
         const deps = json["dependencies"].arrayNoRef;
         foreach (dep; deps)
@@ -110,7 +117,7 @@ const(Recipe) recipeParseJson(const ref JSONValue json) @safe
 
     r._repo = source(jsonObject(json["repo"].objectNoRef));
 
-    if (!json["source"].isNull)
+    if ("source" in json)
     {
         r._source = source(jsonObject(json["source"].objectNoRef));
     }
@@ -122,6 +129,48 @@ const(Recipe) recipeParseJson(const ref JSONValue json) @safe
     r._build = buildSystem(jsonObject(json["build"].objectNoRef));
 
     return r;
+}
+
+@("test recipeParseJson A")
+unittest
+{
+    import test.util : testDataContent;
+
+    const ajson = testDataContent("recipe_a-1.0.0.json");
+    auto json = parseJSON(ajson);
+    const a = recipeParseJson(json);
+
+    assert(a.name == "a");
+    assert(a.description == "test package A");
+    assert(a.ver == "1.0.0");
+    assert(!a.copyright);
+    assert(a.langs == ["d"]);
+    assert(!a.dependencies);
+    assert(a.repo && a.repo.type == SourceType.git);
+    assert(a.source is a.repo);
+    assert(!a.outOfTree);
+    assert(a.build && a.build.name == "Meson");
+}
+
+@("test recipeParseJson B")
+unittest
+{
+    import test.util : testDataContent;
+
+    const bjson = testDataContent("recipe_b-1.0.0.json");
+    auto json = parseJSON(bjson);
+    const b = recipeParseJson(json);
+
+    assert(b.name == "b");
+    assert(b.description == "test package B");
+    assert(b.ver == "0.5.0");
+    assert(b.copyright);
+    assert(b.langs == ["d", "c"]);
+    assert(b.dependencies == [Dependency("a", VersionSpec(">=1.0.0"))]);
+    assert(b.repo && b.repo.type == SourceType.git);
+    assert(b.source && b.source.type == SourceType.archive);
+    assert(b.outOfTree);
+    assert(b.build && b.build.name == "CMake");
 }
 
 JSONValue recipeToJson(const(Recipe) recipe) @safe
@@ -153,7 +202,8 @@ JSONValue recipeToJson(const(Recipe) recipe) @safe
     }
     if (recipe.repo)
         json["repo"] = recipe.repo.toJson();
-    if (recipe.source && !recipe.outOfTree)
+
+    if (recipe.source && recipe.source !is recipe.repo)
     {
         json["source"] = recipe.source.toJson();
     }
@@ -161,6 +211,32 @@ JSONValue recipeToJson(const(Recipe) recipe) @safe
         json["build"] = recipe.build.toJson();
 
     return json;
+}
+
+@("Consistent json recipes A")
+unittest
+{
+    import test.util : testDataContent;
+
+    const ajson = testDataContent("recipe_a-1.0.0.json");
+    auto json = parseJSON(ajson);
+    const a = recipeParseJson(json);
+    auto json2 = recipeToJson(a);
+
+    assert(json.toPrettyString() == json2.toPrettyString());
+}
+
+@("Consistent json recipes B")
+unittest
+{
+    import test.util : testDataContent;
+
+    const ajson = testDataContent("recipe_b-1.0.0.json");
+    auto json = parseJSON(ajson);
+    const a = recipeParseJson(json);
+    auto json2 = recipeToJson(a);
+
+    assert(json.toPrettyString() == json2.toPrettyString());
 }
 
 void initLua() @trusted
