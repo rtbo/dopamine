@@ -28,6 +28,11 @@ string userDopDir()
     }
 }
 
+string userPackagesDir()
+{
+    return buildPath(userDopDir(), "packages");
+}
+
 string userProfileDir()
 {
     return buildPath(userDopDir(), "profiles");
@@ -76,6 +81,12 @@ struct PackageDir
     in(hasDopamineFile)
     {
         return _path("dopamine.lua");
+    }
+
+    @property string lockFile() const
+    in(hasDopamineFile)
+    {
+        return _path("dop.lock");
     }
 
     @property string dopDir() const
