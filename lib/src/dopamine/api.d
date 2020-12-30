@@ -10,11 +10,51 @@ import std.exception;
 import std.json;
 import std.net.curl;
 
+
+/// An error that correspond to a server response code >= 400
+class ErrorResponseException : Exception
+{
+    /// The HTTP code of the response
+    int code;
+    /// A phrase that maps with the status code (e.g. "OK" or "Not Found")
+    string reason;
+    /// A message that might be given by the server in case of error.
+    string error;
+
+    this(int code, string reason, string error)
+    {
+        import std.format : format;
+
+        this.code = code;
+        this.reason = reason;
+        this.error = error;
+        super(format("Error: Server response is %s - %s: %s", code, reason, error));
+    }
+}
+
+/// An error that correspond to a server seemingly down
+class ServerDownException : Exception
+{
+    /// The URL of the server
+    string host;
+    /// A message from Curl backend
+    string reason;
+
+    this(string host, string reason)
+    {
+        import std.format : format;
+
+        this.host = host;
+        this.reason = reason;
+        super(format("Error: Server %s appears to be down: %s", host, reason));
+    }
+}
+
 /// Response returned by the API
 struct Response(T)
 {
     /// The data returned in the response
-    T payload;
+    private T _payload;
     /// The HTTP code of the response
     int code;
     /// A phrase that maps with the status code (e.g. "OK" or "Not Found")
@@ -26,6 +66,16 @@ struct Response(T)
     bool opCast(T : bool)() const
     {
         return code < 400;
+    }
+
+    /// Get the payload, or throw ErrorResponseException
+    @property inout(T) payload() inout
+    {
+        if (code >= 400)
+        {
+            throw new ErrorResponseException(code, reason, error);
+        }
+        return _payload;
     }
 }
 
@@ -238,7 +288,13 @@ struct API
         HTTP.StatusLine status;
         http.onReceiveStatusLine = (HTTP.StatusLine sl) { status = sl; };
 
+        try {
         http.perform();
+        }
+        catch (CurlException ex)
+        {
+            throw new ServerDownException(host, ex.msg);
+        }
 
         {
             import dopamine.log : logInfo, info, success, error;
