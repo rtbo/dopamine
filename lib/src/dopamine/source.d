@@ -37,6 +37,24 @@ interface Source
         return dir;
     }
 
+    /// Fetch source code into dir
+    /// parent of dir must exist and be a directory
+    /// As source code sometimes lands in a subdirectory, this is done by
+    /// first downloading in a temp directory, then move the result src dir to [dir]
+    final void fetchInto(string dir) const
+    in(exists(dirName(dir)) && isDir(dirName(dir)))
+    out(; exists(dir) && isDir(dir))
+    {
+        const dest = tempPath(dirName(dir), baseName(dir));
+        mkdirRecurse(dest);
+
+        const src = doFetch(dest);
+
+        rename(src, dir);
+
+        remove(dest);
+    }
+
     protected string doFetch(in string dest) const
     in(isDir(dest))
     out(res; res.startsWith(dest) && isDir(res));
