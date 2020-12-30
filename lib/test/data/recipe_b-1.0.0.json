@@ -1,0 +1,30 @@
+{
+  "name": "b",
+  "description": "test package B",
+  "version": "0.5.0",
+  "license": "MIT",
+  "copyright": "whatever",
+  "langs": ["d", "c"],
+  "dependencies": [
+    {
+      "name": "a",
+      "version": ">=1.0.0"
+    }
+  ],
+  "repo": {
+    "type": "source",
+    "method": "git",
+    "url": "https://test.com/b/repo.git",
+    "revId": "some_tag"
+  },
+  "source": {
+    "type": "source",
+    "method": "archive",
+    "url": "https://test.com/b/source.tar.gz",
+    "md5": "0123456789abcdef0123456789abcdef"
+  },
+  "build": {
+    "type": "build",
+    "method": "cmake"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "a",
+  "description": "test package A",
+  "version": "1.0.0",
+  "license": "MIT",
+  "langs": ["d"],
+  "repo": {
+    "type": "source",
+    "method": "git",
+    "url": "https://test.com/a/repo.git",
+    "revId": "some_tag"
+  },
+  "build": {
+    "type": "build",
+    "method": "meson"
+  }
+}
