@@ -29,8 +29,8 @@ struct Semver
         int _major;
         int _minor;
         int _patch;
-        string[] _prerelease;
-        string[] _metadata;
+        string _prerelease;
+        string _metadata;
     }
 
     /// major version
@@ -52,13 +52,13 @@ struct Semver
     }
 
     /// prerelease info
-    @property const(string)[] prerelease() const pure nothrow @nogc
+    @property string prerelease() const pure
     {
         return _prerelease;
     }
 
     /// build metadata
-    @property const(string)[] metadata() const pure nothrow @nogc
+    @property string metadata() const pure
     {
         return _metadata;
     }
@@ -68,7 +68,7 @@ struct Semver
     {
         import dopamine.util : indexOrLast;
 
-        import std.algorithm : min;
+        import std.algorithm : min, canFind;
         import std.conv : ConvException, to;
         import std.format : format;
         import std.exception : assumeUnique, enforce;
@@ -97,45 +97,54 @@ struct Semver
 
         if (hyp < semver.length)
         {
-            const prerelease = semver[hyp + 1 .. plus];
-            enforce(prerelease.length > 0, new InvalidSemverException(semver,
+            _prerelease = semver[hyp + 1 .. plus];
+            enforce(_prerelease.length > 0, new InvalidSemverException(semver,
                     "Pre-release section may not be empty"));
-            enforce(allValidChars(prerelease, true), new InvalidSemverException(semver,
+            enforce(!_prerelease.canFind(".."), new InvalidSemverException(semver,
+                    "Pre-release subsection may not be empty"));
+            enforce(allValidChars(_prerelease, true), new InvalidSemverException(semver,
                     "Pre-release section contain invalid character"));
-            _prerelease = prerelease.split('.');
         }
 
         if (plus < semver.length)
         {
-            const metadata = semver[plus + 1 .. $];
-            enforce(metadata.length > 0, new InvalidSemverException(semver,
+            _metadata = semver[plus + 1 .. $];
+            enforce(_metadata.length > 0, new InvalidSemverException(semver,
                     "Build-metadata section may not be empty"));
-            enforce(allValidChars(metadata, true), new InvalidSemverException(semver,
-                    "Pre-release section contain invalid character"));
-            _metadata = metadata.split('.');
+            enforce(!_metadata.canFind(".."), new InvalidSemverException(semver,
+                    "Bulid-metadata subsection may not be empty"));
+            enforce(allValidChars(_metadata, true), new InvalidSemverException(semver,
+                    "Build-metadata section contain invalid character"));
         }
     }
 
     /// Initialize from fields
     this(int major, int minor, int patch, string[] prerelease = null, string[] metadata = null) pure
     {
+        import std.array : join;
+
         _major = major;
         _minor = minor;
         _patch = patch;
-        _prerelease = prerelease;
-        _metadata = metadata;
+        _prerelease = prerelease.join('.');
+        _metadata = metadata.join('.');
     }
 
     invariant()
     {
-        import std.algorithm : all;
+        import std.algorithm : all, canFind;
 
         assert(_major >= 0, "major must be positive");
         assert(_minor >= 0, "minor must be positive");
         assert(_patch >= 0, "patch must be positive");
-        assert(_prerelease.all!(s => allValidChars(s, false)),
+        assert(allValidChars(_prerelease, true),
                 "prerelease contain invalid characters");
-        assert(_metadata.all!(s => allValidChars(s, false)), "metadata contain invalid characters");
+        assert(!_prerelease.canFind(".."),
+                "prerelease contain empty subsection");
+        assert(allValidChars(_metadata, true),
+                "metadata contain invalid characters");
+        assert(!_metadata.canFind(".."),
+                "metadata contain empty subsection");
     }
 
     string toString() const pure
@@ -147,11 +156,11 @@ struct Semver
 
         if (_prerelease)
         {
-            res ~= "-" ~ prerelease.join(".");
+            res ~= "-" ~ _prerelease;
         }
         if (_metadata)
         {
-            res ~= "+" ~ metadata.join(".");
+            res ~= "+" ~ _metadata;
         }
 
         return res;
@@ -178,9 +187,10 @@ struct Semver
         return _prerelease.hashOf(hash);
     }
 
-    int opCmp(const Semver rhs) const pure nothrow
+    int opCmp(const Semver rhs) const pure
     {
         import std.algorithm : min;
+        import std.array : split;
         import std.conv : to;
 
         // §11.2
@@ -192,17 +202,19 @@ struct Semver
             return _patch < rhs._patch ? -1 : 1;
 
         // §11.3
-        if (_prerelease && !rhs._prerelease)
+        const lpr = _prerelease.split('.');
+        const rpr = rhs._prerelease.split('.');
+        if (lpr && !rpr)
             return -1;
-        if (!_prerelease && rhs._prerelease)
+        if (!lpr && rpr)
             return 1;
 
         // §11.4
-        const len = min(_prerelease.length, rhs._prerelease.length);
+        const len = min(lpr.length, rpr.length);
         for (size_t i; i < len; i++)
         {
-            const l = _prerelease[i];
-            const r = rhs._prerelease[i];
+            const l = lpr[i];
+            const r = rpr[i];
 
             if (l == r)
                 continue;
@@ -231,11 +243,11 @@ struct Semver
             return lAllNum ? -1 : 1;
         }
 
-        if (_prerelease.length == rhs._prerelease.length)
+        if (lpr.length == rpr.length)
             return 0;
 
         // §11.4.4
-        return _prerelease.length < rhs._prerelease.length ? -1 : 1;
+        return lpr.length < rpr.length ? -1 : 1;
     }
 
     int opCmp(const string rhs) const pure
@@ -259,15 +271,15 @@ unittest
     assert(complex.major == 1);
     assert(complex.minor == 2);
     assert(complex.patch == 34);
-    assert(complex.prerelease == ["alpha", "1"]);
-    assert(complex.metadata == ["git", "abcdef"]);
+    assert(complex.prerelease == "alpha.1");
+    assert(complex.metadata == "git.abcdef");
 
     const metaonly = Semver("1.2.34+git.abcdef");
     assert(metaonly.major == 1);
     assert(metaonly.minor == 2);
     assert(metaonly.patch == 34);
     assert(!metaonly.prerelease);
-    assert(metaonly.metadata == ["git", "abcdef"]);
+    assert(metaonly.metadata == "git.abcdef");
 }
 
 ///
