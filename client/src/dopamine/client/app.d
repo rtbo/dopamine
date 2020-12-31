@@ -1,6 +1,7 @@
 module dopamine.client.app;
 
 import dopamine.client.build;
+import dopamine.client.deps;
 import dopamine.client.install;
 import dopamine.client.login;
 import dopamine.client.pack;
@@ -27,8 +28,8 @@ int main(string[] args)
     initLua();
 
     const commandHandlers = [
-        "build" : &buildMain, "install" : &installMain, "login" : &loginMain,
-        "package" : &packageMain, "profile" : &profileMain,
+        "build" : &buildMain, "deps" : &depsMain, "install" : &installMain,
+        "login" : &loginMain, "package" : &packageMain, "profile" : &profileMain,
         "publish" : &publishMain, "source" : &sourceMain, "upload" : &uploadMain,
     ];
 
