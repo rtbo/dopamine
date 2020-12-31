@@ -204,7 +204,7 @@ struct VersionSpec
         return _spec;
     }
 
-    bool matchVersion(const(Semver) ver) const nothrow pure @safe
+    bool matchVersion(const(Semver) ver) const pure @safe
     {
         // disallow prerelease if none was specified
         if (!_lower.prerelease && ver.prerelease)

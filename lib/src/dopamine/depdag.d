@@ -14,6 +14,7 @@
 module dopamine.depdag;
 
 import dopamine.dependency;
+import dopamine.recipe;
 import dopamine.semver;
 
 /// Interface for an object that interacts with repository and/or local package cache
@@ -21,13 +22,27 @@ import dopamine.semver;
 /// Implementation may also be a test mock.
 interface CacheRepo
 {
-    /// Get the dependencies of a package in its specified version
-    Dependency[] packDeps(string packname, const(Semver) ver) @safe;
+    /// Get the recipe of a package in its specified version
+    /// Params:
+    ///     packname = name of the package
+    ///     ver = version of the package
+    ///     cache = whether the package version should be added to the package cache
+    /// Returns: The recipe of the package
+    /// Throws: ServerDownException, NoSuchPackageException, NoSuchPackageVersionException
+    const(Recipe) packRecipe(string packname, const(Semver) ver, bool cache) @safe;
 
     /// Get the available versions of a package
+    /// Params:
+    ///     packname = name of the package
+    /// Returns: the list of versions available of the package
+    /// Throws: ServerDownException, NoSuchPackageException
     Semver[] packAvailVersions(string packname) @safe;
 
     /// Check whether a package version is in local cache or not
+    /// Params:
+    ///     packname = name of the package
+    ///     ver = version of the package
+    /// Retruns: whether the package is in local cache
     bool packIsCached(string packname, const(Semver) ver) @safe;
 }
 
@@ -181,11 +196,10 @@ class DepEdge
     }
 }
 
-/// Prepare a dependency DAG
-/// The returned pack is the one of [packname]
+/// Prepare a dependency DAG for package described by [recipe]
 /// The construction of the DAG is made in top-down direction (from the root
 /// package down to its dependencies.
-DepPack prepareDepDAG(string packname, Semver ver, CacheRepo cacheRepo) @safe
+DepPack prepareDepDAG(const(Recipe) recipe, CacheRepo cacheRepo) @safe
 {
     import std.algorithm : canFind, filter, map, sort;
     import std.array : array;
@@ -209,6 +223,7 @@ DepPack prepareDepDAG(string packname, Semver ver, CacheRepo cacheRepo) @safe
     }
 
     DepNode[] visited;
+    DepPack root = new DepPack(recipe.name, [recipe.ver]);
 
     void doPackVersion(DepPack pack, const(Semver) ver) @trusted
     {
@@ -220,9 +235,9 @@ DepPack prepareDepDAG(string packname, Semver ver, CacheRepo cacheRepo) @safe
 
         visited ~= node;
 
-        auto deps = cacheRepo.packDeps(pack.name, ver);
+        const recipe = pack is root ? recipe : cacheRepo.packRecipe(pack.name, ver, false);
 
-        foreach (dep; deps)
+        foreach (dep; recipe.dependencies)
         {
             auto dp = prepPack(dep.name);
 
@@ -235,9 +250,7 @@ DepPack prepareDepDAG(string packname, Semver ver, CacheRepo cacheRepo) @safe
         }
     }
 
-    DepPack root = new DepPack(packname, [ver]);
-
-    doPackVersion(root, ver);
+    doPackVersion(root, recipe.ver);
 
     return root;
 }
@@ -462,7 +475,7 @@ bool dagIsResolved(DepPack root) @safe
 
 /// Serialize a resolved DAG to lock-file content
 string dagToLockFile(DepPack root, bool emitAllVersions = true) @safe
-in(emitAllVersions || !dagIsResolved(root))
+in(emitAllVersions || dagIsResolved(root))
 {
     // using own writing logic because std.json do not preserve any field
     // ordering
@@ -964,7 +977,8 @@ unittest
 }
 
 @("Test Serialization")
-unittest {
+unittest
+{
     auto cacheRepo = TestCacheRepo.withBase();
 
     auto dag1 = prepareDepDAG("e", Semver("1.0.0"), cacheRepo);
