@@ -26,10 +26,9 @@ interface CacheRepo
     /// Params:
     ///     packname = name of the package
     ///     ver = version of the package
-    ///     cache = whether the package version should be added to the package cache
     /// Returns: The recipe of the package
     /// Throws: ServerDownException, NoSuchPackageException, NoSuchPackageVersionException
-    const(Recipe) packRecipe(string packname, const(Semver) ver, bool cache) @safe;
+    const(Recipe) packRecipe(string packname, const(Semver) ver) @safe;
 
     /// Get the available versions of a package
     /// Params:
@@ -235,7 +234,7 @@ DepPack prepareDepDAG(const(Recipe) recipe, CacheRepo cacheRepo) @safe
 
         visited ~= node;
 
-        const recipe = pack is root ? recipe : cacheRepo.packRecipe(pack.name, ver, false);
+        const recipe = pack is root ? recipe : cacheRepo.packRecipe(pack.name, ver);
 
         foreach (dep; recipe.dependencies)
         {

@@ -3,6 +3,7 @@ module dopamine.depcache;
 import dopamine.api;
 import dopamine.depdag;
 import dopamine.dependency;
+import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
 import dopamine.semver;
@@ -15,7 +16,7 @@ class DependencyException : Exception
     }
 }
 
-class NoSuchPackageDependencyException : DependencyException
+class NoSuchPackageException : DependencyException
 {
     string packname;
 
@@ -28,7 +29,7 @@ class NoSuchPackageDependencyException : DependencyException
     }
 }
 
-class NoSuchVersionDependencyException : DependencyException
+class NoSuchVersionException : DependencyException
 {
     string packname;
     const(Semver) ver;
@@ -65,13 +66,12 @@ final class DependencyCache : CacheRepo
     /// Params:
     ///     packname = name of the package
     ///     ver = version of the package
-    ///     cache = whether the package version should be added to the package cache
     /// Returns: The recipe of the package
     /// Throws: ServerDownException, NoSuchPackageException, NoSuchPackageVersionException
-    const(Recipe) packRecipe(string packname, const(Semver) ver, bool cache) @safe
+    const(Recipe) packRecipe(string packname, const(Semver) ver) @safe
     {
         import std.exception : enforce;
-        import std.file : exists, isDir;
+        import std.file : exists;
         import std.path : buildPath;
 
         const id = depId(packname, ver);
@@ -90,35 +90,10 @@ final class DependencyCache : CacheRepo
         }
 
         // must go through API
-        auto api = API();
-        Package pack;
-        if (auto p = packname in _packageCache)
-        {
-            pack = *p;
-        }
-        else
-        {
-            auto packResp = api.getPackageByName(packname);
-            enforce(packResp.code != 404, new NoSuchPackageDependencyException(packname));
-            pack = packResp.payload;
-            _packageCache[packname] = pack;
-        }
-
-        auto resp = api.getPackageVersion(pack.id, ver.toString());
-        enforce(resp.code != 404, new NoSuchVersionDependencyException(packname, ver));
+        Package pack = getPackageMemOrNetwork(packname);
+        auto resp = API().getPackageVersion(pack.id, ver.toString());
+        enforce(resp.code != 404, new NoSuchVersionException(packname, ver));
         const recipe = resp.payload.recipe;
-
-        if (cache)
-        {
-            import std.file : mkdirRecurse;
-
-            mkdirRecurse(userPackagesDir());
-            recipe.repo.fetchInto(dir);
-            const pd = PackageDir.enforced(dir);
-            const r = recipeParseFile(pd.dopamineFile());
-            _recipeCache[id] = r;
-            return r;
-        }
 
         _recipeCache[id] = recipe;
         return recipe;
@@ -134,9 +109,7 @@ final class DependencyCache : CacheRepo
         import std.algorithm : map;
         import std.array : array;
 
-        auto api = API();
-        const pack = api.getPackageByName(packname).payload;
-        return pack.versions.map!(v => Semver(v)).array;
+        return getPackageMemOrNetwork(packname).versions.map!(v => Semver(v)).array;
     }
 
     /// Check whether a package version is in local cache or not
@@ -161,9 +134,71 @@ final class DependencyCache : CacheRepo
         return false;
     }
 
+    /// Cache a dependency in the local cache
+    /// Params:
+    ///     packname = the name of the package
+    ///     ver = version of the package
+    /// Returns the recipe of the cached package
+    const(Recipe) cachePackage(string packname, const(Semver) ver) @safe
+    {
+        import std.file : exists, mkdirRecurse;
+        import std.path : buildPath;
+
+        const id = depId(packname, ver);
+        const dir = buildPath(userPackagesDir(), id);
+
+        if (exists(dir))
+        {
+            const pd = PackageDir.enforced(dir);
+            const r = recipeParseFile(pd.dopamineFile());
+            _recipeCache[id] = r;
+            return r;
+        }
+
+        const recipe = getRecipeMemOrNetwork(packname, ver, id);
+
+        logInfo("Caching %s", info(id));
+
+        mkdirRecurse(userPackagesDir());
+        recipe.repo.fetchInto(dir);
+        const pd = PackageDir.enforced(dir);
+        const r = recipeParseFile(pd.dopamineFile());
+        _recipeCache[id] = r;
+        return r;
+    }
+
     private string depId(string packname, const(Semver) ver) @safe
     {
         return packname ~ "-" ~ ver.toString();
+    }
+
+    private Package getPackageMemOrNetwork(string packname) @safe
+    {
+        import std.exception : enforce;
+
+        if (auto p = packname in _packageCache)
+            return *p;
+
+        auto resp = API().getPackageByName(packname);
+        enforce(resp.code != 404, new NoSuchPackageException(packname));
+        auto pack = resp.payload;
+        _packageCache[packname] = pack;
+        return pack;
+    }
+
+    private const(Recipe) getRecipeMemOrNetwork(string packname, Semver ver, string id) @safe
+    {
+        import std.exception : enforce;
+
+        if (auto p = id in _recipeCache)
+            return *p;
+
+        auto pack = getPackageMemOrNetwork(packname);
+        auto resp = API().getPackageVersion(pack.id, ver.toString());
+        enforce(resp.code != 404, new NoSuchVersionException(packname, ver));
+        const recipe = resp.payload.recipe;
+        _recipeCache[id] = recipe;
+        return recipe;
     }
 }
 
