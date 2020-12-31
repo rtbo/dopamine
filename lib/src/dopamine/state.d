@@ -5,6 +5,7 @@ module dopamine.state;
 
 import dopamine.archive;
 import dopamine.build;
+import dopamine.depdag;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
@@ -132,6 +133,52 @@ mixin template EnforcedState(E = StateNotReachedException)
     protected override void doReach()
     {
         throw new E(_enforceMsg);
+    }
+}
+
+abstract class LockFileState : PackageState
+{
+    private DepPack _dagRoot;
+
+    this(PackageDir packageDir, const(Recipe) recipe)
+    {
+        super("Lock-File", packageDir, recipe);
+    }
+
+    @property DepPack dagRoot()
+    {
+        return _dagRoot;
+    }
+
+    protected @property void dagRoot(DepPack root)
+    {
+        _dagRoot = dagRoot;
+    }
+
+    protected override bool checkReached()
+    {
+        if (_dagRoot !is null)
+            return true;
+
+        if (!exists(packageDir.lockFile))
+            return false;
+
+        if (timeLastModified(packageDir.lockFile) < timeLastModified(packageDir.dopamineFile))
+            return false;
+
+        _dagRoot = dagFromLockFile(packageDir.lockFile);
+        return true;
+    }
+}
+
+class EnforcedLockFileState : LockFileState
+{
+    mixin EnforcedState!();
+
+    this(PackageDir packageDir, const(Recipe) recipe, string msg = "Error: Lock-File is not present or not up-to-date!")
+    {
+        super(packageDir, recipe);
+        _enforceMsg = msg;
     }
 }
 
