@@ -16,32 +16,32 @@ enum LogLevel
 
 LogLevel minLogLevel = LogLevel.info;
 
-auto color(Color color, string text)
+auto color(Color color, string text) @safe
 {
     return ColorizedText(color, text);
 }
 
-auto info(string text)
+auto info(string text) @safe
 {
     return ColorizedText(Color.DEFAULT | Bright, text);
 }
 
-auto success(string text)
+auto success(string text) @safe
 {
     return ColorizedText(Color.green | Bright, text);
 }
 
-auto warning(string text)
+auto warning(string text) @safe
 {
     return ColorizedText(Color.yellow | Bright, text);
 }
 
-auto error(string text)
+auto error(string text) @safe
 {
     return ColorizedText(Color.red | Bright, text);
 }
 
-void log(Args...)(LogLevel level, string msgf, Args args)
+void log(Args...)(LogLevel level, string msgf, Args args) @trusted
 {
     if (level >= minLogLevel)
     {
@@ -54,22 +54,22 @@ void log(Args...)(LogLevel level, string msgf, Args args)
     }
 }
 
-void logVerbose(Args...)(string msgf, Args args)
+void logVerbose(Args...)(string msgf, Args args) @safe
 {
     log(LogLevel.verbose, msgf, args);
 }
 
-void logInfo(Args...)(string msgf, Args args)
+void logInfo(Args...)(string msgf, Args args) @safe
 {
     log(LogLevel.info, msgf, args);
 }
 
-void logWarning(Args...)(string msgf, Args args)
+void logWarning(Args...)(string msgf, Args args) @safe
 {
     log(LogLevel.warning, msgf, args);
 }
 
-void logError(Args...)(string msgf, Args args)
+void logError(Args...)(string msgf, Args args) @safe
 {
     log(LogLevel.error, msgf, args);
 }
