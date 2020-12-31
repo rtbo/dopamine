@@ -163,7 +163,7 @@ abstract class LockFileState : PackageState
         if (!exists(packageDir.lockFile))
             return false;
 
-        if (timeLastModified(packageDir.lockFile) < timeLastModified(packageDir.dopamineFile))
+        if (timeLastModified(packageDir.dopamineFile) > timeLastModified(packageDir.lockFile))
             return false;
 
         _dagRoot = dagFromLockFile(packageDir.lockFile);

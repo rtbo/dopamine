@@ -31,6 +31,13 @@ int depsMain(string[] args)
             checkDepDAGCompat(dag);
             resolveDepDAG(dag, DependencyCache.get, Heuristics.preferCached);
 
+            traverseResolvedNodesTopDown(dag, (DepNode node) @safe {
+                if (node.pack is dag)
+                    return;
+
+                DependencyCache.get.cachePackage(node.pack.name, node.ver);
+            });
+
             dagToLockFile(dag, packageDir.lockFile, false);
 
             dagRoot = dag;
