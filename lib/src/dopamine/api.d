@@ -2,6 +2,7 @@ module dopamine.api;
 
 import dopamine.login;
 import dopamine.recipe;
+import dopamine.semver;
 
 import std.algorithm;
 import std.array;
@@ -119,7 +120,7 @@ struct PackageVersion
 {
     string packageId;
     string name;
-    string ver;
+    Semver ver;
     /// Content of dopamine.lua file. Only needed to display it in frontend.
     /// It is sent when the version is published, but not sent back in the GET
     /// requests
@@ -134,7 +135,7 @@ private PackageVersion packageVersionFromJson(const(JSONValue) json)
     writeln(json.toPrettyString());
     const recipe = recipeParseJson(json["recipe"]);
     return PackageVersion(json["packageId"].str, json["name"].str,
-            json["version"].str, null, recipe);
+            Semver(json["version"].str), null, recipe);
 }
 
 struct API
@@ -205,7 +206,7 @@ struct API
         const uri = resource(format("/packages/%s/versions", pver.packageId));
         JSONValue jv;
         jv["name"] = pver.name;
-        jv["version"] = pver.ver;
+        jv["version"] = pver.ver.toString();
         jv["luaDef"] = pver.luaDef;
         jv["recipe"] = recipeToJson(pver.recipe);
         return jsonPost(uri, jv).mapResp!(jv => packageVersionFromJson(jv));
