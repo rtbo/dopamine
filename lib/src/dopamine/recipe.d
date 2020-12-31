@@ -2,6 +2,7 @@ module dopamine.recipe;
 
 import dopamine.build;
 import dopamine.dependency;
+import dopamine.semver;
 import dopamine.source;
 
 import bindbc.lua;
@@ -17,7 +18,7 @@ class Recipe
     {
         string _name;
         string _description;
-        string _ver;
+        Semver _ver;
         string _license;
         string _copyright;
         string[] _langs;
@@ -39,7 +40,7 @@ class Recipe
         return _description;
     }
 
-    @property string ver() const @safe
+    @property Semver ver() const @safe
     {
         return _ver;
     }
@@ -97,7 +98,7 @@ const(Recipe) recipeParseJson(const ref JSONValue json) @safe
     }
 
     r._name = json["name"].str;
-    r._ver = json["version"].str;
+    r._ver = Semver(json["version"].str);
     r._description = json["description"].str;
     r._license = json["license"].str;
     r._copyright = optionalStr(json, "copyright");
@@ -178,8 +179,7 @@ JSONValue recipeToJson(const(Recipe) recipe) @safe
     JSONValue json;
     if (recipe.name.length)
         json["name"] = recipe.name;
-    if (recipe.ver.length)
-        json["version"] = recipe.ver;
+    json["version"] = recipe.ver.toString();
     if (recipe.description.length)
         json["description"] = recipe.description;
     if (recipe.license.length)
@@ -285,7 +285,7 @@ const(Recipe) recipeParseFile(string path) @trusted
     auto r = new Recipe;
 
     r._name = enforce(globalStringVar(L, "name"), "name field is mandatory");
-    r._ver = enforce(globalStringVar(L, "version"), "version field is mandatory");
+    r._ver = Semver(enforce(globalStringVar(L, "version"), "version field is mandatory"));
     r._description = globalStringVar(L, "description");
     r._license = globalStringVar(L, "license");
     r._copyright = globalStringVar(L, "copyright");
