@@ -130,9 +130,6 @@ struct PackageVersion
 
 private PackageVersion packageVersionFromJson(const(JSONValue) json)
 {
-    import std.stdio;
-
-    writeln(json.toPrettyString());
     const recipe = recipeParseJson(json["recipe"]);
     return PackageVersion(json["packageId"].str, json["name"].str,
             Semver(json["version"].str), null, recipe);
