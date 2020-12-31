@@ -1,5 +1,7 @@
 module dopamine.client.build;
 
+import dopamine.client.deps;
+import dopamine.client.source;
 import dopamine.client.util;
 
 import dopamine.log;
@@ -17,6 +19,18 @@ import std.file;
 import std.format;
 import std.getopt;
 import std.stdio;
+
+/// PackageState that combines enforced configure, build and install steps
+InstallState enforcedBuildState(PackageDir dir, const(Recipe) recipe,
+        ProfileState profileState, SourceState sourceState)
+{
+    auto configState = new EnforcedConfigState(dir, recipe, profileState, sourceState,
+            format("Package not configured for profile '%s'. Try to run `dop build`", profileState.profile.name));
+    auto buildState = new EnforcedBuildState(dir, recipe, profileState, configState,
+            format("Package not built for profile '%s'. Try to run `dop build`", profileState.profile.name));
+    return new EnforcedInstallState(dir, recipe, profileState, buildState,
+            format("Package not installed for profile '%s'. Try to run `dop build`", profileState.profile.name));
+}
 
 int buildMain(string[] args)
 {
@@ -75,9 +89,10 @@ int buildMain(string[] args)
 
     assert(profile, "profile not set");
 
-    auto profileState = new UseProfileState(packageDir, recipe, profile);
-    auto sourceState = new EnforcedSourceState(packageDir, recipe,
-            "Source code not available or not up-to-date. Try to run `dop source`");
+    auto lockFileState = enforcedLockFileState(packageDir, recipe);
+    auto sourceState = enforcedSourceState(packageDir, recipe);
+
+    auto profileState = new UseProfileState(packageDir, recipe, lockFileState, profile);
     auto configState = new DoConfigState(packageDir, recipe, profileState, sourceState);
     auto buildState = new DoBuildState(packageDir, recipe, profileState, configState);
     auto installState = new DoInstallState(packageDir, recipe, profileState, buildState);

@@ -1,5 +1,8 @@
 module dopamine.client.publish;
 
+import dopamine.client.build;
+import dopamine.client.deps;
+import dopamine.client.source;
 import dopamine.client.util;
 
 import dopamine.api;
@@ -51,16 +54,14 @@ int publishMain(string[] args)
 
     assert(profile);
 
-    auto profileState = new UseProfileState(packageDir, recipe, profile);
-    auto sourceState = new EnforcedSourceState(packageDir, recipe,
-            "Source code not available. Try to run `dop source`");
-    auto configState = new EnforcedConfigState(packageDir, recipe, profileState, sourceState,
-            format("Package not configured for profile '%s'. Try to run `dop build`", profile.name));
-    auto buildState = new EnforcedBuildState(packageDir, recipe, profileState, configState,
-            format("Package not built for profile '%s'. Try to run `dop build`", profile.name));
-    auto installState = new EnforcedInstallState(packageDir, recipe, profileState, buildState,
-            format("Package not installed for profile '%s'. Try to run `dop build`", profile.name));
-    auto archiveState = new EnforcedArchiveState(packageDir, recipe, profileState, installState);
+    auto lockFileState = enforcedLockFileState(packageDir, recipe);
+    auto sourceState = enforcedSourceState(packageDir, recipe);
+
+    auto profileState = new UseProfileState(packageDir, recipe, lockFileState, profile);
+
+    auto buildState = enforcedBuildState(packageDir, recipe, profileState, sourceState);
+
+    auto archiveState = new EnforcedArchiveState(packageDir, recipe, profileState, buildState);
 
     const archiveFile = packageDir.archiveFile(profile, recipe);
 

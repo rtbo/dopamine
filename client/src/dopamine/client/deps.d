@@ -7,18 +7,15 @@ import dopamine.paths;
 import dopamine.recipe;
 import dopamine.state;
 
-int depsMain(string[] args)
+LockFileState enforcedLockFileState(PackageDir dir, const(Recipe) recipe)
 {
-    const packageDir = PackageDir.enforced(".");
-    const recipe = recipeParseFile(packageDir.dopamineFile);
+    return new EnforcedLockFileState(dir, recipe,
+            "Lock-file not present or not up-to-date. Try to run 'dop deps'");
+}
 
-    if (!recipe.dependencies)
-    {
-        logInfo("%s has not dependencies: nothing to do!", info(recipe.name));
-        return 0;
-    }
-
-    auto state = new class(packageDir, recipe) LockFileState
+LockFileState reachingLockFileState(PackageDir dir, const(Recipe) recipe)
+{
+    return new class(dir, recipe) LockFileState
     {
         this(PackageDir packageDir, const(Recipe) recipe)
         {
@@ -34,7 +31,6 @@ int depsMain(string[] args)
             traverseResolvedNodesTopDown(dag, (DepNode node) @safe {
                 if (node.pack is dag)
                     return;
-
                 DependencyCache.get.cachePackage(node.pack.name, node.ver);
             });
 
@@ -43,6 +39,20 @@ int depsMain(string[] args)
             dagRoot = dag;
         }
     };
+}
+
+int depsMain(string[] args)
+{
+    const packageDir = PackageDir.enforced(".");
+    const recipe = recipeParseFile(packageDir.dopamineFile);
+
+    if (!recipe.dependencies)
+    {
+        logInfo("%s has not dependencies: nothing to do!", info(recipe.name));
+        return 0;
+    }
+
+    auto state = reachingLockFileState(packageDir, recipe);
 
     if (state.reached)
     {

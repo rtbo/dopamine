@@ -175,7 +175,7 @@ class EnforcedLockFileState : LockFileState
 {
     mixin EnforcedState!();
 
-    this(PackageDir packageDir, const(Recipe) recipe, string msg = "Error: Lock-File is not present or not up-to-date!")
+    this(PackageDir packageDir, const(Recipe) recipe, string msg = "Lock-File is not present or not up-to-date!")
     {
         super(packageDir, recipe);
         _enforceMsg = msg;
@@ -186,9 +186,9 @@ abstract class ProfileState : PackageState
 {
     private Profile _profile;
 
-    this(PackageDir packageDir, const(Recipe) recipe)
+    this(PackageDir packageDir, const(Recipe) recipe, LockFileState lockFile)
     {
-        super("Profile", packageDir, recipe);
+        super("Profile", packageDir, recipe, [lockFile]);
     }
 
     @property const(Profile) profile()
@@ -209,9 +209,9 @@ abstract class ProfileState : PackageState
 
 class UseProfileState : ProfileState
 {
-    this(PackageDir packageDir, const(Recipe) recipe, Profile profile)
+    this(PackageDir packageDir, const(Recipe) recipe, LockFileState lockFile, Profile profile)
     {
-        super(packageDir, recipe);
+        super(packageDir, recipe, lockFile);
         _profile = profile;
     }
 
@@ -223,9 +223,9 @@ class UseProfileState : ProfileState
 
 class UsePackageProfileState : ProfileState
 {
-    this(PackageDir packageDir, const(Recipe) recipe)
+    this(PackageDir packageDir, const(Recipe) recipe, LockFileState lockFile)
     {
-        super(packageDir, recipe);
+        super(packageDir, recipe, lockFile);
     }
 
     protected override void doReach()

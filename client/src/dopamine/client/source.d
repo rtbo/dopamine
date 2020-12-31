@@ -10,6 +10,12 @@ import dopamine.state;
 import std.file;
 import std.stdio;
 
+SourceState enforcedSourceState(PackageDir dir, const(Recipe) recipe)
+{
+    return new EnforcedSourceState(dir, recipe,
+            "Source code not available or not up-to-date. Try to run `dop source`");
+}
+
 int sourceMain(string[] args)
 {
     const packageDir = PackageDir.enforced(".");
