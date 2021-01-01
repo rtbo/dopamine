@@ -543,7 +543,7 @@ Arch fromConfig(T : Arch)(string val)
     case "x86_64":
         return T.x86_64;
     default:
-        throw new Exception(format("cannot convert %s to Arch", val));
+        throw new Exception(format("cannot convert \"%s\" to Arch", val));
     }
 }
 
@@ -556,7 +556,7 @@ OS fromConfig(T : OS)(string val)
     case "windows":
         return T.windows;
     default:
-        throw new Exception(format("cannot convert %s to OS", val));
+        throw new Exception(format("cannot convert \"%s\" to OS", val));
     }
 }
 
@@ -571,7 +571,7 @@ Lang fromConfig(T : Lang)(string val)
     case "c":
         return T.c;
     default:
-        throw new Exception(format("cannot convert %s to Lang", val));
+        throw new Exception(format("cannot convert \"%s\" to Lang", val));
     }
 }
 
@@ -584,7 +584,7 @@ BuildType fromConfig(T : BuildType)(string val)
     case "debut":
         return T.debug_;
     default:
-        throw new Exception(format("cannot convert %s to Build Type", val));
+        throw new Exception(format("cannot convert \"%s\" to Build Type", val));
     }
 }
 
