@@ -27,6 +27,7 @@ LockFileState reachingLockFileState(PackageDir dir, const(Recipe) recipe)
             auto dag = prepareDepDAG(recipe, DependencyCache.get);
             checkDepDAGCompat(dag);
             resolveDepDAG(dag, DependencyCache.get, Heuristics.preferCached);
+            dagFetchLanguages(dag, DependencyCache.get);
 
             traverseResolvedNodesTopDown(dag, (DepNode node) @safe {
                 if (node.pack is dag)

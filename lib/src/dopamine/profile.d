@@ -401,9 +401,24 @@ final class Profile
     }
 }
 
-Lang[] toLangs(const(string)[] langs)
+Lang[] strToLangs(const(string)[] langs)
 {
     return langs.map!(l => l.fromConfig!Lang).array;
+}
+
+Lang strToLang(string lang)
+{
+    return lang.fromConfig!Lang;
+}
+
+string[] strFromLangs(const(Lang)[] langs)
+{
+    return langs.map!(l => l.toConfig()).array;
+}
+
+string strFromLang(Lang lang)
+{
+    return lang.toConfig();
 }
 
 string defaultProfileName(Lang[] langs)

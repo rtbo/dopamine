@@ -2,6 +2,7 @@ module dopamine.recipe;
 
 import dopamine.build;
 import dopamine.dependency;
+import dopamine.profile;
 import dopamine.semver;
 import dopamine.source;
 
@@ -21,7 +22,7 @@ class Recipe
         Semver _ver;
         string _license;
         string _copyright;
-        string[] _langs;
+        Lang[] _langs;
 
         Dependency[] _dependencies;
 
@@ -55,7 +56,7 @@ class Recipe
         return _copyright;
     }
 
-    @property const(string)[] langs() const @safe
+    @property const(Lang)[] langs() const @safe
     {
         return _langs;
     }
@@ -84,6 +85,16 @@ class Recipe
     {
         return _build;
     }
+
+    package static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs) @safe
+    {
+        auto r = new Recipe;
+        r._name = name;
+        r._ver = ver;
+        r._dependencies = deps;
+        r._langs = langs;
+        return r;
+    }
 }
 
 const(Recipe) recipeParseJson(const ref JSONValue json) @safe
@@ -102,7 +113,7 @@ const(Recipe) recipeParseJson(const ref JSONValue json) @safe
     r._description = json["description"].str;
     r._license = json["license"].str;
     r._copyright = optionalStr(json, "copyright");
-    r._langs = jsonArray(json["langs"].arrayNoRef);
+    r._langs = jsonLangArray(json["langs"].arrayNoRef);
 
     if ("dependencies" in json)
     {
@@ -145,7 +156,7 @@ unittest
     assert(a.description == "test package A");
     assert(a.ver == "1.0.0");
     assert(!a.copyright);
-    assert(a.langs == ["d"]);
+    assert(a.langs == [Lang.d]);
     assert(!a.dependencies);
     assert(a.repo && a.repo.type == SourceType.git);
     assert(a.source is a.repo);
@@ -166,7 +177,7 @@ unittest
     assert(b.description == "test package B");
     assert(b.ver == "0.5.0");
     assert(b.copyright);
-    assert(b.langs == ["d", "c"]);
+    assert(b.langs == [Lang.d, Lang.c]);
     assert(b.dependencies == [Dependency("a", VersionSpec(">=1.0.0"))]);
     assert(b.repo && b.repo.type == SourceType.git);
     assert(b.source && b.source.type == SourceType.archive);
@@ -187,7 +198,7 @@ JSONValue recipeToJson(const(Recipe) recipe) @safe
     if (recipe.copyright.length)
         json["copyright"] = recipe.copyright;
     if (recipe.langs.length)
-        json["langs"] = recipe.langs;
+        json["langs"] = recipe.langs.strFromLangs();
     if (recipe.dependencies)
     {
         JSONValue[] deps;
@@ -289,7 +300,7 @@ const(Recipe) recipeParseFile(string path) @trusted
     r._description = globalStringVar(L, "description");
     r._license = globalStringVar(L, "license");
     r._copyright = globalStringVar(L, "copyright");
-    r._langs = globalArrayTableVar(L, "langs");
+    r._langs = globalArrayTableVar(L, "langs").strToLangs();
 
     r._dependencies = readDependencies(L);
 
@@ -397,6 +408,14 @@ string[] jsonArray(in JSONValue[] arr) @safe
     import std.array : array;
 
     return arr.map!(jv => jv.str).array;
+}
+
+Lang[] jsonLangArray(in JSONValue[] arr) @safe
+{
+    import std.algorithm : map;
+    import std.array : array;
+
+    return arr.map!(jv => jv.str.strToLang()).array;
 }
 
 int dopModuleLoader(lua_State* L) nothrow

@@ -14,6 +14,7 @@
 module dopamine.depdag;
 
 import dopamine.dependency;
+import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
 
@@ -153,6 +154,10 @@ class DepNode
 
     /// The edges going to dependencies of this package
     DepEdge[] downEdges;
+
+    /// The languages of this node and all dependencies
+    /// This is generally fetched after resolution
+    Lang[] langs;
 
     this(DepPack pack, Semver ver) @safe
     {
@@ -472,6 +477,53 @@ bool dagIsResolved(DepPack root) @safe
     return resolved;
 }
 
+private Lang[] mergeLangs(Lang[] l1, const(Lang)[] l2)
+{
+    // TODO: find something more efficient, maybe useing as predicate
+    // that both l1 and l2 are sorted
+    import std.algorithm : sort, uniq;
+    import std.array : array;
+
+    auto l = l1 ~ l2;
+    sort(l);
+    return uniq(l).array;
+}
+
+/// Fetch languages for each resolved node
+/// This is used to compute the right profile to build
+/// The dependency tree.
+/// Each node is associated with its language + the cumulated
+/// languages of its dependencies
+void dagFetchLanguages(DepPack root, CacheRepo cacheRepo)
+in(dagIsResolved(root))
+{
+    import std.algorithm : canFind;
+
+    DepPack[] traversed;
+
+    void traverse(DepPack pack, Lang[] fromDeps) @trusted // canFind is @system
+    {
+        if (traversed.canFind(pack))
+            return;
+        traversed ~= pack;
+
+        if (!pack.resolvedNode)
+            return;
+
+        const recipe = cacheRepo.packRecipe(pack.name, pack.resolvedNode.ver);
+        auto langs = mergeLangs(fromDeps, recipe.langs);
+        pack.resolvedNode.langs = langs;
+
+        foreach (e; pack.upEdges)
+            traverse(e.up.pack, langs);
+
+    }
+
+    auto leaves = collectDAGLeaves(root);
+    foreach (l; leaves)
+        traverse(l, []);
+}
+
 /// Serialize a resolved DAG to lock-file content
 string dagToLockFile(DepPack root, bool emitAllVersions = true) @safe
 in(emitAllVersions || dagIsResolved(root))
@@ -505,12 +557,12 @@ in(emitAllVersions || dagIsResolved(root))
         line("");
         line("package: %s", pack.name);
 
+        indent++;
+        scope (success)
+            indent--;
+
         foreach (v; pack.allVersions)
         {
-            indent++;
-            scope (success)
-                indent--;
-
             auto n = pack.getNode(v);
 
             if (n is null && !emitAllVersions)
@@ -530,11 +582,16 @@ in(emitAllVersions || dagIsResolved(root))
 
             if (n !is null)
             {
+                indent++;
+                scope (success)
+                    indent--;
+
+                if (n.langs.length)
+                {
+                    line("langs: %s", n.langs.strFromLangs().join(", "));
+                }
                 foreach (e; n.downEdges)
                 {
-                    indent++;
-                    scope (success)
-                        indent--;
 
                     line("dependency: %s %s", e.down.name, e.spec);
                 }
@@ -582,7 +639,7 @@ class InvalidLockFileException : Exception
 DepPack dagFromLockFileContent(string content, string filename = null) @safe
 {
     import std.algorithm : map;
-    import std.array : split;
+    import std.array : array, split;
     import std.conv : to;
     import std.exception : enforce;
     import std.string : endsWith, indexOf, lineSplitter, startsWith, strip;
@@ -593,6 +650,13 @@ DepPack dagFromLockFileContent(string content, string filename = null) @safe
         Semver ver;
         bool resolved;
         bool excluded;
+    }
+
+    struct Lng
+    {
+        string pack;
+        Semver ver;
+        Lang[] langs;
     }
 
     struct Dep
@@ -609,6 +673,7 @@ DepPack dagFromLockFileContent(string content, string filename = null) @safe
 
     string[] packs;
     Ver[] vers;
+    Lng[] langs;
     Dep[] deps;
 
     int line;
@@ -617,6 +682,7 @@ DepPack dagFromLockFileContent(string content, string filename = null) @safe
         enum lockfilemark = "# dop lock-file v";
         enum pmark = "package: ";
         enum vmark = "version: ";
+        enum lmark = "langs: ";
         enum dmark = "dependency: ";
         enum resolvedmark = " [resolved]";
         enum excludedmark = " [excluded]";
@@ -661,6 +727,14 @@ DepPack dagFromLockFileContent(string content, string filename = null) @safe
                 curver = Semver(l);
                 seenver = true;
                 vers ~= Ver(curpack, curver, resolved, excluded);
+            }
+            else if (l.startsWith(lmark))
+            {
+                enforce(curpack && seenver, new InvalidLockFileException(filename,
+                        line, "Ill-formed lock-file"));
+                l = l[dmark.length .. $];
+                auto entries = l.split(',').map!(l => l.strip()).array;
+                langs ~= Lng(curpack, curver, strToLangs(entries));
             }
             else if (l.startsWith(dmark))
             {
@@ -729,6 +803,12 @@ DepPack dagFromLockFileContent(string content, string filename = null) @safe
         depacks[p] = pack;
         if (root is null)
             root = pack;
+    }
+
+    foreach (l; langs)
+    {
+        auto node = depacks[l.pack].getNode(l.ver);
+        node.langs = l.langs;
     }
 
     foreach (d; deps)
@@ -899,7 +979,7 @@ unittest
 
     auto cacheRepo = TestCacheRepo.withBase();
 
-    auto dag = prepareDepDAG("e", Semver("1.0.0"), cacheRepo);
+    auto dag = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
 
     auto leaves = collectDAGLeaves(dag);
     assert(leaves.length == 1);
@@ -938,7 +1018,7 @@ unittest
 {
     auto cacheRepo = TestCacheRepo.withBase();
 
-    auto dag = prepareDepDAG("e", Semver("1.0.0"), cacheRepo);
+    auto dag = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
     checkDepDAGCompat(dag);
     resolveDepDAG(dag, cacheRepo, Heuristics.preferCached);
 
@@ -959,7 +1039,7 @@ unittest
 {
     auto cacheRepo = TestCacheRepo.withBase();
 
-    auto dag = prepareDepDAG("e", Semver("1.0.0"), cacheRepo);
+    auto dag = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
     checkDepDAGCompat(dag);
     resolveDepDAG(dag, cacheRepo, Heuristics.pickHighest);
 
@@ -980,7 +1060,7 @@ unittest
 {
     auto cacheRepo = TestCacheRepo.withBase();
 
-    auto dag1 = prepareDepDAG("e", Semver("1.0.0"), cacheRepo);
+    auto dag1 = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
     checkDepDAGCompat(dag1);
     resolveDepDAG(dag1, cacheRepo, Heuristics.pickHighest);
 
@@ -1032,9 +1112,22 @@ version (unittest)
     {
         string name;
         TestPackVersion[] nodes;
+        Lang[] langs;
+
+        const(Recipe) recipe(string ver)
+        {
+            foreach (n; nodes)
+            {
+                if (n.ver == ver)
+                {
+                    return Recipe.mock(name, Semver(ver), n.deps, langs);
+                }
+            }
+            assert(false, "wrong version");
+        }
     }
 
-    TestPackage[] buildTestPackBase(TestPackage e)
+    TestPackage[] buildTestPackBase()
     {
         auto a = TestPackage("a", [
                 TestPackVersion("1.0.0", [], true),
@@ -1061,18 +1154,16 @@ version (unittest)
                 TestPackVersion("1.0.0", [Dependency("c", VersionSpec("1.0.0"))], true),
                 TestPackVersion("1.1.0", [Dependency("c", VersionSpec("2.0.0"))]),
                 ]);
-        return [a, b, c, d, e];
+        return [a, b, c, d];
     }
 
-    TestPackage[] buildTestPackBase()
-    {
-        return buildTestPackBase(TestPackage("e", [
-                    TestPackVersion("1.0.0", [
-                        Dependency("b", VersionSpec(">=0.0.1")),
-                        Dependency("d", VersionSpec(">=1.1.0")),
-                    ])
-                ]));
-    }
+    TestPackage packE = TestPackage("e", [
+            TestPackVersion("1.0.0", [
+                    Dependency("b", VersionSpec(">=0.0.1")),
+                    Dependency("d", VersionSpec(">=1.1.0")),
+                ])
+
+            ]);
 
     /// A mock CacheRepo
     final class TestCacheRepo : CacheRepo
@@ -1087,24 +1178,21 @@ version (unittest)
             }
         }
 
-        static TestCacheRepo withBase(TestPackage e)
-        {
-            return new TestCacheRepo(buildTestPackBase(e));
-        }
-
         static TestCacheRepo withBase()
         {
             return new TestCacheRepo(buildTestPackBase());
         }
 
         /// Get the dependencies of a package in its specified version
-        Dependency[] packDeps(string packname, const(Semver) ver) @safe
+        const(Recipe) packRecipe(string packname, const(Semver) ver) @safe
         {
             import std.algorithm : find;
             import std.exception : enforce;
             import std.range : front;
 
-            return packs[packname].nodes.find!(pv => pv.ver == ver).front.deps;
+            TestPackage p = packs[packname];
+            TestPackVersion pv = p.nodes.find!(pv => pv.ver == ver).front;
+            return Recipe.mock(packname, ver, pv.deps, p.langs);
         }
 
         /// Get the available versions of a package

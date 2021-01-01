@@ -49,7 +49,7 @@ int buildMain(string[] args)
 
     const recipe = parseRecipe(packageDir);
 
-    auto langs = recipe.langs.toLangs();
+    Lang[] langs = recipe.langs.dup;
 
     const defaultName = defaultProfileName(langs);
     const defaultFile = userProfileFile(defaultName);
