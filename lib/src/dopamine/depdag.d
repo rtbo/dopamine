@@ -477,41 +477,52 @@ bool dagIsResolved(DepPack root) @safe
     return resolved;
 }
 
-private Lang[] mergeLangs(Lang[] l1, const(Lang)[] l2)
+/// Collect all resolved nodes into a dictionary
+/// Params
+///     root = the root package of the DAG
+/// Returns: A dictionary of all resolved nodes. Key is the package name.
+DepNode[string] dagCollectResolved(DepPack root) @safe
 {
-    // TODO: find something more efficient, maybe useing as predicate
-    // that both l1 and l2 are sorted
-    import std.algorithm : sort, uniq;
-    import std.array : array;
+    DepNode[string] res;
 
-    auto l = l1 ~ l2;
-    sort(l);
-    return uniq(l).array;
+    traverseResolvedNodesTopDown(root, (DepNode node) @safe {
+        res[node.pack.name] = node;
+    });
+
+    return res;
 }
+
 
 /// Fetch languages for each resolved node
 /// This is used to compute the right profile to build
 /// The dependency tree.
 /// Each node is associated with its language + the cumulated
 /// languages of its dependencies
-void dagFetchLanguages(DepPack root, CacheRepo cacheRepo)
+void dagFetchLanguages(DepPack root, const(Recipe) rootRecipe, CacheRepo cacheRepo) @safe
 in(dagIsResolved(root))
+in(root.name == rootRecipe.name)
+in(root.resolvedNode.ver == rootRecipe.ver)
 {
-    import std.algorithm : canFind;
+    import std.algorithm : sort, uniq;
+    import std.array : array;
 
-    DepPack[] traversed;
+    // Bottom-up traversal with collection of all languages along the way
+    // It is possible to traverse several times the same package in case
+    // of diamond dependency configuration. In this case, we have to cumulate the languages
+    // from all passes
 
-    void traverse(DepPack pack, Lang[] fromDeps) @trusted // canFind is @system
+    void traverse(DepPack pack, Lang[] fromDeps) @safe
     {
-        if (traversed.canFind(pack))
-            return;
-        traversed ~= pack;
-
         if (!pack.resolvedNode)
             return;
 
-        const recipe = cacheRepo.packRecipe(pack.name, pack.resolvedNode.ver);
-        auto langs = mergeLangs(fromDeps, recipe.langs);
+        const recipe = pack is root ? rootRecipe : cacheRepo.packRecipe(pack.name,
+                pack.resolvedNode.ver);
+
+        // resolvedNodes may have been previously traversed, we add the previously found languages
+        auto all = fromDeps ~ recipe.langs ~ pack.resolvedNode.langs;
+        sort(all);
+        auto langs = uniq(all).array;
         pack.resolvedNode.langs = langs;
 
         foreach (e; pack.upEdges)
@@ -732,7 +743,7 @@ DepPack dagFromLockFileContent(string content, string filename = null) @safe
             {
                 enforce(curpack && seenver, new InvalidLockFileException(filename,
                         line, "Ill-formed lock-file"));
-                l = l[dmark.length .. $];
+                l = l[lmark.length .. $];
                 auto entries = l.split(',').map!(l => l.strip()).array;
                 langs ~= Lng(curpack, curver, strToLangs(entries));
             }
@@ -1055,14 +1066,38 @@ unittest
     assert(resolvedVersions["e"] == "1.0.0");
 }
 
+@("Test dagFetchLanguages")
+unittest
+{
+    auto cacheRepo = TestCacheRepo.withBase();
+
+    const recipe = packE.recipe("1.0.0");
+
+    auto dag = prepareDepDAG(recipe, cacheRepo);
+    checkDepDAGCompat(dag);
+    resolveDepDAG(dag, cacheRepo, Heuristics.pickHighest);
+    dagFetchLanguages(dag, recipe, cacheRepo);
+
+    auto nodes = dagCollectResolved(dag);
+
+    assert(nodes["a"].langs == [Lang.c]);
+    assert(nodes["b"].langs == [Lang.d, Lang.c]);
+    assert(nodes["c"].langs == [Lang.cpp, Lang.c]);
+    assert(nodes["d"].langs == [Lang.d, Lang.cpp, Lang.c]);
+    assert(nodes["e"].langs == [Lang.d, Lang.cpp, Lang.c]);
+}
+
 @("Test Serialization")
 unittest
 {
     auto cacheRepo = TestCacheRepo.withBase();
 
-    auto dag1 = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
+    const recipe = packE.recipe("1.0.0");
+
+    auto dag1 = prepareDepDAG(recipe, cacheRepo);
     checkDepDAGCompat(dag1);
     resolveDepDAG(dag1, cacheRepo, Heuristics.pickHighest);
+    dagFetchLanguages(dag1, recipe, cacheRepo);
 
     const lock = dagToLockFile(dag1, true);
     auto dag2 = dagFromLockFileContent(lock);
@@ -1133,7 +1168,7 @@ version (unittest)
                 TestPackVersion("1.0.0", [], true),
                 TestPackVersion("1.1.0", [], true), TestPackVersion("1.1.1"),
                 TestPackVersion("2.0.0"),
-                ]);
+                ], [Lang.c]);
 
         auto b = TestPackage("b", [
                 TestPackVersion("0.0.1", [
@@ -1142,18 +1177,18 @@ version (unittest)
                 TestPackVersion("0.0.2", [
                         Dependency("a", VersionSpec(">=1.1.0"))
                     ]),
-                ]);
+                ], [Lang.d]);
 
         auto c = TestPackage("c", [
                 TestPackVersion("1.0.0", [], true),
                 TestPackVersion("2.0.0", [
                         Dependency("a", VersionSpec(">=1.1.0"))
                     ]),
-                ]);
+                ], [Lang.cpp]);
         auto d = TestPackage("d", [
                 TestPackVersion("1.0.0", [Dependency("c", VersionSpec("1.0.0"))], true),
                 TestPackVersion("1.1.0", [Dependency("c", VersionSpec("2.0.0"))]),
-                ]);
+                ], [Lang.d]);
         return [a, b, c, d];
     }
 
@@ -1162,8 +1197,7 @@ version (unittest)
                     Dependency("b", VersionSpec(">=0.0.1")),
                     Dependency("d", VersionSpec(">=1.1.0")),
                 ])
-
-            ]);
+            ], [Lang.d]);
 
     /// A mock CacheRepo
     final class TestCacheRepo : CacheRepo
