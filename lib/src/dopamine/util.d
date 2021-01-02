@@ -46,6 +46,47 @@ out(res; (!location || res.startsWith(location)) && !exists(res))
     return res;
 }
 
+/// Check if array has duplicates
+/// Will try first as if the array is sorted
+/// and will fallback to brute force if not
+bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
+{
+    if (arr.length <= 1)
+        return false;
+
+    T last = arr[0];
+    foreach (el; arr[1 .. $])
+    {
+        if (last == el)
+            return true;
+        if (last < el)
+        {
+            last = el;
+            continue;
+        }
+        // not sorted: alternative impl
+        foreach (i, a; arr[0 .. $ - 1])
+        {
+            foreach (b; arr[i + 1 .. $])
+            {
+                if (a == b)
+                    return true;
+            }
+        }
+        break;
+    }
+    return false;
+}
+
+@("hasDuplicates")
+unittest
+{
+    assert(!hasDuplicates([1, 2, 3, 4, 5]));
+    assert(!hasDuplicates([1, 5, 2, 4, 3]));
+    assert(hasDuplicates([1, 2, 2, 3, 4, 5]));
+    assert(hasDuplicates([1, 2, 3, 4, 1]));
+}
+
 void feedDigestData(D)(ref D digest, in string s) if (isDigest!D)
 {
     digest.put(cast(const(ubyte)[]) s);
