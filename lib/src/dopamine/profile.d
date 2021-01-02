@@ -90,7 +90,7 @@ template to(S : string)
 alias DopDigest = SHA1;
 
 /// Profile host information
-class HostInfo
+struct HostInfo
 {
     private Arch _arch;
     private OS _os;
@@ -133,7 +133,7 @@ class HostInfo
 }
 
 /// Profile compiler information
-class Compiler
+struct Compiler
 {
     private Lang _lang;
     private string _name;
@@ -166,6 +166,11 @@ class Compiler
     @property string path() const
     {
         return _path;
+    }
+
+    bool opCast(T: bool)() const
+    {
+        return _name.length && _ver.length && _path.length;
     }
 
     private void collectEnvironment(ref string[string] env) const
@@ -212,20 +217,35 @@ class Compiler
 
 final class Profile
 {
+    private string _basename;
     private string _name;
     private HostInfo _hostInfo;
     private BuildType _buildType;
     private Compiler[] _compilers;
+    private Lang[] _langs;
+    private string _digestHash;
 
-    this(string name, HostInfo hostInfo, BuildType buildType, Compiler[] compilers)
+    this(string basename, HostInfo hostInfo, BuildType buildType, Compiler[] compilers)
     {
-        _name = enforce(name, "A profile must have a name");
+        _basename = enforce(basename, "A profile must have a name");
         _hostInfo = hostInfo;
         _buildType = buildType;
         _compilers = compilers.sort!((a, b) => a.lang < b.lang).array;
+        enforce(_compilers.length, "a Profile must have at least one compiler");
 
-        auto langs = _compilers.map!(c => c.lang).array;
+        _langs = _compilers.map!(c => c.lang).array;
         enforce(langs.equal(langs.uniq()), "cannot pass twice the same language to a profile");
+
+        _name = _basename ~ "-" ~ _langs.map!(l => l.toConfig()).join('.');
+
+        DopDigest digest;
+        feedDigest(digest);
+        _digestHash = toHexString!(LetterCase.lower)(digest.finish()).idup;
+    }
+
+    @property string basename() const
+    {
+        return _basename;
     }
 
     @property string name() const
@@ -243,6 +263,34 @@ final class Profile
         return _buildType;
     }
 
+    @property const(Lang)[] langs() const
+    {
+        return _langs;
+    }
+
+    @property const(Compiler)[] compilers() const
+    {
+        return _compilers;
+    }
+
+    @property string digestHash() const
+    {
+        return _digestHash;
+    }
+
+    Profile subset(const(Lang)[] langs) const
+    in(langs.length, "Cannot create a Profile subset without language")
+    {
+        Compiler[] comps;
+        foreach (l; langs)
+        {
+            auto cf = _compilers.find!(c => c.lang == l);
+            enforce(!cf.length, format(`Language %s not in Profile %s`, l.to!string, name));
+            comps ~= cf[0];
+        }
+        return new Profile(_basename, _hostInfo, _buildType, comps);
+    }
+
     void collectEnvironment(ref string[string] env) const
     {
         foreach (c; _compilers)
@@ -255,17 +303,10 @@ final class Profile
     {
         _hostInfo.feedDigest(digest);
         feedDigestData(digest, _buildType);
-        foreach (c; _compilers)
+        foreach (ref c; _compilers)
         {
             c.feedDigest(digest);
         }
-    }
-
-    string digestHash() const
-    {
-        DopDigest digest;
-        feedDigest(digest);
-        return toHexString!(LetterCase.lower)(digest.finish()).idup;
     }
 
     string describe() const
@@ -320,7 +361,7 @@ final class Profile
         app.put("[main]\n");
         if (withName)
         {
-            app.put(format("name=%s\n", _name));
+            app.put(format("basename=%s\n", _basename));
         }
         app.put(format("buildtype=%s\n", _buildType));
 
@@ -364,14 +405,14 @@ final class Profile
         auto mainSec = enforceSection("main");
         auto hostSec = enforceSection("host");
 
-        const name = mainSec.hasKey("name") ? mainSec.getKey("name") : defaultName;
         const buildType = enforceKey(mainSec, "buildtype").fromConfig!BuildType();
 
         const arch = enforceKey(hostSec, "arch").fromConfig!Arch();
         const os = enforceKey(hostSec, "os").fromConfig!OS();
-        auto hostInfo = new HostInfo(arch, os);
+        auto hostInfo = HostInfo(arch, os);
 
         Compiler[] compilers;
+        Lang[] langs;
         foreach (s; ini.sections)
         {
             enum prefix = "compiler.";
@@ -385,10 +426,18 @@ final class Profile
             const ver = enforceKey(s, "ver");
             const path = enforceKey(s, "path");
 
-            compilers ~= new Compiler(lang, cname, ver, path);
+            compilers ~= Compiler(lang, cname, ver, path);
+            langs ~= lang;
         }
 
-        auto p = new Profile(name, hostInfo, buildType, compilers);
+        const suffix = nameSuffix(langs);
+        if (defaultName.endsWith(suffix))
+        {
+            defaultName = defaultName[0 .. $ - suffix.length];
+        }
+        const basename = mainSec.hasKey("basename") ? mainSec.getKey("basename") : defaultName;
+
+        auto p = new Profile(basename, hostInfo, buildType, compilers);
 
         if (ini.hasSection("digest"))
         {
@@ -399,6 +448,38 @@ final class Profile
 
         return p;
     }
+
+}
+
+private static string nameSuffix(const(Lang)[] langs)
+in(langs.length)
+in(isStrictlyMonotonic(langs))
+in(langs.uniq().equal(langs))
+{
+    return "-" ~ langs.map!(l => l.toConfig()).join("-");
+}
+
+string profileName(string basename, const(Lang)[] langs)
+{
+    enforce(!hasDuplicates(langs));
+
+    string suffix;
+    if (!isStrictlyMonotonic(langs))
+    {
+        Lang[] ll = langs.dup;
+        sort(ll);
+        suffix = nameSuffix(ll);
+    }
+    else
+    {
+        suffix = nameSuffix(langs);
+    }
+    return basename ~ suffix;
+}
+
+string profileIniName(string basename, const(Lang)[] langs)
+{
+    return profileName(basename, langs) ~ ".ini";
 }
 
 Lang[] strToLangs(const(string)[] langs)
@@ -421,15 +502,8 @@ string strFromLang(Lang lang)
     return lang.toConfig();
 }
 
-string defaultProfileName(Lang[] langs)
-{
-    enforce(langs.length, "at least one language is needed");
-    return "default-" ~ langs.sort().map!(l => l.toConfig()).join("-");
-}
-
 Profile detectDefaultProfile(Lang[] langs)
 {
-    const name = defaultProfileName(langs);
     auto hostInfo = currentHostInfo();
 
     enforce(langs.sort().uniq().equal(langs), "cannot build a profile with twice the same language");
@@ -437,11 +511,10 @@ Profile detectDefaultProfile(Lang[] langs)
     Compiler[] compilers;
     foreach (lang; langs)
     {
-        compilers ~= enforce(detectDefaultCompiler(lang),
-                "could not find a compiler for %s language", lang.to!string);
+        compilers ~= detectDefaultCompiler(lang);
     }
 
-    return new Profile(name, hostInfo, BuildType.release, compilers);
+    return new Profile("default", hostInfo, BuildType.release, compilers);
 }
 
 private:
@@ -481,7 +554,7 @@ HostInfo currentHostInfo()
         static assert(false, "unsupported OS");
     }
 
-    return new HostInfo(arch, os);
+    return HostInfo(arch, os);
 }
 
 /// Translate enums to config file string
@@ -597,7 +670,7 @@ Compiler detectDefaultCompiler(Lang lang)
             return comp;
     }
 
-    return null;
+    throw new Exception(format("could not find a compiler for %s language", lang.to!string));
 }
 
 alias CompilerDetectF = Compiler function();
@@ -640,11 +713,11 @@ in(command.length >= 1)
 {
     command[0] = findProgram(command[0]);
     if (!command[0])
-        return null;
+        return Compiler.init;
 
     auto result = execute(command, null, Config.suppressConsole);
     if (result.status != 0)
-        return null;
+        return Compiler.init;
 
     auto verMatch = matchFirst(result.output, regex(re, "m"));
     if (verMatch.length < 2)
@@ -655,7 +728,7 @@ in(command.length >= 1)
     const ver = verMatch[1];
     const path = command[0];
 
-    return new Compiler(lang, name, ver, path);
+    return Compiler(lang, name, ver, path);
 }
 
 Compiler detectLdc()
