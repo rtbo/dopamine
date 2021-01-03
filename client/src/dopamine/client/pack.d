@@ -2,6 +2,7 @@ module dopamine.client.pack;
 
 import dopamine.client.build;
 import dopamine.client.deps;
+import dopamine.client.profile;
 import dopamine.client.source;
 import dopamine.client.util;
 
@@ -17,6 +18,16 @@ import std.getopt;
 import std.file;
 import std.format;
 import std.stdio;
+
+string enforceArchiveReady(PackageDir dir, const(Recipe) recipe, Profile profile)
+{
+    const archiveFile =checkArchiveReady(dir, recipe, profile);
+    enforce(archiveFile,
+            new FormatLogException("%s: archive file %s not ready. Try to run `%s`.",
+                error("Error"), info(dir.archiveFile(profile, recipe)), info("dop pack")));
+    logInfo("%s: %s - %s", info("Archive"), success("OK"), archiveFile);
+    return archiveFile;
+}
 
 int packageMain(string[] args)
 {
@@ -35,39 +46,25 @@ int packageMain(string[] args)
 
     const recipe = parseRecipe(packageDir);
 
-    Profile profile;
+    auto deps = enforceDepsLocked(packageDir, recipe);
 
-    if (profileName)
+    auto profile = enforceProfileReady(packageDir, recipe, deps, profileName);
+
+    enforceBuildReady(packageDir, recipe, profile);
+
+    if (const archiveFile = checkArchiveReady(packageDir, recipe, profile))
     {
-        const filename = userProfileFile(profileName);
-        enforce(exists(filename), format("Profile %s does not exist", profileName));
-        profile = Profile.loadFromFile(filename);
+        logInfo("archive %s already created\nNothing to do.", archiveFile);
     }
     else
     {
-        const filename = packageDir.profileFile();
-        enforce(exists(filename), "Profile not selected");
-        profile = Profile.loadFromFile(filename);
+        const file = packageDir.archiveFile(profile, recipe);
+        const dirs = packageDir.profileDirs(profile);
+
+        ArchiveBackend.get.create(dirs.install, file);
+
+        logInfo("Created archive %s", file);
     }
 
-    assert(profile);
-
-    auto lockFileState = enforcedLockFileState(packageDir, recipe);
-    auto sourceState = enforcedSourceState(packageDir, recipe);
-
-    auto profileState = new UseProfileState(packageDir, recipe, lockFileState, profile);
-
-    auto buildState = enforcedBuildState(packageDir, recipe, profileState, sourceState);
-
-    auto archiveState = new CreateArchiveState(packageDir, recipe, profileState, buildState);
-
-    if (archiveState.reached)
-    {
-        logInfo("archive %s already created\nNothing to do.", archiveState.file);
-    }
-    else {
-        archiveState.reach();
-        logInfo("Created archive %s", archiveState.file);
-    }
     return 0;
 }

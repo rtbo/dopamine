@@ -477,6 +477,11 @@ string profileName(string basename, const(Lang)[] langs)
     return basename ~ suffix;
 }
 
+string profileDefaultName(const(Lang)[] langs)
+{
+    return profileName("default", langs);
+}
+
 string profileIniName(string basename, const(Lang)[] langs)
 {
     return profileName(basename, langs) ~ ".ini";

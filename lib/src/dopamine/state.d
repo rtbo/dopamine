@@ -5,567 +5,160 @@ module dopamine.state;
 
 import dopamine.archive;
 import dopamine.build;
+import dopamine.depcache;
 import dopamine.depdag;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.source;
+import dopamine.util;
 
 import std.exception;
 import std.file;
 import std.typecons;
 
-abstract class PackageState
+/// Check if a lock-file exists and is up-to-date for package in [dir]
+/// Returns: true if lock-file exists and is up-to-date, false otherwise.
+bool checkLockFile(PackageDir dir)
 {
-    import std.algorithm : all;
+    const lf = dir.lockFile;
 
-    private string _name;
-    private PackageDir _packageDir;
-    private const(Recipe) _recipe;
-    private PackageState[] _prereq;
-    private bool _logged;
+    if (!exists(lf))
+        return false;
 
-    this(string name, PackageDir packageDir, const(Recipe) recipe,
-            PackageState[] prerequisites = null)
-    in(packageDir.hasDopamineFile())
-    {
-        _name = name;
-        _packageDir = packageDir;
-        _recipe = recipe;
-        _prereq = prerequisites;
-    }
-
-    final @property string name() const
-    {
-        return _name;
-    }
-
-    final @property PackageDir packageDir() const
-    {
-        return _packageDir;
-    }
-
-    final @property const(Recipe) recipe() const
-    {
-        return _recipe;
-    }
-
-    final @property bool reached()
-    {
-        if (!prerequisites.all!(p => p.reached))
-            return false;
-        return checkReached();
-    }
-
-    final void reach()
-    out(; prerequisites.all!(p => p.reached) && reached)
-    {
-        foreach (pr; prerequisites)
-        {
-            pr.reach();
-        }
-        if (!reached)
-        {
-            try
-            {
-                doReach();
-            }
-            catch (StateNotReachedException err)
-            {
-                if (!_logged)
-                {
-                    logNotReached(err.msg);
-                    _logged = true;
-                }
-                throw err;
-            }
-        }
-        if (!_logged)
-        {
-            logReached();
-            _logged = true;
-        }
-    }
-
-    final @property PackageState[] prerequisites()
-    {
-        return _prereq;
-    }
-
-    protected void logReached()
-    in(reached)
-    {
-        logInfo("%s: %s", info(name), success("OK"));
-    }
-
-    protected void logNotReached(string msg)
-    in(!reached)
-    {
-        logError("%s: %s - %s", info(name), error("NOK"), msg);
-    }
-
-    protected abstract bool checkReached()
-    in(prerequisites.all!(p => p.reached));
-
-    protected abstract void doReach()
-    in(!reached)
-    out(; reached);
+    return timeLastModified(dir.dopamineFile) < timeLastModified(lf);
 }
 
-class StateNotReachedException : Exception
+/// Check if a lock-file exists and is up-to-date for package in [dir]
+/// Returns: the DAG loaded from the lock-file, or null
+DepPack checkLoadLockFile(PackageDir dir)
 {
-    this(string msg)
-    {
-        super(msg);
-    }
+    const lf = dir.lockFile;
+
+    if (!exists(lf))
+        return null;
+
+    if (timeLastModified(dir.dopamineFile) >= timeLastModified(lf))
+        return null;
+
+    return dagFromLockFile(lf);
 }
 
-mixin template EnforcedState(E = StateNotReachedException)
+/// Check if a profile file exists and is up-to-date for package in [dir]
+/// Returns: the Profile loaded from the package, or null
+Profile checkProfileFile(PackageDir dir, const(Recipe) recipe)
 {
-    private string _enforceMsg;
+    const pf = dir.profileFile();
 
-    @property string enforceMsg() const
-    {
-        return _enforceMsg;
-    }
+    if (!exists(pf))
+        return null;
 
-    protected override void doReach()
-    {
-        throw new E(_enforceMsg);
-    }
+    const tlm = timeLastModified(pf);
+
+    if (recipe.dependencies && (!exists(dir.lockFile) || timeLastModified(dir.lockFile) >= tlm))
+        return null;
+
+    if (timeLastModified(dir.dopamineFile) >= tlm)
+        return null;
+
+    return Profile.loadFromFile(pf);
 }
 
-abstract class LockFileState : PackageState
+/// Check if a profile named [name] exists, and load it
+Profile checkProfileName(PackageDir dir, DepPack depDag,
+        string name = "default", bool saveToDir = false, string* pname=null)
+in(dagIsResolved(depDag))
 {
-    private DepPack _dagRoot;
-
-    this(PackageDir packageDir, const(Recipe) recipe)
+    auto pf = userProfileFile(name);
+    if (!exists(pf))
     {
-        super("Lock-File", packageDir, recipe);
+        const langs = depDag.resolvedNode.langs;
+        name = profileName(name, langs);
+        pf = userProfileFile(name);
+        if (!exists(pf))
+            return null;
     }
 
-    @property DepPack dagRoot()
+    auto profile = Profile.loadFromFile(pf);
+    if (saveToDir)
     {
-        return _dagRoot;
+        profile.saveToFile(dir.profileFile(), true, true);
     }
-
-    protected @property void dagRoot(DepPack root)
-    {
-        _dagRoot = dagRoot;
-    }
-
-    protected override bool checkReached()
-    {
-        if (_dagRoot !is null)
-            return true;
-
-        if (!exists(packageDir.lockFile))
-            return false;
-
-        if (timeLastModified(packageDir.dopamineFile) > timeLastModified(packageDir.lockFile))
-            return false;
-
-        _dagRoot = dagFromLockFile(packageDir.lockFile);
-        return true;
-    }
+    if (pname)
+        *pname = name;
+    return profile;
 }
 
-class EnforcedLockFileState : LockFileState
+/// Check if the source code is ready and up-to-date for package in [dir]
+/// Returns: the path to the source directory, or null
+string checkSourceReady(PackageDir dir, const(Recipe) recipe)
 {
-    mixin EnforcedState!();
-
-    this(PackageDir packageDir, const(Recipe) recipe, string msg = "Lock-File is not present or not up-to-date!")
+    if (!recipe.outOfTree)
     {
-        super(packageDir, recipe);
-        _enforceMsg = msg;
+        return dir.dir;
     }
+
+    auto flagFile = dir.sourceFlag();
+
+    if (!flagFile.exists())
+        return null;
+
+    const sourceDir = flagFile.read();
+    if (!exists(sourceDir) || !isDir(sourceDir))
+        return null;
+
+    if (timeLastModified(dir.dopamineFile()) >= flagFile.timeLastModified)
+        return null;
+
+    return sourceDir;
 }
 
-abstract class ProfileState : PackageState
+private bool checkFlagFile(PackageDir dir, FlagFile flag, FlagFile previous)
 {
-    private Profile _profile;
+    if (!flag.exists() || !previous.exists())
+        return false;
 
-    this(PackageDir packageDir, const(Recipe) recipe, LockFileState lockFile)
-    {
-        super("Profile", packageDir, recipe, [lockFile]);
-    }
+    const tlm = flag.timeLastModified;
 
-    @property const(Profile) profile()
-    {
-        return _profile;
-    }
-
-    protected override bool checkReached()
-    {
-        return _profile !is null;
-    }
-
-    protected override void logReached()
-    {
-        logInfo("%s: %s - %s", info(name), success("OK"), profile.name);
-    }
+    return tlm > previous.timeLastModified && tlm > timeLastModified(dir.dopamineFile);
 }
 
-class UseProfileState : ProfileState
+/// Check if the build was correctly configured for the given [ProfileDirs]
+bool checkConfigReady(PackageDir dir, ProfileDirs pdirs)
 {
-    this(PackageDir packageDir, const(Recipe) recipe, LockFileState lockFile, Profile profile)
-    {
-        super(packageDir, recipe, lockFile);
-        _profile = profile;
-    }
-
-    protected override void doReach()
-    {
-        assert(false);
-    }
+    return checkFlagFile(dir, pdirs.configFlag, dir.sourceFlag);
 }
 
-class UsePackageProfileState : ProfileState
+/// Check if the build was successfully completed for the given [ProfileDirs]
+bool checkBuildReady(PackageDir dir, ProfileDirs pdirs)
 {
-    this(PackageDir packageDir, const(Recipe) recipe, LockFileState lockFile)
-    {
-        super(packageDir, recipe, lockFile);
-    }
-
-    protected override void doReach()
-    {
-        const path = packageDir.profileFile();
-        enforce(exists(path), `Error: profile not set for "%s"`, packageDir.dir);
-        _profile = Profile.loadFromFile(path);
-    }
+    return checkFlagFile(dir, pdirs.buildFlag, pdirs.configFlag);
 }
 
-abstract class SourceState : PackageState
+/// Check if the build was installed for the given [ProfileDirs]
+bool checkInstallReady(PackageDir dir, ProfileDirs pdirs)
 {
-    string _sourceDir;
-
-    this(PackageDir packageDir, const(Recipe) recipe)
-    {
-        super("Source", packageDir, recipe);
-    }
-
-    @property string sourceDir()
-    in(reached)
-    {
-        return _sourceDir;
-    }
-
-    protected override bool checkReached()
-    {
-        if (_sourceDir.length)
-            return true;
-
-        if (!recipe.outOfTree)
-        {
-            _sourceDir = packageDir.dir;
-            return true;
-        }
-
-        auto flagFile = packageDir.sourceFlag();
-        if (!flagFile.exists())
-            return false;
-
-        const sourceDir = flagFile.read();
-        if (!exists(sourceDir) || !isDir(sourceDir))
-            return false;
-
-        if (timeLastModified(packageDir.dopamineFile()) >= flagFile.timeLastModified)
-            return false;
-
-        _sourceDir = sourceDir;
-        return true;
-    }
-
-    protected override void logReached()
-    {
-        logInfo("%s: %s - %s", info(name), success("OK"), sourceDir);
-    }
+    return checkFlagFile(dir, pdirs.installFlag, pdirs.buildFlag);
 }
 
-class EnforcedSourceState : SourceState
+string checkArchiveReady(PackageDir dir, const(Recipe) recipe, Profile profile)
 {
-    mixin EnforcedState!();
+    const file = dir.archiveFile(profile, recipe);
+    if (!exists(file))
+        return null;
 
-    this(PackageDir packageDir, const(Recipe) recipe, string msg = "Error: Source is not ready!")
-    {
-        super(packageDir, recipe);
-        _enforceMsg = msg;
-    }
-}
+    const dirs = dir.profileDirs(profile);
 
-class FetchSourceState : SourceState
-{
-    this(PackageDir packageDir, const(Recipe) recipe)
-    {
-        super(packageDir, recipe);
-    }
+    auto previous = dirs.installFlag;
 
-    override protected void doReach()
-    in(recipe.outOfTree)
-    {
-        _sourceDir = recipe.source.fetch(packageDir);
-    }
-}
+    if (!previous.exists())
+        return null;
 
-abstract class ConfigState : PackageState
-{
-    private ProfileState _profile;
-    private SourceState _source;
+    const tlm = timeLastModified(file);
 
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, SourceState source)
-    {
-        super("Configuration", packageDir, recipe, [profile, source]);
-        _profile = profile;
-        _source = source;
-    }
+    if (previous.timeLastModified >= tlm || timeLastModified(dir.dopamineFile()) >= tlm)
+        return null;
 
-    @property const(Profile) profile()
-    in(_profile.reached)
-    {
-        return _profile.profile;
-    }
-
-    @property string sourceDir()
-    in(_source.reached)
-    {
-        return _source._sourceDir;
-    }
-
-    protected override bool checkReached()
-    {
-        const dirs = packageDir.profileDirs(profile);
-        auto flagFile = dirs.configFlag();
-
-        if (!flagFile.exists())
-            return false;
-
-        return flagFile.timeLastModified > packageDir.sourceFlag().timeLastModified
-            && flagFile.timeLastModified > timeLastModified(packageDir.dopamineFile());
-    }
-}
-
-class EnforcedConfigState : ConfigState
-{
-    mixin EnforcedState!();
-
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile,
-            SourceState source, string msg = "Error: Build is not configured!")
-    {
-        super(packageDir, recipe, profile, source);
-        _enforceMsg = msg;
-    }
-}
-
-class DoConfigState : ConfigState
-{
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, SourceState source)
-    {
-        super(packageDir, recipe, profile, source);
-    }
-
-    protected override void doReach()
-    {
-        recipe.build.configure(sourceDir, packageDir.profileDirs(profile), profile);
-    }
-}
-
-abstract class BuildState : PackageState
-{
-    private ProfileState _profile;
-
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, ConfigState config)
-    {
-        super("Build", packageDir, recipe, [profile, config]);
-        _profile = profile;
-    }
-
-    @property const(Profile) profile()
-    in(_profile.reached)
-    {
-        return _profile.profile;
-    }
-
-    protected override bool checkReached()
-    {
-        const dirs = packageDir.profileDirs(profile);
-        auto flagFile = dirs.buildFlag();
-
-        if (!flagFile.exists())
-            return false;
-
-        return flagFile.timeLastModified > dirs.configFlag().timeLastModified
-            && flagFile.timeLastModified > timeLastModified(packageDir.dopamineFile());
-    }
-
-    protected override void logReached()
-    {
-        const dirs = packageDir.profileDirs(profile);
-        logInfo("%s: %s - %s", info(name), success("OK"), dirs.build);
-    }
-}
-
-class EnforcedBuildState : BuildState
-{
-    mixin EnforcedState!();
-
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile,
-            ConfigState congig, string msg = "Error: Build is not ready!")
-    {
-        super(packageDir, recipe, profile, congig);
-        _enforceMsg = msg;
-    }
-}
-
-class DoBuildState : BuildState
-{
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, ConfigState config)
-    {
-        super(packageDir, recipe, profile, config);
-    }
-
-    protected override void doReach()
-    {
-        recipe.build.build(packageDir.profileDirs(profile));
-    }
-}
-
-abstract class InstallState : PackageState
-{
-    private ProfileState _profile;
-
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, BuildState build)
-    {
-        super("Install", packageDir, recipe, [profile, build]);
-        _profile = profile;
-    }
-
-    @property const(Profile) profile()
-    in(_profile.reached)
-    {
-        return _profile.profile;
-    }
-
-    protected override bool checkReached()
-    {
-        const dirs = packageDir.profileDirs(profile);
-        auto flagFile = dirs.installFlag();
-
-        if (!flagFile.exists())
-            return false;
-
-        return flagFile.timeLastModified > dirs.buildFlag().timeLastModified
-            && flagFile.timeLastModified > timeLastModified(packageDir.dopamineFile());
-    }
-
-    protected override void logReached()
-    {
-        const dirs = packageDir.profileDirs(profile);
-        logInfo("%s: %s - %s", info(name), success("OK"), dirs.install);
-    }
-}
-
-class EnforcedInstallState : InstallState
-{
-    mixin EnforcedState!();
-
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile,
-            BuildState build, string msg = "Error: Build is not installed!")
-    {
-        super(packageDir, recipe, profile, build);
-        _enforceMsg = msg;
-    }
-}
-
-class DoInstallState : InstallState
-{
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, BuildState state)
-    {
-        super(packageDir, recipe, profile, state);
-    }
-
-    protected override void doReach()
-    {
-        recipe.build.install(packageDir.profileDirs(profile));
-    }
-}
-
-abstract class ArchiveState : PackageState
-{
-    private ProfileState _profile;
-    private string _file;
-
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, InstallState install)
-    {
-        super("Archive", packageDir, recipe, [profile, install]);
-        _profile = profile;
-    }
-
-    @property const(Profile) profile()
-    in(_profile.reached)
-    {
-        return _profile.profile;
-    }
-
-    @property string file()
-    in(reached)
-    {
-        return _file;
-    }
-
-    protected override bool checkReached()
-    {
-        if (_file)
-            return true;
-
-        const file = packageDir.archiveFile(profile, recipe);
-        if (!exists(file))
-            return false;
-
-        const dirs = packageDir.profileDirs(profile);
-
-        const res = timeLastModified(file) > dirs.installFlag().timeLastModified
-            && timeLastModified(file) > timeLastModified(packageDir.dopamineFile());
-
-        if (res)
-            _file = file;
-
-        return res;
-    }
-
-    protected override void logReached()
-    {
-        const file = packageDir.archiveFile(profile, recipe);
-        logInfo("%s: %s - %s", info(name), success("OK"), file);
-    }
-}
-
-class EnforcedArchiveState : ArchiveState
-{
-    mixin EnforcedState!();
-
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile,
-            InstallState install, string msg = "Error: Archive not created")
-    {
-        super(packageDir, recipe, profile, install);
-        _enforceMsg = msg;
-    }
-}
-
-class CreateArchiveState : ArchiveState
-{
-    this(PackageDir packageDir, const(Recipe) recipe, ProfileState profile, InstallState install)
-    {
-        super(packageDir, recipe, profile, install);
-    }
-
-    protected override void doReach()
-    {
-        const file = packageDir.archiveFile(profile, recipe);
-        const dirs = packageDir.profileDirs(profile);
-
-        ArchiveBackend.get.create(dirs.install, file);
-
-        _file = file;
-    }
+    return file;
 }

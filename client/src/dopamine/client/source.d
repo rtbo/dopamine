@@ -2,41 +2,49 @@ module dopamine.client.source;
 
 import dopamine.client.util;
 
+import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
 import dopamine.source;
 import dopamine.state;
 
-import std.file;
-import std.stdio;
-
-SourceState enforcedSourceState(PackageDir dir, const(Recipe) recipe)
+string enforceSourceDirReady(PackageDir dir, const(Recipe) recipe)
 {
-    return new EnforcedSourceState(dir, recipe,
-            "Source code not available or not up-to-date. Try to run `dop source`");
+    import std.exception : enforce;
+
+    return enforce(checkSourceReady(dir, recipe), new FormatLogException(
+            "%s: Source directory for %s is not ready or not up-to-date. Try to run `%s`.",
+            error("Error"), info(recipe.name), info("dop source")));
+}
+
+string prepareSourceDir(PackageDir dir, const(Recipe) recipe)
+{
+    return recipe.source.fetch(dir);
 }
 
 int sourceMain(string[] args)
 {
-    const packageDir = PackageDir.enforced(".");
+    const dir = PackageDir.enforced(".");
 
-    const recipe = parseRecipe(packageDir);
+    const recipe = parseRecipe(dir);
 
     if (!recipe.outOfTree)
     {
-        writeln("source integrated to package: nothing to do");
+        logInfo("Source integrated to package: nothing to do");
         return 0;
     }
 
-    auto state = new FetchSourceState(packageDir, recipe);
+    auto sourceDir = checkSourceReady(dir, recipe);
 
-    if (state.reached)
+    if (sourceDir)
     {
-        writefln("Source was previously extracted to '%s'\nNothing to do.", state.sourceDir);
+        logInfo("Source was previously extracted to '%s'\nNothing to do.", sourceDir);
     }
     else
     {
-        state.reach();
+        sourceDir = prepareSourceDir(dir, recipe);
+        logInfo("Source extracted to '%s'", info(sourceDir));
+
     }
 
     return 0;

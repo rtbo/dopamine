@@ -21,9 +21,8 @@ import std.stdio;
 
 int main(string[] args)
 {
-    import dopamine.log : error, info, logError, logInfo;
+    import dopamine.log : error, info, logError, logInfo, FormatLogException;
     import dopamine.recipe : initLua;
-    import dopamine.state : StateNotReachedException;
 
     initLua();
 
@@ -89,14 +88,13 @@ int main(string[] args)
     {
         return (*handler)(args);
     }
-    catch (StateNotReachedException)
+    catch (FormatLogException ex)
     {
-        // Error already logged out.
-        return 1;
+        ex.log();
     }
     catch (Exception ex)
     {
         logError("%s: %s", error("Error"), ex.msg);
-        return 1;
     }
+    return 1;
 }

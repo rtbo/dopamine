@@ -20,16 +20,22 @@ import std.format;
 import std.getopt;
 import std.stdio;
 
-/// PackageState that combines enforced configure, build and install steps
-InstallState enforcedBuildState(PackageDir dir, const(Recipe) recipe,
-        ProfileState profileState, SourceState sourceState)
+/// Enforces that a build is ready and installed.
+string enforceBuildReady(PackageDir dir, const(Recipe) recipe, Profile profile)
 {
-    auto configState = new EnforcedConfigState(dir, recipe, profileState, sourceState,
-            format("Package not configured for profile '%s'. Try to run `dop build`", profileState.profile.name));
-    auto buildState = new EnforcedBuildState(dir, recipe, profileState, configState,
-            format("Package not built for profile '%s'. Try to run `dop build`", profileState.profile.name));
-    return new EnforcedInstallState(dir, recipe, profileState, buildState,
-            format("Package not installed for profile '%s'. Try to run `dop build`", profileState.profile.name));
+    const pdirs = dir.profileDirs(profile);
+
+    enforce(checkConfigReady(dir, pdirs),
+            new FormatLogException("%s: Package %s not configured for profile '%s'. Try to run `%s`",
+                error("Error"), info(recipe.name), info(profile.name), info("dop build")));
+    enforce(checkBuildReady(dir, pdirs),
+            new FormatLogException("%s: Package %s not built for profile '%s'. Try to run `%s`",
+                error("Error"), info(recipe.name), info(profile.name), info("dop build")));
+    enforce(checkInstallReady(dir, pdirs),
+            new FormatLogException("%s: Package %s not installed for profile '%s'. Try to run `%s`",
+                error("Error"), info(recipe.name), info(profile.name), info("dop build")));
+
+    return pdirs.install;
 }
 
 int buildMain(string[] args)
@@ -49,9 +55,11 @@ int buildMain(string[] args)
 
     const recipe = parseRecipe(packageDir);
 
-    Lang[] langs = recipe.langs.dup;
+    const deps = enforceDepsLocked(packageDir, recipe);
 
-    const defaultName = defaultProfileName(langs);
+    Lang[] langs = deps.resolvedNode.langs.dup;
+
+    const defaultName = profileDefaultName(langs);
     const defaultFile = userProfileFile(defaultName);
 
     if (!exists(defaultFile))
@@ -89,24 +97,23 @@ int buildMain(string[] args)
 
     assert(profile, "profile not set");
 
-    auto lockFileState = enforcedLockFileState(packageDir, recipe);
-    auto sourceState = enforcedSourceState(packageDir, recipe);
-
-    auto profileState = new UseProfileState(packageDir, recipe, lockFileState, profile);
-    auto configState = new DoConfigState(packageDir, recipe, profileState, sourceState);
-    auto buildState = new DoBuildState(packageDir, recipe, profileState, configState);
-    auto installState = new DoInstallState(packageDir, recipe, profileState, buildState);
+    auto sourceDir = enforceSourceDirReady(packageDir, recipe);
 
     const dirs = packageDir.profileDirs(profile);
 
-    if (installState.reached)
+    if (!checkConfigReady(packageDir, dirs))
+        recipe.build.configure(sourceDir, dirs, profile);
+    if (!checkBuildReady(packageDir, dirs))
+        recipe.build.build(dirs);
+    if (!checkInstallReady(packageDir, dirs))
     {
-        logInfo("Target already installed in %s\nNothing to do.", info(dirs.install));
+        recipe.build.install(dirs);
+        logInfo("Installed target in %s", info(dirs.install));
     }
     else
     {
-        installState.reach();
-        logInfo("Installed target in %s", info(dirs.install));
+        // can only be reached if package was configured AND built AND installed
+        logInfo("Target already installed in %s\nNothing to do.", info(dirs.install));
     }
 
     return 0;

@@ -1,11 +1,14 @@
 module dopamine.client.profile;
 
 import dopamine.client.util;
+import dopamine.client.deps;
 
+import dopamine.depdag;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.state;
 
 import std.exception;
 import std.getopt;
@@ -16,7 +19,11 @@ import std.stdio;
 
 Profile detectAndWriteDefault(Lang[] langs)
 {
-    logInfo("Detecting default profile");
+    import std.algorithm : map;
+    import std.array : join;
+    import std.conv : to;
+
+    logInfo("Detecting default profile for %s", info(langs.map!(l => l.to!string).join(", ")));
 
     auto profile = detectDefaultProfile(langs);
     logInfo(profile.describe());
@@ -27,6 +34,40 @@ Profile detectAndWriteDefault(Lang[] langs)
     logInfo("Default profile saved to %s", info(path));
 
     return profile;
+}
+
+/// Enforce the loading of a profile.
+/// If name is null, will load the profile from the profile file in .dop/ directory
+/// If name is not null (can be e.g. "default"), will load the profile from the user profile directory
+Profile enforceProfileReady(PackageDir dir, const(Recipe) recipe,
+        DepPack deps, string name = null)
+{
+    Profile profile;
+    if (!name)
+    {
+        profile = enforce(checkProfileFile(dir, recipe),
+                new FormatLogException("%s: %s has no defined profile. Try to run `%s`.",
+                    error("Error"), info(recipe.name), info("dop profile")));
+        if (profile.name)
+        {
+            logInfo("%s: %s - %s (%s)", info("Profile"), success("OK"),
+                    info(profile.name), dir.profileFile());
+        }
+        else
+        {
+            logInfo("%s: %s - %s", info("Profile"), success("OK"), dir.profileFile());
+        }
+    }
+    else
+    {
+        string pname;
+        profile = enforce(checkProfileName(dir, deps, name, false, &pname),
+                new FormatLogException("%s: %s has no defined profile. Try to run `%s`.",
+                    error("Error"), info(recipe.name), info("dop profile")));
+        logInfo("%s: %s - %s", info("Profile"), success("OK"), info(pname));
+    }
+    return profile;
+
 }
 
 int profileMain(string[] args)
@@ -45,7 +86,9 @@ int profileMain(string[] args)
 
     const recipe = parseRecipe(packageDir);
 
-    auto langs = recipe.langs.toLangs();
+    const deps = enforceDepsLocked(packageDir, recipe);
+
+    auto langs = deps.resolvedNode.langs.dup;
 
     if (detectDef)
     {
@@ -53,7 +96,7 @@ int profileMain(string[] args)
         detectAndWriteDefault(langs);
     }
 
-    const defaultName = defaultProfileName(langs);
+    const defaultName = profileDefaultName(langs);
 
     const clProfileName = args.length > 1 ? args[1] : null;
 
