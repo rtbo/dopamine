@@ -152,6 +152,8 @@ class FormatLogException : Exception
             }
         }
         enforce(valI == values.length, "Orphean log format value");
+        instance.put("\n");
+        instance.flush();
     }
 }
 
@@ -169,7 +171,7 @@ unittest
             ColorizedText(Color.green, "success"), ColorizedText(Color.red, "error"), 42);
 
     enum expectedMsg = "Test success and error. fourty-two = 42";
-    enum expectedLog = "Test [green]success[reset] and [red]error[reset]. fourty-two = 42";
+    enum expectedLog = "Test [green]success[reset] and [red]error[reset]. fourty-two = 42\n[flush]";
 
     assert(e.message == expectedMsg);
     assert(output.output.data == "");
@@ -322,6 +324,7 @@ class TerminalLogOutput : LogOutput
 
 version (unittest)
 {
+    /// Testing output mock
     class TestLogOutput : LogOutput
     {
         import std.array : Appender;
@@ -348,6 +351,7 @@ version (unittest)
 
         override void flush()
         {
+            output.put("[flush]");
         }
     }
 }
