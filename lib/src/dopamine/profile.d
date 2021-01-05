@@ -285,7 +285,7 @@ final class Profile
         foreach (l; langs)
         {
             auto cf = _compilers.find!(c => c.lang == l);
-            enforce(!cf.length, format(`Language %s not in Profile %s`, l.to!string, name));
+            enforce(cf.length, format(`Language %s not in Profile %s`, l.to!string, name));
             comps ~= cf[0];
         }
         return new Profile(_basename, _hostInfo, _buildType, comps);
