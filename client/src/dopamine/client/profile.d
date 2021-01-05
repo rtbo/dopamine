@@ -1,7 +1,7 @@
 module dopamine.client.profile;
 
 import dopamine.client.util;
-import dopamine.client.deps;
+import dopamine.client.deps_lock;
 
 import dopamine.depdag;
 import dopamine.log;

@@ -1,4 +1,4 @@
-module dopamine.client.deps;
+module dopamine.client.deps_lock;
 
 import dopamine.client.util;
 
@@ -54,7 +54,7 @@ DepPack lockDeps(PackageDir dir, const(Recipe) recipe)
     return dag;
 }
 
-int depsMain(string[])
+int depsLockMain(string[])
 {
     const dir = PackageDir.enforced(".");
     const recipe = parseRecipe(dir);

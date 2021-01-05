@@ -2,6 +2,7 @@ module dopamine.paths;
 
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.semver;
 import dopamine.util;
 
 import std.file;
@@ -33,6 +34,11 @@ string userPackagesDir()
     return buildPath(userDopDir(), "packages");
 }
 
+string userPackageDir(string packname, const(Semver) ver)
+{
+    return buildPath(userDopDir(), "packages", format("%s-%s", packname, ver));
+}
+
 string userProfileDir()
 {
     return buildPath(userDopDir(), "profiles");
@@ -46,6 +52,12 @@ string userProfileFile(string name)
 string userProfileFile(Profile profile)
 {
     return userProfileFile(profile.name);
+}
+
+string userProfileDepsInstall(Profile profile)
+{
+    return buildPath(userDopDir, "deps", format("%s-%s",
+            profile.digestHash[0 .. 10], profile.name));
 }
 
 string userLoginFile()

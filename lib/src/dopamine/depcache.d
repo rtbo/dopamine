@@ -166,7 +166,7 @@ final class DependencyCache : CacheRepo
         _recipeCache[id] = r;
         return r;
     }
-
+    
     private string depId(string packname, const(Semver) ver) @safe
     {
         return packname ~ "-" ~ ver.toString();

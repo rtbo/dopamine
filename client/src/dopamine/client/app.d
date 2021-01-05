@@ -1,8 +1,8 @@
 module dopamine.client.app;
 
 import dopamine.client.build;
-import dopamine.client.deps;
-import dopamine.client.install;
+import dopamine.client.deps_install;
+import dopamine.client.deps_lock;
 import dopamine.client.login;
 import dopamine.client.pack;
 import dopamine.client.profile;
@@ -27,7 +27,7 @@ int main(string[] args)
     initLua();
 
     const commandHandlers = [
-        "build" : &buildMain, "deps" : &depsMain, "install" : &installMain,
+        "build" : &buildMain, "deps-lock" : &depsLockMain, "deps-install" : &depsInstallMain,
         "login" : &loginMain, "package" : &packageMain, "profile" : &profileMain,
         "publish" : &publishMain, "source" : &sourceMain, "upload" : &uploadMain,
     ];

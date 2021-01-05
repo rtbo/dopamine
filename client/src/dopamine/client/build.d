@@ -1,6 +1,6 @@
 module dopamine.client.build;
 
-import dopamine.client.deps;
+import dopamine.client.deps_lock;
 import dopamine.client.source;
 import dopamine.client.util;
 
