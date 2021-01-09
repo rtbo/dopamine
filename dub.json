@@ -4,5 +4,5 @@
   "description": "The Dopamine package manager",
   "targetType": "none",
   "license": "MIT",
-  "subPackages": ["client", "lib"]
+  "subPackages": ["lib"]
 }
