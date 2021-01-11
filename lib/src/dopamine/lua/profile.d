@@ -20,7 +20,7 @@ void luaPushProfile(lua_State* L, Profile profile)
     const hostInd = lua_gettop(L);
     luaSetTable(L, hostInd, "os", profile.hostInfo.os.toConfig);
     luaSetTable(L, hostInd, "arch", profile.hostInfo.arch.toConfig);
-    lua_settable(L, ind);
+    lua_settable(L, ind); // host table
 
     luaSetTable(L, ind, "build_type", profile.buildType.toConfig);
 
@@ -40,7 +40,7 @@ void luaPushProfile(lua_State* L, Profile profile)
 
         lua_settable(L, compsInd);
     }
-    lua_settable(L, ind);
+    lua_settable(L, ind); // compilers table
 
     luaSetTable(L, ind, "digest_hash", profile.digestHash);
 }
@@ -68,7 +68,7 @@ Profile luaReadProfile(lua_State* L, int ind)
     enforce(lua_type(L, -1) == LUA_TTABLE, "Cannot find compilers profile table");
     Compiler[] compilers;
     lua_pushnil(L);
-    while(lua_next(L, compInd) != 0)
+    while (lua_next(L, compInd) != 0)
     {
         enforce(lua_type(L, -2) == LUA_TSTRING, "Compilers table key must be language name");
 
@@ -89,7 +89,28 @@ Profile luaReadProfile(lua_State* L, int ind)
 
     auto profile = new Profile(basename, host, buildType, compilers);
 
-    enforce(hash == profile.digestHash, "Error: hash mismatch between profile rebuilt from Lua and original");
+    enforce(hash == profile.digestHash,
+            "Error: hash mismatch between profile rebuilt from Lua and original");
 
     return profile;
+}
+
+version (unittest)
+{
+    import test.profile;
+}
+
+@("Profile can pass to lua and come back identical")
+unittest
+{
+    auto L = luaL_newstate();
+    scope (exit)
+        lua_close(L);
+
+    auto profile = ensureDefaultProfile();
+    luaPushProfile(L, profile);
+    auto copy = luaReadProfile(L, -1);
+
+    assert(profile.name == copy.name);
+    assert(profile.digestHash == copy.digestHash);
 }
