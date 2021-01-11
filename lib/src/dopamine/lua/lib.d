@@ -68,7 +68,7 @@ int luaDopNativeModule(lua_State* L) nothrow
     const boolconsts = ["posix" : posix];
     const funcs = [
         "join_paths" : &luaJoinPaths, "cwd" : &luaCwd, "chdir" : &luaChangeDir,
-        "run_cmd" : &luaRunCmd,
+        "run_cmd" : &luaRunCmd, "profile_environment" : &luaProfileEnvironment,
     ];
 
     lua_createtable(L, 0, cast(int)(strconsts.length + boolconsts.length + funcs.length));
@@ -259,4 +259,25 @@ int luaRunCmd(lua_State* L) nothrow
     {
         return luaL_error(L, ex.msg.toStringz);
     }
+}
+
+int luaProfileEnvironment(lua_State* L) nothrow
+{
+    import dopamine.lua.profile : luaReadProfile;
+
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    return L.catchAll!({
+        auto profile = luaReadProfile(L, 1);
+
+        string[string] env;
+        profile.collectEnvironment(env);
+
+        lua_createtable(L, 0, cast(int)env.length);
+        foreach (k, v; env)
+        {
+            luaSetTable(L, -1, k, v);
+        }
+        return 1;
+    });
 }

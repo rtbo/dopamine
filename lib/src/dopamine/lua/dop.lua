@@ -135,7 +135,7 @@ function Meson:setup(params)
     end
 
     cmd['workdir'] = self.src_dir
-    -- cmd['env'] = dop.profile_environment(self.profile)
+    cmd['env'] = dop.profile_environment(self.profile)
 
     dop.run_cmd(cmd)
 end
