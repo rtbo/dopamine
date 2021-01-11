@@ -37,8 +37,11 @@ function CMake:configure(params)
 
     assert(params, 'CMake:configure must be passed a parameter table')
     self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
+    self.install_dir = assert(params.install_dir, 'install_dir is a mandatory parameter')
     local cwd = dop.cwd()
     self.build_dir = params.build_dir or cwd
+
+    self.defs['CMAKE_INSTALL_PREFIX'] = self.install_dir
 
     if params.defs then
         for k, v in pairs(params.defs) do
