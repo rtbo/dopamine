@@ -5,7 +5,7 @@
   "targetType": "library",
   "targetName": "dopamine",
   "license": "MIT",
-  "stringImportPaths": ["lua"],
+  "stringImportPaths": ["src/dopamine/lua"],
   "dependencies": {
     "dini": "~>2.0.0"
   },
@@ -18,6 +18,14 @@
     {
       "name": "lua53-dynamic",
       "versions": ["LUA_53"]
+    },
+    {
+      "name": "unittest",
+      "versions": ["LUA_53", "BindBC_Static"],
+      "libs": ["lua53"],
+      "sourcePaths": ["src", "test"],
+      "importPaths": [".", "src"],
+      "stringImportPaths": ["test/data"]
     }
   ]
 }

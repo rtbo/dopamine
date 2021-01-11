@@ -87,6 +87,116 @@ template to(S : string)
     }
 }
 
+/// Translate enums to config file string
+string toConfig(Arch val)
+{
+    final switch (val)
+    {
+    case Arch.x86:
+        return "x86";
+    case Arch.x86_64:
+        return "x86_64";
+    }
+}
+
+/// ditto
+string toConfig(OS val)
+{
+    final switch (val)
+    {
+    case OS.linux:
+        return "linux";
+    case OS.windows:
+        return "windows";
+    }
+}
+
+/// ditto
+string toConfig(Lang val)
+{
+    final switch (val)
+    {
+    case Lang.d:
+        return "d";
+    case Lang.cpp:
+        return "c++";
+    case Lang.c:
+        return "c";
+    }
+}
+
+/// ditto
+string toConfig(BuildType val)
+{
+    final switch (val)
+    {
+    case BuildType.release:
+        return "release";
+    case BuildType.debug_:
+        return "debug";
+    }
+}
+
+/// Translate config file string to enum
+T fromConfig(T)(string val) if (is(T == enum));
+
+Arch fromConfig(T : Arch)(string val)
+{
+    switch (val)
+    {
+    case "x86":
+        return T.x86;
+    case "x86_64":
+        return T.x86_64;
+    default:
+        throw new Exception(format("cannot convert \"%s\" to Arch", val));
+    }
+}
+
+/// ditto
+OS fromConfig(T : OS)(string val)
+{
+    switch (val)
+    {
+    case "linux":
+        return T.linux;
+    case "windows":
+        return T.windows;
+    default:
+        throw new Exception(format("cannot convert \"%s\" to OS", val));
+    }
+}
+
+/// ditto
+Lang fromConfig(T : Lang)(string val)
+{
+    switch (val)
+    {
+    case "d":
+        return T.d;
+    case "c++":
+        return T.cpp;
+    case "c":
+        return T.c;
+    default:
+        throw new Exception(format("cannot convert \"%s\" to Lang", val));
+    }
+}
+
+/// ditto
+BuildType fromConfig(T : BuildType)(string val)
+{
+    switch (val)
+    {
+    case "release":
+        return T.release;
+    case "debut":
+        return T.debug_;
+    default:
+        throw new Exception(format("cannot convert \"%s\" to Build Type", val));
+    }
+}
+
 alias DopDigest = SHA1;
 
 /// Profile host information
@@ -561,111 +671,6 @@ HostInfo currentHostInfo()
 
     return HostInfo(arch, os);
 }
-
-/// Translate enums to config file string
-string toConfig(Arch val)
-{
-    final switch (val)
-    {
-    case Arch.x86:
-        return "x86";
-    case Arch.x86_64:
-        return "x86_64";
-    }
-}
-
-string toConfig(OS val)
-{
-    final switch (val)
-    {
-    case OS.linux:
-        return "linux";
-    case OS.windows:
-        return "windows";
-    }
-}
-
-string toConfig(Lang val)
-{
-    final switch (val)
-    {
-    case Lang.d:
-        return "d";
-    case Lang.cpp:
-        return "c++";
-    case Lang.c:
-        return "c";
-    }
-}
-
-string toConfig(BuildType val)
-{
-    final switch (val)
-    {
-    case BuildType.release:
-        return "release";
-    case BuildType.debug_:
-        return "debug";
-    }
-}
-
-/// Translate config file string to enum
-T fromConfig(T)(string val) if (is(T == enum));
-
-Arch fromConfig(T : Arch)(string val)
-{
-    switch (val)
-    {
-    case "x86":
-        return T.x86;
-    case "x86_64":
-        return T.x86_64;
-    default:
-        throw new Exception(format("cannot convert \"%s\" to Arch", val));
-    }
-}
-
-OS fromConfig(T : OS)(string val)
-{
-    switch (val)
-    {
-    case "linux":
-        return T.linux;
-    case "windows":
-        return T.windows;
-    default:
-        throw new Exception(format("cannot convert \"%s\" to OS", val));
-    }
-}
-
-Lang fromConfig(T : Lang)(string val)
-{
-    switch (val)
-    {
-    case "d":
-        return T.d;
-    case "c++":
-        return T.cpp;
-    case "c":
-        return T.c;
-    default:
-        throw new Exception(format("cannot convert \"%s\" to Lang", val));
-    }
-}
-
-BuildType fromConfig(T : BuildType)(string val)
-{
-    switch (val)
-    {
-    case "release":
-        return T.release;
-    case "debut":
-        return T.debug_;
-    default:
-        throw new Exception(format("cannot convert \"%s\" to Build Type", val));
-    }
-}
-
 Compiler detectDefaultCompiler(Lang lang)
 {
     foreach (detectF; defaultDetectOrder[lang])

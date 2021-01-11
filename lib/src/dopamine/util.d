@@ -277,7 +277,7 @@ void runCommands(in string[][] commands, string workDir = null,
 
     foreach (cmd; commands)
     {
-        log(logLevel, cmd.commandRep);
+        log(logLevel, "%s %s", info(cmd[0]), cmd[1 .. $].commandRep);
         auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
         auto exitcode = pid.wait();
         enforce(exitcode == 0,
