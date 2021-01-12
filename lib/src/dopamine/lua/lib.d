@@ -1,3 +1,8 @@
+/// Lua library for dopamine lua files
+/// The library is made of two modules:
+///     1. the dop_native module implemented in this file
+///     2. the dop module implemented in Lua (see dop.lua)
+/// The dop module re-exports all symbols of the dop_native module
 module dopamine.lua.lib;
 
 import dopamine.lua.util;
@@ -10,7 +15,6 @@ package(dopamine):
 
 void luaPreloadDopLib(lua_State* L)
 {
-    // preloading dop.lua
     lua_getglobal(L, "package");
     lua_getfield(L, -1, "preload");
 
@@ -38,6 +42,52 @@ int luaDopModule(lua_State* L) nothrow
     }
 
     return 1;
+}
+
+unittest
+{
+    import std.path : dirName;
+
+    lua_State* L = luaL_newstate();
+    scope (exit)
+        lua_close(L);
+
+    luaL_openlibs(L);
+    luaPreloadDopLib(L);
+
+    const thisDir = dirName(__FILE_FULL_PATH__);
+    version (Windows)
+    {
+        const lsCmd = "dir";
+    }
+    else
+    {
+        const lsCmd = "ls";
+    }
+
+    const lua = format(`
+        local dop = require('dop')
+
+        local ls_res = dop.from_dir('%s', function()
+            return dop.run_cmd({
+                '%s', '.',
+                catch_output=true,
+            })
+        end)
+
+        assert(string.find(ls_res, 'dop.lua'))
+        assert(string.find(ls_res, 'lib.d'))
+        assert(string.find(ls_res, 'profile.d'))
+        assert(string.find(ls_res, 'util.d'))
+    `, thisDir, lsCmd);
+
+    const res = luaL_dostring(L, lua.toStringz);
+    string err;
+    if (res != LUA_OK)
+    {
+        err = luaTo!string(L, -1);
+    }
+    assert(res == LUA_OK, err);
 }
 
 int luaDopNativeModule(lua_State* L) nothrow
@@ -165,6 +215,8 @@ int luaRunCmd(lua_State* L) nothrow
     // take a single table argument:
     // integer keys (array) is the actual command
     // ["workdir"]: working directory
+    // ["loglevel"]: log level (one of "info" or "verbose") - default "verbose"
+    //               passing false disables the log entirely
     // ["env"]: additional environment
     // ["allow_fail"]: if true, will return if status is not 0
     // ["catch_output"]: if true, will buffer output and return it to caller
@@ -204,32 +256,77 @@ int luaRunCmd(lua_State* L) nothrow
     const allowFail = luaGetTable!bool(L, 1, "allow_fail", false);
     const catchOut = luaGetTable!bool(L, 1, "catch_output", false);
 
+    // default loglevel to "verbose"
+    auto logLevel = luaGetTable!string(L, 1, "loglevel", "verbose");
+    // if false was passed: disable logging
+    if (!luaGetTable!bool(L, 1, "loglevel", true))
+        logLevel = null;
+
     try
     {
-        import dopamine.log : logInfo, info;
+        import dopamine.log : log, LogLevel, info, minLogLevel;
         import std.array : join;
         import std.process : Config, execute, spawnProcess, wait;
 
         int status;
         string output;
 
+        LogLevel ll;
+
+        if (logLevel)
+        {
+            switch (logLevel)
+            {
+            case "info":
+                ll = LogLevel.info;
+                break;
+            case "verbose":
+                ll = LogLevel.verbose;
+                break;
+            default:
+                throw new Exception("invalid log level: " ~ logLevel);
+            }
+
+            if (workDir)
+                log(ll, "from directory %s", info(workDir));
+
+            if (cmd.length > 1)
+                log(ll, "%s %s", info(cmd[0]), cmd[1 .. $].join(" "));
+            else
+                log(ll, "%s", info(cmd[0]));
+        }
+
         if (catchOut)
         {
             const res = execute(cmd, env, Config.none, size_t.max, workDir);
             status = res.status;
             output = res.output;
+            if (logLevel && ll >= minLogLevel)
+            {
+                log(ll, output);
+            }
         }
         else
         {
-            if (workDir)
-                logInfo("from directory %s", info(workDir));
+            import std.stdio : stdin, stderr, stdout, File;
 
-            if (cmd.length > 1)
-                logInfo("%s %s", info(cmd[0]), cmd[1 .. $].join(" "));
+            version (Windows)
+                enum nullFile = "NUL";
             else
-                logInfo("%s", info(cmd[0]));
+                enum nullFile = "/dev/null";
 
-            auto pid = spawnProcess(cmd, env, Config.none, workDir);
+            auto childStdout = stdout;
+            auto childStderr = stderr;
+            auto config = Config.retainStdout | Config.retainStderr;
+
+            if (!logLevel || ll < minLogLevel)
+            {
+                childStdout = File(nullFile, "w");
+                childStderr = File(nullFile, "w");
+                config = Config.none;
+            }
+
+            auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
             status = wait(pid);
         }
 
@@ -273,7 +370,7 @@ int luaProfileEnvironment(lua_State* L) nothrow
         string[string] env;
         profile.collectEnvironment(env);
 
-        lua_createtable(L, 0, cast(int)env.length);
+        lua_createtable(L, 0, cast(int) env.length);
         foreach (k, v; env)
         {
             luaSetTable(L, -1, k, v);

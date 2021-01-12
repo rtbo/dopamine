@@ -6,12 +6,30 @@ for k, v in pairs(require('dop_native')) do
 end
 
 -- perform closure func from the directory dir
+-- and return its result(s)
+-- will chdir back to previous even if func raise an error
 function dop.from_dir(dir, func)
     local cwd = dop.cwd()
 
-    dop.change_dir(dir)
-    func()
-    dop.change_dir(cwd)
+    dop.chdir(dir)
+    local pres = {pcall(func)}
+    dop.chdir(cwd)
+
+    if pres[1] then
+        -- shift left and unpack results
+        local res = {}
+        for i=2,#pres do
+            res[i-1] = pres[i]
+        end
+        return table.unpack(res)
+    else
+        error(pres[2])
+    end
+end
+
+-- get hash of last git commit
+function dop.git_last_commit()
+    return dop.run_cmd({'git', 'rev-parse', 'HEAD', catch_output = true})
 end
 
 CMake = {}
@@ -23,12 +41,9 @@ function CMake:new(profile)
     setmetatable(o, self)
 
     o.profile = assert(profile, 'profile is mandatory')
-    o.defs = {}
-
-    if o.profile then
-        o.defs['CMAKE_BUILD_TYPE'] = profile.build_type
-    else
-    end
+    o.defs = {
+        ['CMAKE_BUILD_TYPE'] = profile.build_type
+    }
 
     return o
 end
@@ -37,7 +52,8 @@ function CMake:configure(params)
 
     assert(params, 'CMake:configure must be passed a parameter table')
     self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
-    self.install_dir = assert(params.install_dir, 'install_dir is a mandatory parameter')
+    self.install_dir = assert(params.install_dir,
+                              'install_dir is a mandatory parameter')
     local cwd = dop.cwd()
     self.build_dir = params.build_dir or cwd
 
@@ -108,7 +124,7 @@ function Meson:setup(params)
     self.build_dir = assert(params.build_dir,
                             'build_dir is a mandatory parameter')
     self.install_dir = assert(params.install_dir,
-                            'install_dir is a mandatory parameter')
+                              'install_dir is a mandatory parameter')
     local cwd = dop.cwd()
     self.src_dir = params.src_dir or cwd
 
@@ -141,11 +157,11 @@ function Meson:setup(params)
 end
 
 function Meson:compile()
-    dop.run_cmd({'meson', 'compile', workdir=self.build_dir})
+    dop.run_cmd({'meson', 'compile', workdir = self.build_dir})
 end
 
 function Meson:install()
-    dop.run_cmd({'meson', 'install', workdir=self.build_dir})
+    dop.run_cmd({'meson', 'install', workdir = self.build_dir})
 end
 
 return dop

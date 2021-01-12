@@ -12,7 +12,20 @@ int positiveStackIndex(lua_State* L, int index) nothrow
 {
     pragma(inline, true);
 
-    return index >= 0 ? index : lua_gettop(L) + index + 1;
+    return index >= 0 || index == LUA_REGISTRYINDEX ? index : lua_gettop(L) + index + 1;
+}
+
+void luaAddPrefixToPath(lua_State *L, string prefix)
+{
+    import std.format : format;
+
+    const addedpath = ";%s/?.lua;%s/?/init.lua".format(prefix, prefix);
+
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "path");
+    const lp = luaPop!string(L) ~ addedpath;
+    luaSetTable(L, -1, "path", lp);
+    lua_pop(L, 1);
 }
 
 enum isLuaScalar(T) = (isSomeString!T || isNumeric!T || is(T == bool));
