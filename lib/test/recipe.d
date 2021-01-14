@@ -21,7 +21,15 @@ unittest
     assert(recipe.ver == "1.0.0");
 }
 
-@("Build pkga")
+@("pkga.source")
+unittest
+{
+    auto recipe = pkgRecipe("pkga");
+
+    assert(recipe.source() == ".");
+}
+
+@("pkga.build")
 unittest
 {
     auto recipe = pkgRecipe("pkga");

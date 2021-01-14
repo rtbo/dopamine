@@ -83,6 +83,22 @@ struct Recipe
         return d.dependencies;
     }
 
+    string source()
+    {
+        auto L = d.L;
+
+        lua_getglobal(L, "source");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a source function");
+
+        // no argument, 1 result
+        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        {
+            throw new Exception("cannot get source: " ~ luaTo!string(L, -1));
+        }
+
+        return L.luaPop!string();
+    }
+
     void build(Profile profile, string srcdir, string builddir, string installdir)
     {
         auto L = d.L;
@@ -101,6 +117,7 @@ struct Recipe
         luaSetTable(L, paramsInd, "build_dir", builddir);
         luaSetTable(L, paramsInd, "install_dir", installdir);
 
+        // 1 argument, no result
         if (lua_pcall(L, 1, 0, 0) != LUA_OK)
         {
             throw new Exception("cannot build recipe: " ~ luaTo!string(L, -1));
