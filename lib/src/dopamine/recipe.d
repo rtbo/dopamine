@@ -31,13 +31,13 @@ struct Recipe
         this.d = d;
     }
 
-    this(this)
+    this(this) @safe
     {
         if (d !is null)
             d.incr();
     }
 
-    ~this()
+    ~this() @safe
     {
         if (d !is null)
             d.decr();
@@ -45,7 +45,7 @@ struct Recipe
 
     bool opCast(T : bool)() const
     {
-        return d !is null && rc !is null;
+        return d !is null;
     }
 
     @property string name() const @safe
@@ -124,7 +124,7 @@ struct Recipe
         }
     }
 
-    static Recipe parseFile(string path) @safe
+    static Recipe parseFile(string path)
     {
         import std.file : read;
 
@@ -132,7 +132,7 @@ struct Recipe
         return parseString(cast(const(char)[]) content);
     }
 
-    static Recipe parseString(const(char)[] content) @trusted
+    static Recipe parseString(const(char)[] content)
     {
         auto d = new RecipePayload();
         auto L = d.L;
@@ -186,12 +186,12 @@ package class RecipePayload
         rc = 1;
     }
 
-    void incr()
+    void incr() @safe
     {
         rc++;
     }
 
-    void decr()
+    void decr() @trusted
     {
         rc--;
         if (!rc)
