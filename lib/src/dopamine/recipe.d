@@ -83,6 +83,38 @@ struct Recipe
         return d.dependencies;
     }
 
+    @property string filename() const @safe
+    {
+        return d.filename;
+    }
+
+    @property string revision()
+    {
+        if (d.revision)
+            return d.revision;
+
+        auto L = d.L;
+
+        lua_getglobal(L, "revision");
+        scope (success)
+            lua_pop(L, 1);
+
+        if (d.filename && lua_type(L, -1) == LUA_TNIL)
+        {
+            return sha1RevisionFromFile(d.filename);
+        }
+
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a recipe function");
+
+        // no argument, 1 result
+        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        {
+            throw new Exception("cannot get revision: " ~ luaTo!string(L, -1));
+        }
+
+        return luaTo!string(L, -1);
+    }
+
     string source()
     {
         auto L = d.L;
@@ -124,36 +156,28 @@ struct Recipe
         }
     }
 
-    static Recipe parseFile(string path)
+    static Recipe parseFile(string path, string revision = null)
     {
         import std.file : read;
 
-        const content = read(path);
-        return parseString(cast(const(char)[]) content);
+        const lua = cast(const(char)[]) read(path);
+        auto d = RecipePayload.parse(lua, path, revision);
+        return Recipe(d);
     }
 
-    static Recipe parseString(const(char)[] content)
+    static Recipe parseString(const(char)[] content, string revision = null)
+    {
+        auto d = RecipePayload.parse(content, null, revision);
+        return Recipe(d);
+    }
+
+    static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs) @trusted
     {
         auto d = new RecipePayload();
-        auto L = d.L;
-
-        if (luaL_dostring(L, content.toStringz))
-        {
-            throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
-                    -1)).idup);
-        }
-
-        d.name = luaGetGlobal!string(L, "name", null);
-        d.ver = Semver(luaGetGlobal!string(L, "version"));
-        d.description = luaGetGlobal!string(L, "description", null);
-        d.license = luaGetGlobal!string(L, "license", null);
-        d.copyright = luaGetGlobal!string(L, "copyright", null);
-        d.langs = globalArrayTableVar(L, "langs").strToLangs();
-
-        d.dependencies = readDependencies(L);
-
-        assert(lua_gettop(L) == 0, "Lua stack not clean");
-
+        d.name = name;
+        d.ver = ver;
+        d.dependencies = deps;
+        d.langs = langs;
         return Recipe(d);
     }
 }
@@ -168,6 +192,9 @@ package class RecipePayload
     Lang[] langs;
 
     Dependency[] dependencies;
+
+    string filename;
+    string revision;
 
     lua_State* L;
     int rc;
@@ -200,9 +227,85 @@ package class RecipePayload
             L = null;
         }
     }
+
+    private static RecipePayload parse(const(char)[] lua, string filename, string revision)
+    {
+        auto d = new RecipePayload();
+        auto L = d.L;
+
+        if (luaL_dostring(L, lua.toStringz))
+        {
+            throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                    -1)).idup);
+        }
+
+        d.name = luaGetGlobal!string(L, "name", null);
+        d.ver = Semver(luaGetGlobal!string(L, "version"));
+        d.description = luaGetGlobal!string(L, "description", null);
+        d.license = luaGetGlobal!string(L, "license", null);
+        d.copyright = luaGetGlobal!string(L, "copyright", null);
+        d.langs = globalArrayTableVar(L, "langs").strToLangs();
+
+        d.dependencies = readDependencies(L);
+
+        d.filename = filename;
+
+        if (revision)
+        {
+            d.revision = revision;
+        }
+        else
+        {
+            lua_getglobal(L, "revision");
+            switch (lua_type(L, -1))
+            {
+            case LUA_TFUNCTION:
+                // will be called from Recipe.revision
+                lua_pop(L, 1);
+                break;
+            case LUA_TNIL:
+                {
+                    // revision must be computed from lua content
+                    // we want to be as lazy as possible, because revision is
+                    // generally needed only when package is uploaded.
+                    // if filename is known, we defer revision to Recipe.revision
+                    // if not known, we compute it now.
+
+                    if (!d.filename)
+                    {
+                        d.revision = sha1RevisionFromContent(lua);
+                    }
+                    lua_pop(L, 1);
+                    break;
+                }
+            default:
+                throw new Exception("Invalid revision specified");
+            }
+        }
+
+        assert(lua_gettop(L) == 0, "Lua stack not clean");
+
+        return d;
+    }
 }
 
 private:
+
+string sha1RevisionFromContent(const(char)[] luaContent)
+{
+    import std.digest.sha : sha1Of;
+    import std.digest : toHexString, LetterCase;
+
+    const hash = sha1Of(luaContent);
+    return toHexString!(LetterCase.lower)(hash).idup;
+}
+
+string sha1RevisionFromFile(string filename)
+{
+    import std.file : read;
+
+    return sha1RevisionFromContent(cast(const(char)[])read(filename));
+}
 
 Dependency[] readDependencies(lua_State* L)
 {

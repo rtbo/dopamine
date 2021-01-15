@@ -21,6 +21,19 @@ unittest
     assert(recipe.ver == "1.0.0");
 }
 
+@("Read pkga revision")
+unittest
+{
+    import std.digest : toHexString, LetterCase;
+    import std.digest.sha : sha1Of;
+
+    auto recipe = pkgRecipe("pkga");
+
+    const expected = sha1Of(read(recipe.filename)).toHexString!(LetterCase.lower);
+
+    assert(recipe.revision == expected);
+}
+
 @("pkga.source")
 unittest
 {
