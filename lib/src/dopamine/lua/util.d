@@ -15,7 +15,7 @@ int positiveStackIndex(lua_State* L, int index) nothrow
     return index >= 0 || index == LUA_REGISTRYINDEX ? index : lua_gettop(L) + index + 1;
 }
 
-void luaAddPrefixToPath(lua_State *L, string prefix)
+void luaAddPrefixToPath(lua_State* L, string prefix)
 {
     import std.format : format;
 
@@ -164,6 +164,41 @@ T luaGetGlobal(T)(lua_State* L, string varName, T defaultVal) nothrow
     return luaPop!T(L, defaultVal);
 }
 
+/// Get all strings in a table at stack index [ind] who have string keys.
+string[string] luaReadStringDict(lua_State* L, int ind) nothrow
+{
+    if (lua_type(L, ind) != LUA_TTABLE)
+        return null;
+
+    string[string] aa;
+
+    ind = positiveStackIndex(L, ind);
+
+    lua_pushnil(L); // first key
+
+    while (lua_next(L, ind) != 0)
+    {
+        // skip numeric indices
+        if (lua_type(L, -2) != LUA_TSTRING)
+        {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // uses 'key' (at index -2) and 'value' (at index -1)
+        const key = luaTo!string(L, -2, null);
+        const val = luaTo!string(L, -1, null);
+
+        if (key && val)
+            aa[key] = val;
+
+        // removes 'value'; keeps 'key' for next iteration
+        lua_pop(L, 1);
+    }
+
+    return aa;
+}
+
 deprecated
 {
     string[string] globalDictTableVar(lua_State* L, string varName)
@@ -171,7 +206,7 @@ deprecated
         lua_getglobal(L, toStringz(varName));
         scope (success)
             lua_pop(L, 1);
-        return getStringDictTable(L, -1);
+        return luaReadStringDict(L, -1);
     }
 
     string[] globalArrayTableVar(lua_State* L, string varName)
@@ -197,41 +232,6 @@ deprecated
         scope (success)
             lua_pop(L, 2);
         return lua_equal(L, -2, -1) == 1;
-    }
-
-    /// Get all strings in a table at stack index [ind] who have string keys.
-    string[string] getStringDictTable(lua_State* L, int ind) nothrow
-    {
-        if (lua_type(L, ind) != LUA_TTABLE)
-            return null;
-
-        string[string] aa;
-
-        ind = positiveStackIndex(L, ind);
-
-        lua_pushnil(L); // first key
-
-        while (lua_next(L, ind) != 0)
-        {
-            // skip numeric indices
-            if (lua_type(L, -2) != LUA_TSTRING)
-            {
-                lua_pop(L, 1);
-                continue;
-            }
-
-            // uses 'key' (at index -2) and 'value' (at index -1)
-            const key = luaTo!string(L, -2, null);
-            const val = luaTo!string(L, -1, null);
-
-            if (key && val)
-                aa[key] = val;
-
-            // removes 'value'; keeps 'key' for next iteration
-            lua_pop(L, 1);
-        }
-
-        return aa;
     }
 
     /// Get all strings in a table at stack index [ind] who have integer keys.

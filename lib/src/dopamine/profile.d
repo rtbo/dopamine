@@ -388,6 +388,26 @@ final class Profile
         return _digestHash;
     }
 
+    Profile withBasename(string basename) const
+    {
+        return new Profile (basename, this.hostInfo, this.buildType, this.compilers.dup);
+    }
+
+    Profile withHostInfo(HostInfo hostInfo) const
+    {
+        return new Profile (this.basename, hostInfo, this.buildType, this.compilers.dup);
+    }
+
+    Profile withBuildType(BuildType buildType) const
+    {
+        return new Profile (this.basename, this.hostInfo, buildType, this.compilers.dup);
+    }
+
+    Profile withCompilers(Compiler[] compilers) const
+    {
+        return new Profile (this.basename, this.hostInfo, this.buildType, compilers);
+    }
+
     Profile subset(const(Lang)[] langs) const
     in(langs.length, "Cannot create a Profile subset without language")
     {

@@ -13,12 +13,23 @@ import std.exception;
 import std.json;
 import std.string;
 import std.stdio;
+import std.variant;
 
-/// Information relative to an installed dependency
-struct DepInfo
+enum BuildOptionType
 {
-    Semver ver;
-    string installDir;
+    boolean,
+    str,
+    choice,
+    number,
+}
+
+alias BuildOptionVal = Algebraic!(string, bool, int);
+
+struct BuildOptionDef
+{
+    BuildOptionType type;
+    string[] choices;
+    BuildOptionVal def;
 }
 
 struct Recipe
@@ -78,9 +89,30 @@ struct Recipe
         return d.langs;
     }
 
-    @property const(Dependency)[] dependencies() const @safe
+    @property const(Dependency)[] dependencies(const(Profile) profile)
     {
-        return d.dependencies;
+        if (!d.depFunc)
+            return d.dependencies;
+
+        auto L = d.L;
+
+        // the dependencies func takes a profile as argument
+        // and return dependency table
+        lua_getglobal(L, "dependencies");
+        assert(lua_type(L, -1) == LUA_TFUNCTION);
+
+        luaPushProfile(L, profile);
+
+        // 1 argument, 1 result
+        if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+        {
+            throw new Exception("cannot get dependencies: " ~ luaTo!string(L, -1));
+        }
+
+        scope(success)
+            lua_pop(L, 1);
+
+        return readDependencies(L);
     }
 
     @property string filename() const @safe
@@ -192,6 +224,7 @@ package class RecipePayload
     Lang[] langs;
 
     Dependency[] dependencies;
+    bool depFunc;
 
     string filename;
     string revision;
@@ -246,7 +279,21 @@ package class RecipePayload
         d.copyright = luaGetGlobal!string(L, "copyright", null);
         d.langs = globalArrayTableVar(L, "langs").strToLangs();
 
-        d.dependencies = readDependencies(L);
+        lua_getglobal(L, "dependencies");
+        switch (lua_type(L, -1))
+        {
+        case LUA_TFUNCTION:
+            d.depFunc = true;
+            break;
+        case LUA_TTABLE:
+            d.dependencies = readDependencies(L);
+            break;
+        case LUA_TNIL:
+            break;
+        default:
+            throw new Exception("invalid dependencies specification");
+        }
+        lua_pop(L, 1);
 
         d.filename = filename;
 
@@ -304,21 +351,16 @@ string sha1RevisionFromFile(string filename)
 {
     import std.file : read;
 
-    return sha1RevisionFromContent(cast(const(char)[])read(filename));
+    return sha1RevisionFromContent(cast(const(char)[]) read(filename));
 }
 
+/// Read a dependency table from top of the stack
 Dependency[] readDependencies(lua_State* L)
 {
-    lua_getglobal(L, "dependencies");
-
-    scope (success)
-        lua_pop(L, 1);
-
     const typ = lua_type(L, -1);
-    if (typ == LUA_TNIL)
-        return null;
+    if (typ == LUA_TNIL) return null;
 
-    enforce(typ == LUA_TTABLE, "Invalid dependencies declaration");
+    enforce(typ == LUA_TTABLE, "invalid dependencies return type");
 
     Dependency[] res;
 
@@ -344,7 +386,7 @@ Dependency[] readDependencies(lua_State* L)
             break;
         case LUA_TTABLE:
             {
-                const aa = getStringDictTable(L, -1);
+                const aa = luaReadStringDict(L, -1);
                 dep.spec = VersionSpec(enforce(aa["version"],
                         format("'version' not specified for '%s' dependency", dep.name)));
                 break;

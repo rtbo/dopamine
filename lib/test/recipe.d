@@ -3,6 +3,8 @@ module test.recipe;
 import test.profile;
 import test.util;
 
+import dopamine.dependency;
+import dopamine.profile;
 import dopamine.recipe;
 
 import std.file;
@@ -55,4 +57,20 @@ unittest
     mkdirRecurse(buildDir);
 
     recipe.build(profile, srcDir, buildDir, installDir);
+}
+
+@("pkgb.dependencies")
+unittest
+{
+    auto recipe = pkgRecipe("pkgb");
+
+    const rel = ensureDefaultProfile().withBuildType(BuildType.release);
+    const deb = rel.withBuildType(BuildType.debug_);
+
+    const relDeps = recipe.dependencies(rel);
+    const debDeps = recipe.dependencies(deb);
+
+    assert(relDeps.length == 0);
+    assert(debDeps.length == 1);
+    assert(debDeps[0] == Dependency("pkga", VersionSpec(">=1.0.0")));
 }

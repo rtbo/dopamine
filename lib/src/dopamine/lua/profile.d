@@ -7,7 +7,7 @@ import bindbc.lua;
 package(dopamine):
 
 /// Push on the stack a table with the data of profile
-void luaPushProfile(lua_State* L, Profile profile)
+void luaPushProfile(lua_State* L, const(Profile) profile)
 {
     lua_newtable(L);
     const ind = lua_gettop(L);
@@ -46,7 +46,7 @@ void luaPushProfile(lua_State* L, Profile profile)
 }
 
 /// Read a profile from a lua table at index ind
-Profile luaReadProfile(lua_State* L, int ind)
+const(Profile) luaReadProfile(lua_State* L, int ind)
 {
     import std.exception : enforce;
 

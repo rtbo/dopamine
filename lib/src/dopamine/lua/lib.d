@@ -250,7 +250,7 @@ int luaRunCmd(lua_State* L) nothrow
     const workDir = luaGetTable!string(L, 1, "workdir", null);
 
     lua_getfield(L, 1, "env");
-    string[string] env = getStringDictTable(L, -1);
+    string[string] env = luaReadStringDict(L, -1);
     lua_pop(L, 1);
 
     const allowFail = luaGetTable!bool(L, 1, "allow_fail", false);
