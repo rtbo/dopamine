@@ -109,7 +109,7 @@ struct Recipe
             throw new Exception("cannot get dependencies: " ~ luaTo!string(L, -1));
         }
 
-        scope(success)
+        scope (success)
             lua_pop(L, 1);
 
         return readDependencies(L);
@@ -277,23 +277,23 @@ package class RecipePayload
         d.description = luaGetGlobal!string(L, "description", null);
         d.license = luaGetGlobal!string(L, "license", null);
         d.copyright = luaGetGlobal!string(L, "copyright", null);
-        d.langs = globalArrayTableVar(L, "langs").strToLangs();
+        d.langs = L.luaWithGlobal!("langs", () => luaReadStringArray(L, -1).strToLangs());
 
-        lua_getglobal(L, "dependencies");
-        switch (lua_type(L, -1))
-        {
-        case LUA_TFUNCTION:
-            d.depFunc = true;
-            break;
-        case LUA_TTABLE:
-            d.dependencies = readDependencies(L);
-            break;
-        case LUA_TNIL:
-            break;
-        default:
-            throw new Exception("invalid dependencies specification");
-        }
-        lua_pop(L, 1);
+        L.luaWithGlobal!("dependencies", {
+            switch (lua_type(L, -1))
+            {
+            case LUA_TFUNCTION:
+                d.depFunc = true;
+                break;
+            case LUA_TTABLE:
+                d.dependencies = readDependencies(L);
+                break;
+            case LUA_TNIL:
+                break;
+            default:
+                throw new Exception("invalid dependencies specification");
+            }
+        });
 
         d.filename = filename;
 
@@ -303,15 +303,13 @@ package class RecipePayload
         }
         else
         {
-            lua_getglobal(L, "revision");
-            switch (lua_type(L, -1))
-            {
-            case LUA_TFUNCTION:
-                // will be called from Recipe.revision
-                lua_pop(L, 1);
-                break;
-            case LUA_TNIL:
+            L.luaWithGlobal!("revision", {
+                switch (lua_type(L, -1))
                 {
+                case LUA_TFUNCTION:
+                    // will be called from Recipe.revision
+                    break;
+                case LUA_TNIL:
                     // revision must be computed from lua content
                     // we want to be as lazy as possible, because revision is
                     // generally needed only when package is uploaded.
@@ -322,12 +320,11 @@ package class RecipePayload
                     {
                         d.revision = sha1RevisionFromContent(lua);
                     }
-                    lua_pop(L, 1);
                     break;
+                default:
+                    throw new Exception("Invalid revision specification");
                 }
-            default:
-                throw new Exception("Invalid revision specified");
-            }
+            });
         }
 
         assert(lua_gettop(L) == 0, "Lua stack not clean");
@@ -358,7 +355,8 @@ string sha1RevisionFromFile(string filename)
 Dependency[] readDependencies(lua_State* L)
 {
     const typ = lua_type(L, -1);
-    if (typ == LUA_TNIL) return null;
+    if (typ == LUA_TNIL)
+        return null;
 
     enforce(typ == LUA_TTABLE, "invalid dependencies return type");
 

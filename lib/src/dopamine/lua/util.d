@@ -164,6 +164,20 @@ T luaGetGlobal(T)(lua_State* L, string varName, T defaultVal) nothrow
     return luaPop!T(L, defaultVal);
 }
 
+/// Call fun with global variable [varName] pushed on top of the stack.
+/// Stack is popped when fun returns.
+auto luaWithGlobal(string varName, alias fun)(lua_State* L)
+{
+    lua_getglobal(L, toStringz(varName));
+    scope (success)
+        lua_pop(L, 1);
+
+    static if (is(typeof(fun()) == void))
+        fun();
+    else
+        return fun();
+}
+
 /// Get all strings in a table at stack index [ind] who have string keys.
 string[string] luaReadStringDict(lua_State* L, int ind) nothrow
 {
@@ -199,65 +213,29 @@ string[string] luaReadStringDict(lua_State* L, int ind) nothrow
     return aa;
 }
 
-deprecated
+/// Get all strings in a table at stack index [ind] who have integer keys.
+string[] luaReadStringArray(lua_State* L, int ind) nothrow
 {
-    string[string] globalDictTableVar(lua_State* L, string varName)
+    if (lua_type(L, ind) != LUA_TTABLE)
+        return null;
+
+    ind = positiveStackIndex(L, ind);
+
+    const len = lua_rawlen(L, ind);
+
+    string[] arr;
+    arr.length = len;
+
+    for (int i = 1; i <= len; ++i)
     {
-        lua_getglobal(L, toStringz(varName));
-        scope (success)
-            lua_pop(L, 1);
-        return luaReadStringDict(L, -1);
+        lua_rawgeti(L, ind, i);
+
+        arr[i - 1] = luaTo!string(L, -1, null);
+
+        lua_pop(L, 1);
     }
 
-    string[] globalArrayTableVar(lua_State* L, string varName)
-    {
-        lua_getglobal(L, toStringz(varName));
-        scope (success)
-            lua_pop(L, 1);
-        return getStringArrayTable(L, -1);
-    }
-
-    bool globalIsNil(lua_State* L, string var)
-    {
-        lua_getglobal(L, toStringz(var));
-        scope (success)
-            lua_pop(L, 1);
-        return lua_isnil(L, -1);
-    }
-
-    bool globalEqual(lua_State* L, string var1, string var2) nothrow
-    {
-        lua_getglobal(L, toStringz(var1));
-        lua_getglobal(L, toStringz(var2));
-        scope (success)
-            lua_pop(L, 2);
-        return lua_equal(L, -2, -1) == 1;
-    }
-
-    /// Get all strings in a table at stack index [ind] who have integer keys.
-    string[] getStringArrayTable(lua_State* L, int ind) nothrow
-    {
-        if (lua_type(L, ind) != LUA_TTABLE)
-            return null;
-
-        ind = positiveStackIndex(L, ind);
-
-        const len = lua_rawlen(L, ind);
-
-        string[] arr;
-        arr.length = len;
-
-        for (int i = 1; i <= len; ++i)
-        {
-            lua_rawgeti(L, ind, i);
-
-            arr[i - 1] = luaTo!string(L, -1, null);
-
-            lua_pop(L, 1);
-        }
-
-        return arr;
-    }
+    return arr;
 }
 
 // some debugging functions
