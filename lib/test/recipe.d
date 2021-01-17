@@ -9,6 +9,13 @@ import dopamine.recipe;
 
 import std.file;
 
+shared static this()
+{
+    import dopamine.lua : initLua;
+
+    initLua();
+}
+
 Recipe pkgRecipe(string pkg)
 {
     return Recipe.parseFile(testPath("data", pkg, "dopamine.lua"));
