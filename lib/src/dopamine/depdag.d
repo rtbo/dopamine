@@ -62,8 +62,8 @@ enum Heuristics
 /// Dependency graph
 struct DepDAG
 {
-    private DepPack root;
-    private Heuristics heuristics;
+    package DepPack root;
+    package Heuristics heuristics;
 
     auto traverseTopDown(Flag!"root" traverseRoot = No.root) @safe
     {
@@ -155,14 +155,14 @@ class DepPack
     /// Edges towards packages that depends on this
     DepEdge[] upEdges;
 
-    private this(string name)
+    package this(string name) @safe
     {
         this.name = name;
     }
 
     /// Get node that match with [ver]
     /// Create one if doesn't exist
-    private DepNode getOrCreateNode(const(Semver) ver) @safe
+    package DepNode getOrCreateNode(const(Semver) ver) @safe
     {
         foreach (n; nodes)
         {
@@ -172,6 +172,17 @@ class DepPack
         auto node = new DepNode(this, ver);
         nodes ~= node;
         return node;
+    }
+
+    /// Get existing node that match with [ver], or null
+    package DepNode getNode(Semver ver) @safe
+    {
+        foreach (n; nodes)
+        {
+            if (n.ver == ver)
+                return n;
+        }
+        return null;
     }
 
     Semver[] consideredVersions() const @safe
@@ -385,8 +396,8 @@ out(; dagIsResolved(dag))
             if (e.down.resolvedNode)
                 continue;
 
-            const resolved = chooseVersion(dag.heuristics, cacheRepo, e.down.name,
-                    e.down.consideredVersions);
+            const resolved = chooseVersion(dag.heuristics, cacheRepo,
+                    e.down.name, e.down.consideredVersions);
 
             foreach (n; e.down.nodes)
             {
@@ -891,6 +902,8 @@ struct DepthFirstRange(alias getMore)
         return DepthFirstRange!(getMore)(stack.dup, visited.dup);
     }
 }
+
+package:
 
 version (unittest)
 {
