@@ -203,13 +203,14 @@ struct Recipe
         return Recipe(d);
     }
 
-    static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs) @trusted
+    static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs, string revision) @trusted
     {
         auto d = new RecipePayload();
         d.name = name;
         d.ver = ver;
         d.dependencies = deps;
         d.langs = langs;
+        d.revision = revision;
         return Recipe(d);
     }
 }
