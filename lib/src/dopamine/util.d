@@ -46,6 +46,23 @@ out(res; (!location || res.startsWith(location)) && !exists(res))
     return res;
 }
 
+/// execute pred from directory dir
+/// and chdir back to the previous dir afterwards
+/// Returns: whatever pred returns
+auto fromDir(alias pred)(string dir) @system
+{
+    // shortcut if chdir is not needed
+    if (dir == ".")
+        return pred();
+
+    const cwd = getcwd();
+    chdir(dir);
+    scope (exit)
+        chdir(cwd);
+
+    return pred();
+}
+
 /// Check if array has duplicates
 /// Will try first as if the array is sorted
 /// and will fallback to brute force if not
