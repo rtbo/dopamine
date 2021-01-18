@@ -125,6 +125,19 @@ struct PackageDir
         return _path(".dop", "profile.ini");
     }
 
+    /// Get the default locations for building with profile
+    ProfileDirs profileDirs(const(Profile) profile) const @trusted
+    in(profile && hasDopamineFile)
+    {
+        const workDir = _workDirName(profile);
+
+        ProfileDirs dirs = void;
+        dirs.work = _path(".dop", workDir);
+        dirs.build = _path(".dop", workDir, "build");
+        dirs.install = _path(".dop", workDir, "install");
+        return dirs;
+    }
+
     /// Get the path to the packed archive
     /// Must be called from the package dir
     string archiveFile(const(Profile) profile, const(Recipe) recipe) const
@@ -170,5 +183,22 @@ struct PackageDir
     private static string _workDirName(const(Profile) profile)
     {
         return format("%s-%s", profile.digestHash[0 .. 10], profile.name);
+    }
+}
+
+/// Structure gathering directories needed during a build
+struct ProfileDirs
+{
+    /// dop working directory
+    string work;
+    /// directory into which build happens
+    string build;
+    /// directory into which files are installed
+    string install;
+
+    /// FlagFile that indicates that build is done and contain the directory
+    FlagFile buildFlag() const
+    {
+        return FlagFile(buildPath(work, ".build"));
     }
 }

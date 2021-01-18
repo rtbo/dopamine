@@ -147,8 +147,17 @@ struct Recipe
         return luaTo!string(L, -1);
     }
 
+    /// Returns: whether the source is included with the package
+    @property bool inTreeSrc() const
+    {
+        return d.inTreeSrc.length > 0;
+    }
+
     string source()
     {
+        if (d.inTreeSrc)
+            return d.inTreeSrc;
+
         auto L = d.L;
 
         lua_getglobal(L, "source");
@@ -163,7 +172,7 @@ struct Recipe
         return L.luaPop!string();
     }
 
-    void build(Profile profile, string srcdir, string builddir, string installdir)
+    string build(Profile profile, string srcDir, string buildDir, string installDir)
     {
         auto L = d.L;
 
@@ -177,23 +186,38 @@ struct Recipe
         luaPushProfile(L, profile);
         lua_settable(L, paramsInd);
 
-        luaSetTable(L, paramsInd, "src_dir", srcdir);
-        luaSetTable(L, paramsInd, "build_dir", builddir);
-        luaSetTable(L, paramsInd, "install_dir", installdir);
+        luaSetTable(L, paramsInd, "src_dir", srcDir);
+        luaSetTable(L, paramsInd, "build_dir", buildDir);
+        luaSetTable(L, paramsInd, "install_dir", installDir);
 
-        // 1 argument, no result
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+        // 1 argument, 1 result
+        if (lua_pcall(L, 1, 1, 0) != LUA_OK)
         {
             throw new Exception("cannot build recipe: " ~ luaTo!string(L, -1));
         }
+
+        scope (success)
+            lua_pop(L, 1);
+
+        string result = installDir;
+        switch (lua_type(L, -1))
+        {
+        case LUA_TSTRING:
+            result = luaTo!string(L, -1);
+            break;
+        case LUA_TNIL:
+            break;
+        default:
+            throw new Exception("invalid return from build");
+        }
+        return result;
     }
 
     static Recipe parseFile(string path, string revision = null)
     {
         import std.file : read;
 
-        const lua = cast(const(char)[]) read(path);
-        auto d = RecipePayload.parse(lua, path, revision);
+        auto d = RecipePayload.parse(null, path, revision);
         return Recipe(d);
     }
 
@@ -226,6 +250,8 @@ package class RecipePayload
 
     Dependency[] dependencies;
     bool depFunc;
+
+    string inTreeSrc;
 
     string filename;
     string revision;
@@ -263,14 +289,23 @@ package class RecipePayload
     }
 
     private static RecipePayload parse(const(char)[] lua, string filename, string revision)
+    in((filename && !lua) || (!filename && lua))
     {
+        import std.path : isAbsolute;
+
         auto d = new RecipePayload();
         auto L = d.L;
 
-        if (luaL_dostring(L, lua.toStringz))
+        if (filename && luaL_dofile(L, filename.toStringz))
         {
             throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
                     -1)).idup);
+        }
+        else if (luaL_dostring(L, lua.toStringz))
+        {
+            throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                    -1)).idup);
+
         }
 
         d.name = luaGetGlobal!string(L, "name", null);
@@ -293,6 +328,24 @@ package class RecipePayload
                 break;
             default:
                 throw new Exception("invalid dependencies specification");
+            }
+        });
+
+        L.luaWithGlobal!("source", {
+            switch (lua_type(L, -1))
+            {
+            case LUA_TSTRING:
+                d.inTreeSrc = luaTo!string(L, -1);
+                enforce(!isAbsolute(d.inTreeSrc),
+                    "constant source must be relative to package file");
+                break;
+            case LUA_TFUNCTION:
+                break;
+            case LUA_TNIL:
+                d.inTreeSrc = ".";
+                break;
+            default:
+                throw new Exception("invalid source specification");
             }
         });
 
@@ -319,6 +372,7 @@ package class RecipePayload
 
                     if (!d.filename)
                     {
+                        assert(lua.length);
                         d.revision = sha1RevisionFromContent(lua);
                     }
                     break;

@@ -116,7 +116,10 @@ int luaDopNativeModule(lua_State* L) nothrow
     const boolconsts = ["posix" : posix];
     const funcs = [
         "join_paths" : &luaJoinPaths, "cwd" : &luaCwd, "chdir" : &luaChangeDir,
-        "run_cmd" : &luaRunCmd, "profile_environment" : &luaProfileEnvironment,
+        "mkdir" : &luaMkdir, "run_cmd" : &luaRunCmd,
+        "profile_environment" : &luaProfileEnvironment, "download" : &luaDownload,
+        "checksum" : &luaChecksum, "create_archive" : &luaCreateArchive,
+        "extract_archive" : &luaExtractArchive,
     ];
 
     lua_createtable(L, 0, cast(int)(strconsts.length + boolconsts.length + funcs.length));
@@ -206,6 +209,32 @@ int luaChangeDir(lua_State* L) nothrow
     const dir = luaL_checklstring(L, 1, &len);
     L.catchAll!({ chdir(dir[0 .. len]); });
     return 0;
+}
+
+int luaMkdir(lua_State* L) nothrow
+{
+    import std.file : mkdir, mkdirRecurse;
+
+    if (lua_type(L, 1) == LUA_TSTRING)
+    {
+        L.catchAll!({ const dir = luaTo!string(L, 1); mkdir(dir); });
+        return 0;
+    }
+
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    return L.catchAll!({
+        const dirs = luaReadStringArray(L, 1);
+        const recurse = luaGetTable!bool(L, 1, "recurse", false);
+        foreach (d; dirs)
+        {
+            if (recurse)
+                mkdirRecurse(d);
+            else
+                mkdir(d);
+        }
+        return 0;
+    });
 }
 
 int luaRunCmd(lua_State* L) nothrow
@@ -374,5 +403,133 @@ int luaProfileEnvironment(lua_State* L) nothrow
             luaSetTable(L, -1, k, v);
         }
         return 1;
+    });
+}
+
+int luaDownload(lua_State* L) nothrow
+{
+    import std.net.curl : download;
+
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    return L.catchAll!({
+        const url = luaGetTable!string(L, 1, "url");
+        const dest = luaGetTable!string(L, 1, "dest");
+
+        download(url, dest);
+        return 0;
+    });
+}
+
+int luaChecksum(lua_State* L) nothrow
+{
+    import std.algorithm : canFind;
+    import std.digest : Digest, toHexString, LetterCase;
+    import std.digest.md : MD5Digest;
+    import std.digest.sha : SHA1Digest, SHA256Digest, secureEqual;
+    import std.stdio : File;
+    import std.string : toLower;
+
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    const files = luaReadStringArray(L, 1);
+    if (files.length == 0)
+    {
+        return luaL_error(L, "dop.checksum must have at least one argument");
+    }
+
+    return L.catchAll!({
+
+        lua_pushnil(L);
+        while (lua_next(L, 1))
+        {
+            // skip numeric indices
+            if (lua_type(L, -2) != LUA_TSTRING)
+            {
+                lua_pop(L, 1);
+                continue;
+            }
+
+            const key = luaTo!string(L, -2);
+            enforce(["md5", "sha1", "sha256"].canFind(key), "unsupported checksum: " ~ key);
+
+            string[] vals;
+            switch (lua_type(L, -1))
+            {
+            case LUA_TSTRING:
+                vals = [luaTo!string(L, -1)];
+                break;
+            case LUA_TTABLE:
+                vals = luaReadStringArray(L, -1);
+                break;
+            default:
+                throw new Exception("invalid checksum spec: " ~ key);
+            }
+            enforce(files.length == vals.length,
+                "must provide as many entries in " ~ key ~ " than there are files to check");
+
+            Digest digest;
+
+            switch (key)
+            {
+            case "md5":
+                digest = new MD5Digest();
+                break;
+            case "sha1":
+                digest = new SHA1Digest();
+                break;
+            case "sha256":
+                digest = new SHA256Digest();
+                break;
+            default:
+                assert(false);
+            }
+
+            foreach (i, f; files)
+            {
+                digest.reset();
+                auto file = File(f, "rb");
+                foreach (chunk; file.byChunk(4096))
+                {
+                    digest.put(chunk);
+                }
+                const hash = digest.finish().toHexString!(LetterCase.lower)();
+                enforce(vals[i].toLower() == hash, key ~ " checksum failed for " ~ f);
+            }
+
+            lua_pop(L, 1);
+        }
+
+        return 0;
+    });
+}
+
+int luaCreateArchive(lua_State* L) nothrow
+{
+    import dopamine.archive : ArchiveBackend;
+
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    return L.catchAll!({
+        const indir = luaGetTable!string(L, 1, "indir");
+        const archive = luaGetTable!string(L, 1, "archive");
+
+        ArchiveBackend.get.create(indir, archive);
+        return 0;
+    });
+}
+
+int luaExtractArchive(lua_State* L) nothrow
+{
+    import dopamine.archive : ArchiveBackend;
+
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    return L.catchAll!({
+        const archive = luaGetTable!string(L, 1, "archive");
+        const outdir = luaGetTable!string(L, 1, "outdir");
+
+        ArchiveBackend.get.extract(archive, outdir);
+        return 0;
     });
 }

@@ -4,6 +4,8 @@ import dopamine.client.recipe;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
+import dopamine.recipe;
+import dopamine.state;
 
 import std.exception;
 import std.getopt;
@@ -26,6 +28,38 @@ Profile detectAndWriteDefault(Lang[] langs)
     profile.saveToFile(path, false, true);
     logInfo("Default profile saved to %s", info(path));
 
+    return profile;
+}
+
+/// Enforce the loading of a profile.
+/// If name is null, will load the profile from the profile file in .dop/ directory
+/// If name is not null (can be e.g. "default"), will load the profile from the user profile directory
+Profile enforceProfileReady(PackageDir dir, Recipe recipe, string name = null)
+{
+    Profile profile;
+    if (!name)
+    {
+        profile = enforce(checkProfileFile(dir),
+                new FormatLogException("%s: %s has no defined profile. Try to run `%s`.",
+                    error("Error"), info(recipe.name), info("dop profile")));
+        if (profile.name)
+        {
+            logInfo("%s: %s - %s (%s)", info("Profile"), success("OK"),
+                    info(profile.name), dir.profileFile());
+        }
+        else
+        {
+            logInfo("%s: %s - %s", info("Profile"), success("OK"), dir.profileFile());
+        }
+    }
+    else
+    {
+        string pname;
+        profile = enforce(checkProfileName(dir, recipe, name, false, &pname),
+                new FormatLogException("%s: %s has no defined profile. Try to run `%s`.",
+                    error("Error"), info(recipe.name), info("dop profile")));
+        logInfo("%s: %s - %s", info("Profile"), success("OK"), info(pname));
+    }
     return profile;
 }
 

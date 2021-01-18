@@ -1,8 +1,10 @@
 module dopamine.client.app;
 
+import dopamine.client.build;
 import dopamine.client.login;
 import dopamine.client.profile;
 import dopamine.client.source;
+import dopamine.log;
 
 import std.getopt;
 import std.file;
@@ -11,13 +13,13 @@ import std.format;
 int main(string[] args)
 {
     import std.algorithm : canFind, remove;
-    import dopamine.log : error, info, logError, logInfo, FormatLogException;
     import dopamine.lua : initLua;
 
     initLua();
 
     const commandHandlers = [
         "login" : &loginMain, "profile" : &profileMain, "source" : &sourceMain,
+        "build" : &buildMain,
     ];
 
     const commandNames = commandHandlers.keys;
@@ -37,13 +39,18 @@ int main(string[] args)
     }
 
     string changeDir;
+    bool verbose;
 
-    auto helpInfo = getopt(globalArgs, "change-dir|C", &changeDir,);
+    auto helpInfo = getopt(globalArgs, "change-dir|C", &changeDir, "verbose|v", &verbose);
 
     if (helpInfo.helpWanted)
     {
         defaultGetoptPrinter("The Dopamine package manager", helpInfo.options);
         return 0;
+    }
+    if (verbose)
+    {
+        minLogLevel = LogLevel.verbose;
     }
     if (changeDir.length)
     {
