@@ -5,6 +5,9 @@
   "targetType": "library",
   "targetName": "dopamine",
   "license": "MIT",
+  "stringImportPaths": [
+    "src/dopamine/lua"
+  ],
   "dependencies": {
     "dini": "~>2.0.0"
   },

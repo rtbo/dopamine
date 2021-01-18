@@ -32,11 +32,9 @@ private:
 
 int luaDopModule(lua_State* L) nothrow
 {
-    import std.path : buildPath, dirName;
+    const dopMod = import("dop.lua");
 
-    const dopMod = buildPath(dirName(__FILE_FULL_PATH__), "dop.lua");
-
-    if (luaL_dofile(L, dopMod.toStringz) != LUA_OK)
+    if (luaL_dostring(L, dopMod.toStringz) != LUA_OK)
     {
         return luaL_error(L, "Error during 'dop.lua' execution: %s", lua_tostring(L, -1));
     }
