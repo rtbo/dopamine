@@ -70,15 +70,10 @@ struct API
         return format("%s/api/%s%s", transport.host, transport.ver, path);
     }
 
-    private string resource(string path, string[string] params)
+    private string resource(Args...)(string path, Args args)
     {
-        import std.algorithm : map;
-        import std.array : join;
-        import std.format : format;
+        pragma(inline, true);
 
-        const query = params.byKeyValue().map!(kv => format("%s=%s", kv.key, kv.value)).join("&");
-        const querySt = query.length ? "?" : "";
-
-        return format("%s/api/%s%s%s%s", transport.host, transport.ver, path, querySt, query);
+        return transport.resource(path, args);
     }
 }

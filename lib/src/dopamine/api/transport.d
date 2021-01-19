@@ -2,6 +2,7 @@ module dopamine.api.transport;
 
 import std.json;
 import std.net.curl;
+import std.traits;
 
 /// An error that correspond to a server response code >= 400
 class ErrorResponseException : Exception
@@ -94,6 +95,61 @@ struct ApiTransport
     string host = "http://localhost:3000";
     string ver = "v1";
     LoginKey login;
+
+    /// build a resource url
+    /// Parameters formatting:
+    /// If [path] contain format specifiers (e.g. "%s"), [args] must have the corresponding values
+    /// Query formatting:
+    /// If the last argument is a `string[string]` associative array, it is used to format a GET query
+    /// e.g. path?param1=value1&param2=value2
+    string resource(Args...)(string path, Args args)
+    in(path.length == 0 || path[0] == '/')
+    {
+        import std.algorithm : map;
+        import std.array : join;
+        import std.format : format;
+
+        enum hasQuery = Args.length > 0 && isStringDict!(Args[$ - 1]);
+        enum hasParam = Args.length > (hasQuery ? 1 : 0);
+
+        static if (hasParam)
+        {
+            enum paramEnd = Args.length - (hasQuery ? 1 : 0);
+            path = format(path, args[0 .. paramEnd]);
+        }
+
+        static if (hasQuery)
+        {
+            const queryStr = args[$ - 1].byKeyValue()
+                .map!(kv => format("%s=%s", kv.key, kv.value)).join("&");
+            const query = queryStr.length ? "?" ~ queryStr : "";
+        }
+        else
+        {
+            enum query = "";
+        }
+
+        return format("%s/api/%s%s%s", host, ver, path, query);
+    }
+
+    ///
+    unittest
+    {
+        ApiTransport transport;
+        transport.host = "http://api.net";
+        transport.ver = "v2";
+
+        assert(transport.resource("/resource") == "http://api.net/api/v2/resource");
+        assert(transport.resource("/resource/%s/field",
+                "id") == "http://api.net/api/v2/resource/id/field");
+        assert(transport.resource("/resource", ["p1": "v1",
+                    "p2": "v2"]) == "http://api.net/api/v2/resource?p1=v1&p2=v2");
+
+        assert(transport.resource("/resource/%s/field", "id", [
+                    "p1": "v1",
+                    "p2": "v2"
+                ]) == "http://api.net/api/v2/resource/id/field?p1=v1&p2=v2");
+    }
 
     Response!JSONValue jsonGet(string url)
     {
@@ -188,6 +244,9 @@ struct ApiTransport
         return Response!(ubyte[])(data, status.code, status.reason, error);
     }
 }
+
+private enum isStringDict(T) = isAssociativeArray!T && is(KeyType!T == string)
+    && is(ValueType!T == string);
 
 private JSONValue toJson(ubyte[] raw) @trusted
 {
