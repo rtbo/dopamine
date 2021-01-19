@@ -153,26 +153,27 @@ struct ApiTransport
 
     Response!JSONValue jsonGet(string url)
     {
-        return rawGet(url, true).mapResp!(raw => toJson(raw));
+        return rawGet(url).mapResp!(raw => toJson(raw));
     }
 
     Response!JSONValue jsonPost(string url, const ref JSONValue bodi)
     {
         const rawbody = fromJson(bodi);
-        return rawPost(url, cast(const(ubyte)[]) rawbody, true).mapResp!(raw => toJson(raw));
+        return rawPost(url, cast(const(ubyte)[]) rawbody, "application/json").mapResp!(raw => toJson(raw));
     }
 
-    Response!(ubyte[]) rawGet(string url, bool json = false)
+    Response!(ubyte[]) rawGet(string url)
     {
-        return rawReq(url, HTTP.Method.get, [], json);
+        return rawReq(url, HTTP.Method.get);
     }
 
-    Response!(ubyte[]) rawPost(string url, scope const(void)[] bodi, bool json = false)
+    Response!(ubyte[]) rawPost(string url, scope const(void)[] bodi, string contentType)
     {
-        return rawReq(url, HTTP.Method.post, bodi, json);
+        return rawReq(url, HTTP.Method.post, bodi, contentType);
     }
 
-    Response!(ubyte[]) rawReq(string url, HTTP.Method method, scope const(void)[] bodi, bool json) @trusted
+    Response!(ubyte[]) rawReq(string url, HTTP.Method method,
+            scope const(void)[] bodi=null, string contentType = null) @trusted
     {
         import std.algorithm : min;
         import std.conv : to;
@@ -191,9 +192,9 @@ struct ApiTransport
         {
             assert(method != HTTP.Method.get);
 
-            if (json)
+            if (contentType)
             {
-                http.addRequestHeader("Content-Type", "application/json");
+                http.addRequestHeader("Content-Type", contentType);
             }
 
             http.contentLength = bodi.length;
