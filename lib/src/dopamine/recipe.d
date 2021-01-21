@@ -136,12 +136,12 @@ struct Recipe
             return sha1RevisionFromFile(d.filename);
         }
 
-        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a recipe function");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "Package recipe is missing a recipe function");
 
         // no argument, 1 result
         if (lua_pcall(L, 0, 1, 0) != LUA_OK)
         {
-            throw new Exception("cannot get revision: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot get recipe revision: " ~ luaTo!string(L, -1));
         }
 
         return luaTo!string(L, -1);
@@ -166,7 +166,7 @@ struct Recipe
         // no argument, 1 result
         if (lua_pcall(L, 0, 1, 0) != LUA_OK)
         {
-            throw new Exception("cannot get source: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot get source: " ~ luaTo!string(L, -1));
         }
 
         return L.luaPop!string();
@@ -193,7 +193,7 @@ struct Recipe
         // 1 argument, 1 result
         if (lua_pcall(L, 1, 1, 0) != LUA_OK)
         {
-            throw new Exception("cannot build recipe: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
         }
 
         scope (success)
@@ -366,11 +366,9 @@ package class RecipePayload
             L.luaWithGlobal!("revision", {
                 switch (lua_type(L, -1))
                 {
-                case LUA_TFUNCTION:
-                    // will be called from Recipe.revision
+                case LUA_TFUNCTION: // will be called from Recipe.revision
                     break;
-                case LUA_TNIL:
-                    // revision must be computed from lua content
+                case LUA_TNIL: // revision must be computed from lua content
                     // we want to be as lazy as possible, because revision is
                     // generally needed only when package is uploaded.
                     // if filename is known, we defer revision to Recipe.revision
