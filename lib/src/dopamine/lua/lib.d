@@ -115,8 +115,8 @@ int luaDopNativeModule(lua_State* L) nothrow
     ];
     const boolconsts = ["posix" : posix];
     const funcs = [
-        "join_paths" : &luaJoinPaths, "cwd" : &luaCwd, "chdir" : &luaChangeDir,
-        "mkdir" : &luaMkdir, "run_cmd" : &luaRunCmd,
+        "trim" : &luaTrim, "join_paths" : &luaJoinPaths, "cwd" : &luaCwd,
+        "chdir" : &luaChangeDir, "mkdir" : &luaMkdir, "run_cmd" : &luaRunCmd,
         "profile_environment" : &luaProfileEnvironment, "download" : &luaDownload,
         "checksum" : &luaChecksum, "create_archive" : &luaCreateArchive,
         "extract_archive" : &luaExtractArchive,
@@ -160,6 +160,25 @@ auto catchAll(alias fun)(lua_State* L) nothrow
         luaL_error(L, ex.msg.toStringz);
     }
     assert(false);
+}
+
+int luaTrim(lua_State* L) nothrow
+{
+    import std.ascii : isWhite;
+
+    size_t size;
+    auto p = luaL_checklstring(L, 1, &size);
+    auto s = p[0 .. size];
+
+    while (s.length && s[0].isWhite)
+        s = s[1 .. $];
+
+    while (s.length && s[$ - 1].isWhite)
+        s = s[0 .. $ - 1];
+
+    lua_pushlstring(L, s.ptr, s.length);
+
+    return 1;
 }
 
 int luaJoinPaths(lua_State* L) nothrow
