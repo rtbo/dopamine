@@ -27,9 +27,20 @@ function dop.from_dir(dir, func)
     end
 end
 
--- get hash of last git commit
-function dop.git_last_commit()
-    return dop.run_cmd({'git', 'rev-parse', 'HEAD', catch_output = true})
+Git = {}
+Git.__index = Git
+dop.Git = Git
+
+-- Return a function that checks if the git repo is clean and return the commit revision
+-- Assign this to your package revision if you want to use git as package revision tracker
+function Git.revision()
+    return function()
+        local status = dop.run_cmd({'git', 'status', '--porcelain', catch_output = true})
+        if status ~= '' then
+            error('Git repo not clean', 2)
+        end
+        return dop.trim(dop.run_cmd({'git', 'rev-parse', 'HEAD', catch_output = true}))
+    end
 end
 
 CMake = {}
