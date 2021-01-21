@@ -1,6 +1,7 @@
 module dopamine.client.app;
 
 import dopamine.client.build;
+import dopamine.client.cache;
 import dopamine.client.login;
 import dopamine.client.profile;
 import dopamine.client.source;
@@ -19,8 +20,13 @@ int main(string[] args)
 
     const commandHandlers = [
         "login" : &loginMain, "profile" : &profileMain, "source" : &sourceMain,
-        "build" : &buildMain,
+        "build" : &buildMain, "cache" :  &cacheMain,
     ];
+    // TODO: missing commands
+    // - config: specify build options, install path etc.
+    // - package: stage built data in a directory (typically install operation)
+    // - publish: publish a recipe on a remote repo
+    // - upload: upload a build on a remote repo
 
     const commandNames = commandHandlers.keys;
 

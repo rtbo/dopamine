@@ -7,9 +7,17 @@ import dopamine.log;
 import dopamine.paths;
 import dopamine.state;
 
+import std.exception;
 import std.file;
 import std.getopt;
 import std.path;
+
+string enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
+{
+    return enforce(checkBuildReady(dir, profileDirs), new FormatLogException(
+            "%s: package is not built for selected profile. Try to run `%s`",
+            error("Error"), info("dop build")));
+}
 
 int buildMain(string[] args)
 {
