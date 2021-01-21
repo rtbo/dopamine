@@ -65,6 +65,18 @@ string userLoginFile()
     return buildPath(userDopDir(), "login.json");
 }
 
+PackageDir cacheDepDir(Recipe recipe) @system
+{
+    return PackageDir(buildPath(userDopDir(), "packages", format("%s-%s",
+            recipe.name, recipe.ver), recipe.revision()));
+}
+
+FlagFile cacheDepDirFlag(Recipe recipe) @system
+{
+    return FlagFile(buildPath(userDopDir(), "packages", format("%s-%s",
+            recipe.name, recipe.ver), "." ~ recipe.revision()));
+}
+
 struct PackageDir
 {
     private string _dir;
@@ -90,7 +102,6 @@ struct PackageDir
     }
 
     @property string dopamineFile() const
-    in(hasDopamineFile)
     {
         return _path("dopamine.lua");
     }
@@ -160,6 +171,13 @@ struct PackageDir
         const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
                 profile.digestHash[0 .. 10], archiveFormat[0]);
         return _path(".dop", workDir, filename);
+    }
+
+    FlagFile archiveFlag(const(Profile) profile) const
+    {
+        const workDir = _workDirName(profile);
+        return FlagFile(_path(".dop", workDir, ".archive"));
+
     }
 
     static PackageDir enforced(string dir, lazy string msg = null)
