@@ -161,6 +161,15 @@ struct FlagFile
         write(path, content);
     }
 
+    void touch()
+    {
+        import std.file : append;
+        import std.path : dirName;
+
+        mkdirRecurse(dirName(path));
+        append(path, []);
+    }
+
     void remove()
     {
         import std.file : exists, remove;
