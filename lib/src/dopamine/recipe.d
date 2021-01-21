@@ -296,16 +296,22 @@ package class RecipePayload
         auto d = new RecipePayload();
         auto L = d.L;
 
-        if (filename && luaL_dofile(L, filename.toStringz))
+        if (filename)
         {
-            throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
-                    -1)).idup);
+            if (luaL_dofile(L, filename.toStringz))
+            {
+                throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                        -1)).idup);
+            }
         }
-        else if (luaL_dostring(L, lua.toStringz))
+        else
         {
-            throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
-                    -1)).idup);
-
+            assert(lua);
+            if (luaL_dostring(L, lua.toStringz))
+            {
+                throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                        -1)).idup);
+            }
         }
 
         d.name = luaGetGlobal!string(L, "name", null);
