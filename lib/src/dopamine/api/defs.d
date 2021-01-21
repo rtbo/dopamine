@@ -23,3 +23,13 @@ package Package packageFromJson(const(JSONValue) json)
     p.versions = json["versions"].arrayNoRef.map!(v => v.str).array;
     return p;
 }
+
+struct PackageVersionPost
+{
+    /// The id of the package
+    string packageId;
+    /// The version of the package
+    string ver;
+    /// The revision of the package - must be unique whatever the version
+    string rev;
+}

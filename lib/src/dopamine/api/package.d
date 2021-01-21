@@ -4,6 +4,8 @@ public import dopamine.api.defs;
 import dopamine.api.transport;
 import dopamine.login;
 
+import std.json;
+
 struct API
 {
     private
@@ -55,19 +57,20 @@ struct API
 
     Response!Package postPackage(string name)
     {
-        import std.json : JSONValue;
-
         const uri = resource("/packages");
         JSONValue json;
         json["name"] = name;
         return transport.jsonPost(uri, json).mapResp!(jv => packageFromJson(jv));
     }
 
-    private string resource(string path)
+    /// POST a new package version and retrieve the secured upload-url
+    Response!string postVersion(PackageVersionPost pvp)
     {
-        import std.format : format;
-
-        return format("%s/api/%s%s", transport.host, transport.ver, path);
+        const uri = resource("/packages/%s/version", pvp.packageId);
+        JSONValue json;
+        json["verison"] = pvp.ver;
+        json["revision"] = pvp.rev;
+        return transport.jsonPost(uri, json).mapResp!(jv => jv["upload-url"].str);
     }
 
     private string resource(Args...)(string path, Args args)
