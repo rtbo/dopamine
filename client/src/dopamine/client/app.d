@@ -2,6 +2,7 @@ module dopamine.client.app;
 
 import dopamine.client.build;
 import dopamine.client.cache;
+import dopamine.client.deplock;
 import dopamine.client.login;
 import dopamine.client.profile;
 import dopamine.client.source;
@@ -19,8 +20,8 @@ int main(string[] args)
     initLua();
 
     const commandHandlers = [
-        "login" : &loginMain, "profile" : &profileMain, "source" : &sourceMain,
-        "build" : &buildMain, "cache" :  &cacheMain,
+        "login" : &loginMain, "profile" : &profileMain, "deplock" : &depLockMain,
+        "source" : &sourceMain, "build" : &buildMain, "cache" : &cacheMain,
     ];
     // TODO: missing commands
     // - config: specify build options, install path etc.

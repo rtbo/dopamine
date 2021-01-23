@@ -55,8 +55,8 @@ int cacheMain(string[] args)
 
     enforceCanBeCached(recipe);
 
-    const depDir = cacheDepDir(recipe);
-    auto flag = cacheDepDirFlag(recipe);
+    const depDir = cacheDepRevDir(recipe);
+    auto flag = cacheDepRevDirFlag(recipe);
 
     mkdirRecurse(depDir.dir);
     copy(dir.dopamineFile(), depDir.dopamineFile());
