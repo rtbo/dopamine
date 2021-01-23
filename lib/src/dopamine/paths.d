@@ -118,12 +118,6 @@ struct PackageDir
         return _path(".dop");
     }
 
-    @property string sourceDest() const
-    in(hasDopamineFile)
-    {
-        return _path(".dop", "source");
-    }
-
     @property FlagFile sourceFlag() const
     in(hasDopamineFile)
     {
