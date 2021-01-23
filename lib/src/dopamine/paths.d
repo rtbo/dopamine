@@ -65,16 +65,29 @@ string userLoginFile()
     return buildPath(userDopDir(), "login.json");
 }
 
-PackageDir cacheDepDir(Recipe recipe) @system
+string cacheDepDir(string packname, Semver ver)
 {
-    return PackageDir(buildPath(userDopDir(), "packages", format("%s-%s",
-            recipe.name, recipe.ver), recipe.revision()));
+    return buildPath(userDopDir(), "packages", format("%s-%s", packname, ver));
 }
 
-FlagFile cacheDepDirFlag(Recipe recipe) @system
+PackageDir cacheDepRevDir(string packname, Semver ver, string revision)
 {
-    return FlagFile(buildPath(userDopDir(), "packages", format("%s-%s",
-            recipe.name, recipe.ver), "." ~ recipe.revision()));
+    return PackageDir(buildPath(cacheDepDir(packname, ver), revision));
+}
+
+FlagFile cacheDepRevDirFlag(string packname, Semver ver, string revision)
+{
+    return FlagFile(buildPath(cacheDepDir(packname, ver), "." ~ revision));
+}
+
+PackageDir cacheDepRevDir(Recipe recipe) @system
+{
+    return cacheDepRevDir(recipe.name, recipe.ver, recipe.revision());
+}
+
+FlagFile cacheDepRevDirFlag(Recipe recipe) @system
+{
+    return cacheDepRevDirFlag(recipe.name, recipe.ver, recipe.revision());
 }
 
 struct PackageDir
