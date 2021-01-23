@@ -32,6 +32,17 @@ struct BuildOptionDef
     BuildOptionVal def;
 }
 
+struct BuildDirs
+{
+    string src;
+    string install;
+}
+
+struct DepInfo
+{
+    string installDir;
+}
+
 struct Recipe
 {
     private RecipePayload d;
@@ -89,6 +100,11 @@ struct Recipe
         return d.langs;
     }
 
+    @property bool hasDependencies() const @safe
+    {
+        return d.depFunc || d.dependencies.length != 0;
+    }
+
     @property const(Dependency)[] dependencies(const(Profile) profile)
     {
         if (!d.depFunc)
@@ -144,7 +160,8 @@ struct Recipe
             throw new Exception("Cannot get recipe revision: " ~ luaTo!string(L, -1));
         }
 
-        return luaTo!string(L, -1);
+        d.revision = luaTo!string(L, -1);
+        return d.revision;
     }
 
     /// Returns: whether the source is included with the package
@@ -172,34 +189,43 @@ struct Recipe
         return L.luaPop!string();
     }
 
-    string build(Profile profile, string srcDir, string buildDir, string installDir)
+    string build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
     {
         auto L = d.L;
 
         lua_getglobal(L, "build");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
-        lua_createtable(L, 0, 3);
-        const paramsInd = lua_gettop(L);
+        lua_createtable(L, 0, 2);
+        const dirsInd = lua_gettop(L);
+        luaSetTable(L, dirsInd, "src", dirs.src);
+        luaSetTable(L, dirsInd, "install", dirs.install);
 
-        lua_pushliteral(L, "profile");
         luaPushProfile(L, profile);
-        lua_settable(L, paramsInd);
 
-        luaSetTable(L, paramsInd, "src_dir", srcDir);
-        luaSetTable(L, paramsInd, "build_dir", buildDir);
-        luaSetTable(L, paramsInd, "install_dir", installDir);
+        if (depInfos)
+        {
+            lua_createtable(L, 0, cast(int)depInfos.length);
+            foreach (k, di; depInfos)
+            {
+                lua_createtable(L, 0, 1);
+                luaSetTable(L, -1, "install_dir", di.installDir);
+                lua_settable(L, -2);
+            }
+        }
+
+        const nparams = depInfos ? 3 : 2;
 
         // 1 argument, 1 result
-        if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+        if (lua_pcall(L, nparams, 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
         }
 
-        scope (success)
+        scope (exit)
             lua_pop(L, 1);
 
-        string result = installDir;
+        string result = dirs.install;
         switch (lua_type(L, -1))
         {
         case LUA_TSTRING:

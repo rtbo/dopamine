@@ -115,7 +115,7 @@ int luaDopNativeModule(lua_State* L) nothrow
     ];
     const boolconsts = ["posix" : posix];
     const funcs = [
-        "trim" : &luaTrim, "join_paths" : &luaJoinPaths, "cwd" : &luaCwd,
+        "trim" : &luaTrim, "path" : &luaPath, "cwd" : &luaCwd,
         "chdir" : &luaChangeDir, "mkdir" : &luaMkdir, "run_cmd" : &luaRunCmd,
         "profile_environment" : &luaProfileEnvironment, "download" : &luaDownload,
         "checksum" : &luaChecksum, "create_archive" : &luaCreateArchive,
@@ -181,7 +181,7 @@ int luaTrim(lua_State* L) nothrow
     return 1;
 }
 
-int luaJoinPaths(lua_State* L) nothrow
+int luaPath(lua_State* L) nothrow
 {
     import std.path : isAbsolute, dirSeparator;
 

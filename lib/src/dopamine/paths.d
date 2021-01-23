@@ -151,7 +151,6 @@ struct PackageDir
 
         ProfileDirs dirs = void;
         dirs.work = _path(".dop", workDir);
-        dirs.build = _path(".dop", workDir, "build");
         dirs.install = _path(".dop", workDir, "install");
         return dirs;
     }
@@ -207,7 +206,7 @@ struct PackageDir
 
     private static string _workDirName(const(Profile) profile)
     {
-        return format("%s-%s", profile.digestHash[0 .. 10], profile.name);
+        return profile.digestHash[0 .. 10];
     }
 }
 
@@ -216,8 +215,6 @@ struct ProfileDirs
 {
     /// dop working directory
     string work;
-    /// directory into which build happens
-    string build;
     /// directory into which files are installed
     string install;
 

@@ -23,7 +23,7 @@ function dop.from_dir(dir, func)
         end
         return table.unpack(res)
     else
-        error(pres[2])
+        error(pres[2], -2)
     end
 end
 
@@ -65,8 +65,6 @@ function CMake:configure(params)
     self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
     self.install_dir = assert(params.install_dir,
                               'install_dir is a mandatory parameter')
-    local cwd = dop.cwd()
-    self.build_dir = params.build_dir or cwd
 
     self.defs['CMAKE_INSTALL_PREFIX'] = self.install_dir
 
@@ -95,19 +93,18 @@ function CMake:configure(params)
 
     table.insert(cmd, self.src_dir)
 
-    cmd['workdir'] = self.build_dir
     cmd['env'] = dop.profile_environment(self.profile)
 
     dop.run_cmd(cmd)
 end
 
 function CMake:build()
-    cmd = {'cmake', '--build', self.build_dir}
+    cmd = {'cmake', '--build', '.'}
     dop.run_cmd(cmd)
 end
 
 function CMake:install()
-    cmd = {'cmake', '--build', self.build_dir, '--target', 'install'}
+    cmd = {'cmake', '--build', '.', '--target', 'install'}
     dop.run_cmd(cmd)
 end
 
@@ -136,8 +133,6 @@ function Meson:setup(params)
                             'build_dir is a mandatory parameter')
     self.install_dir = assert(params.install_dir,
                               'install_dir is a mandatory parameter')
-    local cwd = dop.cwd()
-    self.src_dir = params.src_dir or cwd
 
     self.options['--prefix'] = params.install_dir
 
@@ -168,11 +163,11 @@ function Meson:setup(params)
 end
 
 function Meson:compile()
-    dop.run_cmd({'meson', 'compile', workdir = self.build_dir})
+    dop.run_cmd({'meson', 'compile'})
 end
 
 function Meson:install()
-    dop.run_cmd({'meson', 'install', workdir = self.build_dir})
+    dop.run_cmd({'meson', 'install'})
 end
 
 return dop

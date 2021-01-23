@@ -5,6 +5,7 @@ import dopamine.client.recipe;
 import dopamine.client.source;
 import dopamine.log;
 import dopamine.paths;
+import dopamine.recipe;
 import dopamine.state;
 
 import std.exception;
@@ -22,12 +23,11 @@ string enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
 int buildMain(string[] args)
 {
     string profileName;
-    string buildDir;
     string installDir;
     bool force;
 
-    auto helpInfo = getopt(args, "profile|p", &profileName, "build-dir|b",
-            &buildDir, "install-dir|i", &installDir, "force", &force);
+    auto helpInfo = getopt(args, "profile|p", &profileName, "install-dir|i",
+            &installDir, "force", &force);
 
     if (helpInfo.helpWanted)
     {
@@ -49,20 +49,14 @@ int buildMain(string[] args)
         return 0;
     }
 
-    const cwd = getcwd();
-
-    const srcDir = enforceSourceReady(dir, recipe).absolutePath(cwd);
-
-    if (!buildDir)
-        buildDir = profileDirs.build;
+    const srcDir = enforceSourceReady(dir, recipe);
 
     if (!installDir)
         installDir = profileDirs.install;
 
-    buildDir = buildDir.absolutePath(cwd);
-    installDir = installDir.absolutePath(cwd);
+    const buildDirs = BuildDirs(srcDir, installDir.absolutePath());
 
-    const buildInfo = recipe.build(profile, srcDir, buildDir, installDir).relativePath(cwd);
+    const buildInfo = recipe.build(buildDirs, profile);
     profileDirs.buildFlag.write(buildInfo);
 
     logInfo("%s: %s - %s", info("Build"), success("OK"), buildInfo);

@@ -6,6 +6,7 @@ import test.util;
 import dopamine.dependency;
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.util;
 
 import std.file;
 
@@ -57,13 +58,12 @@ unittest
     auto recipe = pkgRecipe("pkga");
 
     const srcDir = testPath("data/pkga");
-    const buildDir = testPath("gen/pkga/build");
     const installDir = testPath("gen/pkga/install");
     auto profile = ensureDefaultProfile();
 
-    mkdirRecurse(buildDir);
-
-    recipe.build(profile, srcDir, buildDir, installDir);
+    srcDir.fromDir!({
+        recipe.build(BuildDirs(".", installDir), profile);
+    });
 }
 
 @("pkgb.dependencies")
