@@ -65,6 +65,11 @@ struct DepDAG
     package DepPack root;
     package Heuristics heuristics;
 
+    bool opCast(T : bool)() const
+    {
+        return root !is null;
+    }
+
     auto traverseTopDown(Flag!"root" traverseRoot = No.root) @safe
     {
         auto res = DepthFirstTopDownRange([root]);
