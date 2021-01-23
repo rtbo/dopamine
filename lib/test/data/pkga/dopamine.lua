@@ -4,7 +4,7 @@ name = 'pkga'
 version = '1.0.0'
 
 function source()
-    return "."
+    return '.'
 end
 
 function build(dirs, profile)
@@ -12,11 +12,8 @@ function build(dirs, profile)
 
     dop.from_dir(dirs.src, function()
         local build = dop.path('build', profile.digest_hash)
-        dop.mkdir {build, recurse=true}
-        meson:setup{
-            build_dir=build,
-            install_dir=dirs.install
-        }
+        dop.mkdir {build, recurse = true}
+        meson:setup{build_dir = build, install_dir = dirs.install}
         dop.from_dir(build, function()
             meson:compile()
             meson:install()

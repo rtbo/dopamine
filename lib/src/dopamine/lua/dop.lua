@@ -18,8 +18,8 @@ function dop.from_dir(dir, func)
     if pres[1] then
         -- shift left and unpack results
         local res = {}
-        for i=2,#pres do
-            res[i-1] = pres[i]
+        for i = 2, #pres do
+            res[i - 1] = pres[i]
         end
         return table.unpack(res)
     else
@@ -35,11 +35,21 @@ dop.Git = Git
 -- Assign this to your package revision if you want to use git as package revision tracker
 function Git.revision()
     return function()
-        local status = dop.run_cmd({'git', 'status', '--porcelain', catch_output = true})
+        local status = dop.run_cmd({
+            'git',
+            'status',
+            '--porcelain',
+            catch_output = true,
+        })
         if status ~= '' then
             error('Git repo not clean', 2)
         end
-        return dop.trim(dop.run_cmd({'git', 'rev-parse', 'HEAD', catch_output = true}))
+        return dop.trim(dop.run_cmd({
+            'git',
+            'rev-parse',
+            'HEAD',
+            catch_output = true,
+        }))
     end
 end
 
@@ -52,9 +62,7 @@ function CMake:new(profile)
     setmetatable(o, self)
 
     o.profile = assert(profile, 'profile is mandatory')
-    o.defs = {
-        ['CMAKE_BUILD_TYPE'] = profile.build_type
-    }
+    o.defs = {['CMAKE_BUILD_TYPE'] = profile.build_type}
 
     return o
 end
