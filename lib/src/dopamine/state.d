@@ -1,5 +1,7 @@
 module dopamine.state;
 
+import dopamine.depdag;
+import dopamine.deplock;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
@@ -84,4 +86,19 @@ private string checkFlagFile(PackageDir dir, FlagFile flag, FlagFile previous)
 string checkBuildReady(PackageDir dir, ProfileDirs pdirs)
 {
     return checkFlagFile(dir, pdirs.buildFlag, dir.sourceFlag);
+}
+
+/// Check if a lock-file exists and is up-to-date for package in [dir]
+/// Returns: the DAG loaded from the lock-file, or null
+DepDAG checkLoadLockFile(PackageDir dir)
+{
+    const lf = dir.lockFile;
+
+    if (!exists(lf))
+        return DepDAG.init;
+
+    if (timeLastModified(dir.dopamineFile) >= timeLastModified(lf))
+        return DepDAG.init;
+
+    return dagFromLockFileContent(lf);
 }
