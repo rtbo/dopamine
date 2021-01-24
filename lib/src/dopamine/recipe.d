@@ -206,17 +206,21 @@ struct Recipe
         if (depInfos)
         {
             lua_createtable(L, 0, cast(int)depInfos.length);
+            const depInfosInd = lua_gettop(L);
             foreach (k, di; depInfos)
             {
+                lua_pushlstring(L, k.ptr, k.length);
+
                 lua_createtable(L, 0, 1);
                 luaSetTable(L, -1, "install_dir", di.installDir);
-                lua_settable(L, -2);
+
+                lua_settable(L, depInfosInd);
             }
         }
 
         const nparams = depInfos ? 3 : 2;
 
-        // 1 argument, 1 result
+        // nparams argument, 1 result
         if (lua_pcall(L, nparams, 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
