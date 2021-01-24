@@ -39,7 +39,8 @@ interface CacheRepo
     ///     packname = name of the package
     /// Returns: the list of versions available of the package
     /// Throws: ServerDownException, NoSuchPackageException
-    Semver[] packAvailVersions(string packname) @safe;
+    Semver[] packAvailVersions(string packname) @safe
+    out(res; res.length > 0);
 
     /// Check whether a package version is in local cache or not
     /// Params:
@@ -68,6 +69,13 @@ struct DepDAG
     bool opCast(T : bool)() const
     {
         return root !is null;
+    }
+
+    @property Lang[] allLangs()
+    {
+        if (root && root.resolvedNode)
+            return root.resolvedNode.langs;
+        return [];
     }
 
     auto traverseTopDown(Flag!"root" traverseRoot = No.root) @safe
@@ -217,12 +225,18 @@ class DepNode
     /// The package version
     Semver ver;
 
+    /// The package revision
+    string revision;
+
     /// The edges going to dependencies of this package
     DepEdge[] downEdges;
 
     /// The languages of this node and all dependencies
     /// This is generally fetched after resolution
     Lang[] langs;
+
+    /// User data
+    Object userData;
 
     this(DepPack pack, Semver ver) @safe
     {
@@ -309,6 +323,10 @@ DepDAG prepareDepDAG(Recipe recipe, Profile profile, CacheRepo cacheRepo, Heuris
         visited ~= node;
 
         auto rec = pack is root ? recipe : cacheRepo.packRecipe(pack.name, ver);
+        if (pack !is root)
+        {
+            node.revision = rec.revision();
+        }
         auto deps = rec.dependencies(profile);
         foreach (dep; deps)
         {
@@ -441,6 +459,34 @@ DepNode[string] dagCollectResolved(DepDAG dag) @safe
     DepNode[string] res;
 
     dag.traverseTopDownResolved(Yes.root).each!(n => res[n.pack.name] = n);
+
+    return res;
+}
+
+/// Collect all resolved nodes that are dependencies of the given [node]
+DepNode[string] dagCollectDependencies(DepNode node) @safe
+{
+    DepNode[string] res;
+
+    void doNode(DepNode n) @safe
+    {
+        res[n.pack.name] = n;
+        foreach (e; n.downEdges)
+        {
+            if (e.down.resolvedNode)
+            {
+                doNode(e.down.resolvedNode);
+            }
+        }
+    }
+
+    foreach (e; node.downEdges)
+    {
+        if (e.down.resolvedNode)
+        {
+            doNode(e.down.resolvedNode);
+        }
+    }
 
     return res;
 }

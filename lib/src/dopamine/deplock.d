@@ -70,13 +70,17 @@ in(emitAllVersions || dagIsResolved(dag))
                 scope (success)
                     indent--;
 
+                if (n.revision)
+                {
+                    line("revision: %s", n.revision);
+                }
+
                 if (n.langs.length)
                 {
                     line("langs: %s", n.langs.strFromLangs().join(", "));
                 }
                 foreach (e; n.downEdges)
                 {
-
                     line("dependency: %s %s", e.down.name, e.spec);
                 }
             }
@@ -137,6 +141,13 @@ DepDAG dagFromLockFileContent(string content, string filename = null) @safe
         bool considered;
     }
 
+    struct Rev
+    {
+        string pack;
+        Semver ver;
+        string revision;
+    }
+
     struct Lng
     {
         string pack;
@@ -159,6 +170,7 @@ DepDAG dagFromLockFileContent(string content, string filename = null) @safe
     Heuristics heuristics;
     string[] packs;
     Ver[] vers;
+    Rev[] revs;
     Lng[] langs;
     Dep[] deps;
 
@@ -169,6 +181,7 @@ DepDAG dagFromLockFileContent(string content, string filename = null) @safe
         enum hmark = "heuristics: ";
         enum pmark = "package: ";
         enum vmark = "version: ";
+        enum rmark = "revision: ";
         enum lmark = "langs: ";
         enum dmark = "dependency: ";
         enum resolvedmark = " [resolved]";
@@ -229,6 +242,12 @@ DepDAG dagFromLockFileContent(string content, string filename = null) @safe
                 curver = Semver(l);
                 seenver = true;
                 vers ~= Ver(curpack, curver, resolved, considered);
+            }
+            else if (l.startsWith(rmark))
+            {
+                enforce(curpack && seenver, new InvalidLockFileException(filename,
+                        line, "Ill-formed lock-file"));
+                revs ~= Rev(curpack, curver, l[rmark.length .. $]);
             }
             else if (l.startsWith(lmark))
             {
@@ -304,6 +323,12 @@ DepDAG dagFromLockFileContent(string content, string filename = null) @safe
         depacks[p] = pack;
         if (root is null)
             root = pack;
+    }
+
+    foreach (r; revs)
+    {
+        auto node = depacks[r.pack].getNode(r.ver);
+        node.revision = r.revision;
     }
 
     foreach (l; langs)

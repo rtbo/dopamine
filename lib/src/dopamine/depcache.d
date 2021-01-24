@@ -49,6 +49,12 @@ final class DependencyCache : CacheRepo
 {
     private Package[string] _packageCache;
     private Recipe[string] _recipeCache;
+    private Flag!"network" _network;
+
+    this(Flag!"network" network = Yes.network)
+    {
+        _network = network;
+    }
 
     /// Clean all recipes held in memory
     void dispose()
@@ -95,10 +101,25 @@ final class DependencyCache : CacheRepo
             }
         }
 
-        // must go through API
-        auto recipe = cacheRecipeNetwork(packname, ver, revision);
-        _recipeCache[depId(packname, ver, revision)] = recipe;
-        return recipe;
+        if (!revision || !_network)
+        {
+            auto recipe = findRecipeCache(packname, ver);
+            if (recipe)
+            {
+                _recipeCache[depId(packname, ver, recipe.revision())] = recipe;
+                return recipe;
+            }
+        }
+
+        if (_network)
+        {
+            // must go through API
+            auto recipe = cacheRecipeNetwork(packname, ver, revision);
+            _recipeCache[depId(packname, ver, revision)] = recipe;
+            return recipe;
+        }
+
+        throw new NoSuchVersionException(packname, ver);
     }
 
     /// Get the available versions of a package
@@ -107,15 +128,23 @@ final class DependencyCache : CacheRepo
     /// Returns: the list of versions available of the package
     /// Throws: ServerDownException, NoSuchPackageException
     Semver[] packAvailVersions(string packname) @trusted
+    out(res; res.length > 0)
     {
         import std.algorithm : map;
         import std.array : array;
         import std.exception : enforce;
 
-        auto pack = getPackageMemOrNetwork(packname);
-        auto resp = API().getPackageVersions(pack.id, false);
-        enforce(resp.code != 404, new NoSuchPackageException(packname));
-        return resp.payload.map!(v => Semver(v)).array;
+        if (_network)
+        {
+            auto pack = getPackageMemOrNetwork(packname);
+            auto resp = API().getPackageVersions(pack.id, false);
+            enforce(resp.code != 404, new NoSuchPackageException(packname));
+            return resp.payload.map!(v => Semver(v)).array;
+        }
+        else
+        {
+            return allVersionsCached(packname);
+        }
     }
 
     /// Check whether a package version is in local cache or not
@@ -129,16 +158,19 @@ final class DependencyCache : CacheRepo
         import std.file : dirEntries, SpanMode;
         import std.format : format;
         import std.path : buildPath;
+
         if (revision)
         {
             const dir = cacheDepRevDir(packname, ver, revision);
             return dir.hasDopamineFile;
         }
-        else {
+        else
+        {
             const dir = buildPath(userPackagesDir(), format("%s-%s", packname, ver));
             foreach (e; dirEntries(dir, SpanMode.depth))
             {
-                if (e.isFile && e.name == "dopamine.lua") return true;
+                if (e.isFile && e.name == "dopamine.lua")
+                    return true;
             }
             return false;
         }
@@ -185,6 +217,52 @@ final class DependencyCache : CacheRepo
             return Recipe.parseFile(dir.dopamineFile, revision);
         }
         return Recipe.init;
+    }
+
+    private Recipe findRecipeCache(string packname, Semver ver) @system
+    {
+        import std.algorithm : map, filter, sort;
+        import std.array : array;
+        import std.file : exists, isDir, dirEntries, SpanMode, DirEntry, timeLastModified;
+        import std.path : baseName, buildPath, dirName;
+
+        const dir = cacheDepVerDir(packname, ver);
+        if (!exists(dir) || !isDir(dir))
+            return Recipe.init;
+
+        string flag(string rev)
+        {
+            return buildPath(dir, "." ~ rev);
+        }
+
+        auto revs = dirEntries(dir, SpanMode.shallow).filter!(e => e.isDir)
+            .map!(e => baseName(e.name))
+            .filter!(r => exists(flag(r)))
+            .array;
+
+        if (revs.length == 0)
+            return Recipe.init;
+
+        revs.sort!((a, b) => timeLastModified(flag(a)) > timeLastModified(flag(b)));
+
+        return getRecipeCache(packname, ver, revs[0]);
+    }
+
+    private Semver[] allVersionsCached(string packname)
+    {
+        import std.algorithm : map, filter, sort;
+        import std.array : array;
+        import std.file : exists, isDir, dirEntries, SpanMode;
+        import std.path : baseName;
+
+        const packdir = cacheDepPackDir(packname);
+        auto vers = dirEntries(packdir, SpanMode.shallow).filter!(e => e.isDir)
+            .map!(e => baseName(e.name))
+            .filter!(s => Semver.isValid(s))
+            .map!(v => Semver(v))
+            .array;
+        vers.sort!((a, b) => a > b);
+        return vers;
     }
 
     private Recipe cacheRecipeNetwork(string packname, Semver ver, string revision = null) @system

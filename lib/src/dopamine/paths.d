@@ -65,19 +65,24 @@ string userLoginFile()
     return buildPath(userDopDir(), "login.json");
 }
 
-string cacheDepDir(string packname, Semver ver)
+string cacheDepPackDir(string packname)
 {
-    return buildPath(userDopDir(), "packages", format("%s-%s", packname, ver));
+    return buildPath(userDopDir(), "packages", packname);
+}
+
+string cacheDepVerDir(string packname, Semver ver)
+{
+    return buildPath(userDopDir(), "packages", packname, ver.toString());
 }
 
 PackageDir cacheDepRevDir(string packname, Semver ver, string revision)
 {
-    return PackageDir(buildPath(cacheDepDir(packname, ver), revision));
+    return PackageDir(buildPath(userDopDir(), "packages", packname, ver.toString(), revision));
 }
 
 FlagFile cacheDepRevDirFlag(string packname, Semver ver, string revision)
 {
-    return FlagFile(buildPath(cacheDepDir(packname, ver), "." ~ revision));
+    return FlagFile(buildPath(userDopDir(), "packages", packname, ver.toString(), "." ~ revision));
 }
 
 PackageDir cacheDepRevDir(Recipe recipe) @system

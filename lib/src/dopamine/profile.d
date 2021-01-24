@@ -408,6 +408,13 @@ final class Profile
         return new Profile (this.basename, this.hostInfo, this.buildType, compilers);
     }
 
+    bool hasAllLangs(const (Lang)[] langs) const @trusted
+    {
+        import std.algorithm : canFind;
+
+        return langs.all!(l => this.langs.canFind(l));
+    }
+
     Profile subset(const(Lang)[] langs) const
     in(langs.length, "Cannot create a Profile subset without language")
     {
