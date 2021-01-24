@@ -136,6 +136,13 @@ struct FlagFile
 {
     string path;
 
+    FlagFile absolute(string cwd=getcwd())
+    {
+        import std.path : absolutePath;
+
+        return FlagFile(path.absolutePath(cwd));
+    }
+
     @property bool exists()
     {
         import std.file : exists;
