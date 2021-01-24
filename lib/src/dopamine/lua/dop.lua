@@ -61,18 +61,30 @@ function CMake:new(profile)
     o = {}
     setmetatable(o, self)
 
-    o.profile = assert(profile, 'profile is mandatory')
+    if profile == nil then
+        error('profile is mandatory', -2)
+    end
+    if profile.build_type == nil then
+        error('wrong profile parameter', -2)
+    end
+    o.profile = profile
     o.defs = {['CMAKE_BUILD_TYPE'] = profile.build_type}
 
     return o
 end
 
 function CMake:configure(params)
-
-    assert(params, 'CMake:configure must be passed a parameter table')
-    self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
-    self.install_dir = assert(params.install_dir,
-                              'install_dir is a mandatory parameter')
+    if params == nil then
+        error('CMake:configure must be passed a parameter table', -2)
+    end
+    if params.src_dir == nil then
+        error('CMake:configure: src_dir is a mandatory parameter', -2)
+    end
+    if params.install_dir == nil then
+        error('CMake:configure: install_dir is a mandatory parameter', -2)
+    end
+    self.src_dir = params.src_dir
+    self.install_dir = params.install_dir
 
     self.defs['CMAKE_INSTALL_PREFIX'] = self.install_dir
 
