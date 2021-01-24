@@ -240,7 +240,7 @@ string[] luaReadStringArray(lua_State* L, int ind) nothrow
 
 // some debugging functions
 
-void printStack(lua_State* L)
+void luaPrintStack(lua_State* L)
 {
     import std.stdio : writef, writefln, writeln;
     import std.string : fromStringz;
@@ -287,7 +287,7 @@ void printStack(lua_State* L)
 
 }
 
-void printTable(lua_State* L, int ind)
+void luaPrintTable(lua_State* L, int ind)
 {
     import std.stdio : writefln;
 
