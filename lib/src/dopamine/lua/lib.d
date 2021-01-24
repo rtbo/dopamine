@@ -193,7 +193,7 @@ int luaPath(lua_State* L) nothrow
     {
         size_t l;
         const s = luaL_checklstring(L, i, &l);
-        if (n > 1 && isAbsolute(s[0 .. l]))
+        if (i > 1 && isAbsolute(s[0 .. l]))
         {
             return luaL_argerror(L, i, "Invalid absolute path after first position");
         }
