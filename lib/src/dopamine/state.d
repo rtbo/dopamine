@@ -100,5 +100,5 @@ DepDAG checkLoadLockFile(PackageDir dir)
     if (timeLastModified(dir.dopamineFile) >= timeLastModified(lf))
         return DepDAG.init;
 
-    return dagFromLockFileContent(lf);
+    return dagFromLockFile(lf);
 }

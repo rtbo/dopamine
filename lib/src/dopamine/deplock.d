@@ -322,6 +322,15 @@ DepDAG dagFromLockFileContent(string content, string filename = null) @safe
     return DepDAG(root, heuristics);
 }
 
+DepDAG dagFromLockFile(string filename) @trusted
+{
+    import std.exception : assumeUnique;
+    import std.file : read;
+
+    string content = cast(string)assumeUnique(read(filename));
+    return dagFromLockFileContent(content, filename);
+}
+
 @("Test Lock-file serialization")
 unittest
 {
