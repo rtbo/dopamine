@@ -18,6 +18,8 @@ import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
 
+import std.typecons;
+
 /// Interface for an object that interacts with repository and/or local package cache
 /// Implementation may be cache-only or cache+network
 /// Implementation may also be a test mock.
@@ -27,23 +29,26 @@ interface CacheRepo
     /// Params:
     ///     packname = name of the package
     ///     ver = version of the package
+    ///     revision = optional revision of the package
     /// Returns: The recipe of the package
     /// Throws: ServerDownException, NoSuchPackageException, NoSuchPackageVersionException
-    const(Recipe) packRecipe(string packname, const(Semver) ver) @safe;
+    Recipe packRecipe(string packname, Semver ver, string revision = null) @safe;
 
     /// Get the available versions of a package
     /// Params:
     ///     packname = name of the package
     /// Returns: the list of versions available of the package
     /// Throws: ServerDownException, NoSuchPackageException
-    Semver[] packAvailVersions(string packname) @safe;
+    Semver[] packAvailVersions(string packname) @safe
+    out(res; res.length > 0);
 
     /// Check whether a package version is in local cache or not
     /// Params:
     ///     packname = name of the package
     ///     ver = version of the package
+    ///     revision = optional revision of the package
     /// Retruns: whether the package is in local cache
-    bool packIsCached(string packname, const(Semver) ver) @safe;
+    bool packIsCached(string packname, Semver ver, string revision = null) @safe;
 }
 
 /// Heuristics to help choosing a package version in a set of compatible versions
@@ -55,17 +60,106 @@ enum Heuristics
     pickHighest,
 }
 
+/// Dependency graph
+struct DepDAG
+{
+    package DepPack root;
+    package Heuristics heuristics;
+
+    bool opCast(T : bool)() const
+    {
+        return root !is null;
+    }
+
+    @property Lang[] allLangs()
+    {
+        if (root && root.resolvedNode)
+            return root.resolvedNode.langs;
+        return [];
+    }
+
+    auto traverseTopDown(Flag!"root" traverseRoot = No.root) @safe
+    {
+        auto res = DepthFirstTopDownRange([root]);
+
+        if (!traverseRoot)
+            res.popFront();
+
+        return res;
+    }
+
+    auto traverseBottomUp(Flag!"root" traverseRoot = No.root) @safe
+    {
+        auto res = DepthFirstBottomUpRange(collectLeaves());
+
+        if (!traverseRoot)
+            res.visited ~= root;
+
+        return res;
+    }
+
+    auto traverseTopDownResolved(Flag!"root" traverseRoot = No.root) @safe
+    {
+        import std.algorithm : filter, map;
+
+        return traverseTopDown(traverseRoot).filter!(p => (p.resolvedNode !is null))
+            .map!(p => p.resolvedNode);
+    }
+
+    auto traverseBottomUpResolved(Flag!"root" traverseRoot = No.root) @safe
+    {
+        import std.algorithm : filter, map;
+
+        return traverseBottomUp(traverseRoot).filter!(p => (p.resolvedNode !is null))
+            .map!(p => p.resolvedNode);
+    }
+
+    /// Collect all leaves from a graph, that is nodes without leaving edges
+    DepPack[] collectLeaves() @safe
+    {
+        import std.algorithm : canFind;
+
+        DepPack[] traversed;
+        DepPack[] leaves;
+
+        void collectLeaves(DepPack pack) @trusted
+        {
+            if (traversed.canFind(pack))
+                return;
+            traversed ~= pack;
+
+            bool isLeaf = true;
+            foreach (n; pack.nodes)
+            {
+                foreach (e; n.downEdges)
+                {
+                    collectLeaves(e.down);
+                    isLeaf = false;
+                }
+            }
+            if (isLeaf)
+            {
+                leaves ~= pack;
+            }
+        }
+
+        collectLeaves(root);
+
+        return leaves;
+    }
+}
+
 /// Dependency DAG package : represent a package and gathers DAG nodes, each of which is a version of this package
 class DepPack
 {
     /// Name of the package
     string name;
 
-    /// The available versions of the package
+    /// The available versions of the package that are compatible with the current state of the DAG.
     Semver[] allVersions;
 
-    /// The version nodes of the package that are compabile with the current state of the DAG.
-    /// Starts with the full list of available versions and reduces during resolution.
+    /// The version nodes of the package that are considered for the resolution.
+    /// This is a subset of allVersions
     DepNode[] nodes;
 
     /// The resolved version node
@@ -74,29 +168,27 @@ class DepPack
     /// Edges towards packages that depends on this
     DepEdge[] upEdges;
 
-    this(string name, Semver[] allVersions) @safe
-    in(isStrictlyMonotonic(allVersions))
+    package this(string name) @safe
     {
-        import std.algorithm : map;
-        import std.array : array;
-
         this.name = name;
-        this.allVersions = allVersions;
-        nodes = allVersions.map!(v => new DepNode(this, v)).array;
-    }
-
-    /// The versions of the package that are compabile with the current state of the DAG.
-    /// Starts with the full list of available versions and reduces during resolution.
-    @property const(Semver)[] compatibleVersions() const @safe pure
-    {
-        import std.algorithm : map;
-        import std.array : array;
-
-        return nodes.map!(n => n.ver).array;
     }
 
     /// Get node that match with [ver]
-    DepNode getNode(const(Semver) ver) @safe
+    /// Create one if doesn't exist
+    package DepNode getOrCreateNode(const(Semver) ver) @safe
+    {
+        foreach (n; nodes)
+        {
+            if (n.ver == ver)
+                return n;
+        }
+        auto node = new DepNode(this, ver);
+        nodes ~= node;
+        return node;
+    }
+
+    /// Get existing node that match with [ver], or null
+    package DepNode getNode(Semver ver) @safe
     {
         foreach (n; nodes)
         {
@@ -106,31 +198,12 @@ class DepPack
         return null;
     }
 
-    /// Removes nodes whose version do not match with [spec]
-    /// and clean-up connected edges
-    private void filterVersions(VersionSpec spec) @trusted
+    Semver[] consideredVersions() const @safe
     {
-        import std.algorithm : remove;
+        import std.algorithm : map;
+        import std.array : array;
 
-        size_t i;
-        while (i < nodes.length)
-        {
-            if (spec.matchVersion(nodes[i].ver))
-            {
-                i++;
-                continue;
-            }
-
-            // must remove this version, as well as clean-up up-edges
-            // in lower nodes
-            foreach (de; nodes[i].downEdges)
-            {
-                de.down.upEdges = de.down.upEdges.remove!(e => e == de);
-            }
-
-            // no increment as size is reduced
-            nodes = nodes.remove(i);
-        }
+        return nodes.map!(n => cast(Semver) n.ver).array;
     }
 
     /// Remove node matching with ver.
@@ -152,12 +225,18 @@ class DepNode
     /// The package version
     Semver ver;
 
+    /// The package revision
+    string revision;
+
     /// The edges going to dependencies of this package
     DepEdge[] downEdges;
 
     /// The languages of this node and all dependencies
     /// This is generally fetched after resolution
     Lang[] langs;
+
+    /// User data
+    Object userData;
 
     this(DepPack pack, Semver ver) @safe
     {
@@ -182,16 +261,16 @@ class DepEdge
     /// Create a dependency edge between a package version and another package
     static DepEdge create(DepNode up, DepPack down, VersionSpec spec) @safe
     {
-        auto res = new DepEdge;
+        auto edge = new DepEdge;
 
-        res.up = up;
-        res.down = down;
-        res.spec = spec;
+        edge.up = up;
+        edge.down = down;
+        edge.spec = spec;
 
-        up.downEdges ~= res;
-        down.upEdges ~= res;
+        up.downEdges ~= edge;
+        down.upEdges ~= edge;
 
-        return res;
+        return edge;
     }
 
     bool onResolvedPath() const @safe
@@ -200,177 +279,73 @@ class DepEdge
     }
 }
 
-/// Prepare a dependency DAG for package described by [recipe]
-/// The construction of the DAG is made in top-down direction (from the root
-/// package down to its dependencies.
-DepPack prepareDepDAG(const(Recipe) recipe, CacheRepo cacheRepo) @safe
+/// Prepare a dependency DAG for the given recipe and profile.
+DepDAG prepareDepDAG(Recipe recipe, Profile profile, CacheRepo cacheRepo, Heuristics heuristics) @system
 {
-    import std.algorithm : canFind, filter, map, sort;
+    import std.algorithm : canFind, filter, sort, uniq;
     import std.array : array;
-    import std.exception : enforce;
 
     DepPack[string] packs;
 
-    DepPack prepPack(string name) @safe
+    DepPack prepDepPack(Dependency dep)
     {
-        if (auto p = name in packs)
-            return *p;
+        auto av = cacheRepo.packAvailVersions(dep.name)
+            .filter!(v => dep.spec.matchVersion(v)).array;
 
-        auto av = cacheRepo.packAvailVersions(name);
-        sort(av);
+        DepPack pack;
+        if (auto p = dep.name in packs)
+            pack = *p;
 
-        auto pack = new DepPack(name, av);
+        if (pack)
+        {
+            av ~= pack.allVersions;
+        }
+        else
+        {
+            pack = new DepPack(dep.name);
+            packs[dep.name] = pack;
+        }
 
-        packs[name] = pack;
-
+        pack.allVersions = sort(av).uniq().array;
         return pack;
     }
 
     DepNode[] visited;
-    DepPack root = new DepPack(recipe.name, [recipe.ver]);
+    DepPack root = new DepPack(recipe.name);
+    root.allVersions = [recipe.ver];
 
-    void doPackVersion(DepPack pack, const(Semver) ver) @trusted
+    void doPackVersion(DepPack pack, Semver ver)
     {
-        auto node = pack.getNode(ver);
-        assert(node);
-
+        auto node = pack.getOrCreateNode(ver);
         if (visited.canFind(node))
             return;
 
         visited ~= node;
 
-        const recipe = pack is root ? recipe : cacheRepo.packRecipe(pack.name, ver);
-
-        foreach (dep; recipe.dependencies)
+        auto rec = pack is root ? recipe : cacheRepo.packRecipe(pack.name, ver);
+        if (pack !is root)
         {
-            auto dp = prepPack(dep.name);
-
+            node.revision = rec.revision();
+        }
+        auto deps = rec.dependencies(profile);
+        foreach (dep; deps)
+        {
+            auto dp = prepDepPack(dep);
             DepEdge.create(node, dp, dep.spec);
 
-            foreach (v; dp.compatibleVersions)
-            {
-                doPackVersion(dp, v);
-            }
+            const dv = chooseVersion(heuristics, cacheRepo, dp.name, dp.allVersions);
+            doPackVersion(dp, dv);
         }
     }
 
     doPackVersion(root, recipe.ver);
 
-    return root;
-}
-
-/// Collect all leaves from a graph, that is nodes without leaving edges
-DepPack[] collectDAGLeaves(DepPack root) @safe
-{
-    import std.algorithm : canFind;
-
-    DepPack[] traversed;
-    DepPack[] leaves;
-
-    void collectLeaves(DepPack pack) @trusted
-    {
-        if (traversed.canFind(pack))
-            return;
-        traversed ~= pack;
-
-        bool isLeaf = true;
-        foreach (n; pack.nodes)
-        {
-            foreach (e; n.downEdges)
-            {
-                collectLeaves(e.down);
-                isLeaf = false;
-            }
-        }
-        if (isLeaf)
-        {
-            leaves ~= pack;
-        }
-    }
-
-    collectLeaves(root);
-
-    return leaves;
-}
-
-/// Traverse the graph from top to bottom  and apply [dg] for
-/// every package on the way
-void traversePacksTopDown(DepPack root, void delegate(DepPack) @safe dg) @safe
-{
-    import std.algorithm : canFind;
-
-    DepPack[] traversed;
-
-    void traverse(DepPack pack) @trusted // canFind is @system
-    {
-        if (traversed.canFind(pack))
-            return;
-        traversed ~= pack;
-
-        dg(pack);
-
-        foreach (n; pack.nodes)
-            foreach (e; n.downEdges)
-                traverse(e.down);
-    }
-
-    traverse(root);
-}
-
-/// Traverse the graph from bottom to top and apply [dg] for
-/// every package on the way.
-/// In order to traverse in this direction, the tree is traversed once
-/// in top down direction in order to collect the leaves
-void traversePacksBottomUp(DepPack root, void delegate(DepPack) @safe dg) @safe
-{
-    import std.algorithm : canFind;
-
-    DepPack[] traversed;
-
-    void traverse(DepPack pack) @trusted // canFind is @system
-    {
-        if (traversed.canFind(pack))
-            return;
-        traversed ~= pack;
-
-        dg(pack);
-
-        foreach (e; pack.upEdges)
-            traverse(e.up.pack);
-    }
-
-    auto leaves = collectDAGLeaves(root);
-    foreach (l; leaves)
-        traverse(l);
-}
-
-/// Traverse the graph from top to bottom and apply [dg]
-/// on every resolved node found on the way.
-void traverseResolvedNodesTopDown(DepPack root, void delegate(DepNode) @safe dg) @safe
-{
-    import std.algorithm : canFind;
-
-    traversePacksTopDown(root, (DepPack pack) @safe {
-        if (pack.resolvedNode)
-            dg(pack.resolvedNode);
-    });
-}
-
-/// Traverse the graph from top to bottom and apply [dg]
-/// on every resolved node found on the way.
-void traverseResolvedNodesBottomUp(DepPack root, void delegate(DepNode) @safe dg) @safe
-{
-    import std.algorithm : canFind;
-
-    traversePacksBottomUp(root, (DepPack pack) @safe {
-        if (pack.resolvedNode)
-            dg(pack.resolvedNode);
-    });
+    return DepDAG(root, heuristics);
 }
 
 /// Finalize filtering of incompatible versions in the DAG
 /// This is done by successive up traversals until nothing changes
-void checkDepDAGCompat(DepPack root) @safe
+void checkDepDAGCompat(DepDAG dag) @trusted
 {
     import std.algorithm : any, canFind, filter, remove;
 
@@ -380,9 +355,8 @@ void checkDepDAGCompat(DepPack root) @safe
     while (1)
     {
         bool diff;
-        traversePacksBottomUp(root, (DepPack pack) @trusted {
-            if (pack == root)
-                return;
+        foreach (pack; dag.traverseBottomUp())
+        {
             // Remove nodes of pack for which at least one up package is found
             // without compatibility with it
             DepPack[] ups;
@@ -426,7 +400,7 @@ void checkDepDAGCompat(DepPack root) @safe
                     ni++;
                 }
             }
-        });
+        }
 
         if (!diff)
             break;
@@ -434,8 +408,8 @@ void checkDepDAGCompat(DepPack root) @safe
 }
 
 /// Resolves a DAG such as each package has a resolved version
-void resolveDepDAG(DepPack root, CacheRepo cacheRepo, Heuristics heuristics)
-out(; dagIsResolved(root))
+void resolveDepDAG(DepDAG dag, CacheRepo cacheRepo)
+out(; dagIsResolved(dag))
 {
     void resolveDeps(DepPack pack)
     in(pack.resolvedNode)
@@ -445,8 +419,8 @@ out(; dagIsResolved(root))
             if (e.down.resolvedNode)
                 continue;
 
-            const resolved = chooseVersion(heuristics, cacheRepo, e.down.name,
-                    e.down.compatibleVersions);
+            const resolved = chooseVersion(dag.heuristics, cacheRepo,
+                    e.down.name, e.down.consideredVersions);
 
             foreach (n; e.down.nodes)
             {
@@ -460,48 +434,72 @@ out(; dagIsResolved(root))
         }
     }
 
-    root.resolvedNode = root.nodes[0];
-    resolveDeps(root);
+    dag.root.resolvedNode = dag.root.nodes[0];
+    resolveDeps(dag.root);
 }
 
 /// Check whether a DAG is fully resolved
-bool dagIsResolved(DepPack root) @safe
+bool dagIsResolved(DepDAG dag) @safe
 {
-    bool resolved = true;
+    import std.algorithm : all;
 
-    traversePacksTopDown(root, (p) @safe {
-        if (p.resolvedNode is null)
-            resolved = false;
+    return dag.traverseTopDown(Yes.root).all!((DepPack p) {
+        return p.resolvedNode !is null;
     });
-
-    return resolved;
 }
 
 /// Collect all resolved nodes into a dictionary
 /// Params
 ///     root = the root package of the DAG
 /// Returns: A dictionary of all resolved nodes. Key is the package name.
-DepNode[string] dagCollectResolved(DepPack root) @safe
+DepNode[string] dagCollectResolved(DepDAG dag) @safe
 {
+    import std.algorithm : each;
+
     DepNode[string] res;
 
-    traverseResolvedNodesTopDown(root, (DepNode node) @safe {
-        res[node.pack.name] = node;
-    });
+    dag.traverseTopDownResolved(Yes.root).each!(n => res[n.pack.name] = n);
 
     return res;
 }
 
+/// Collect all resolved nodes that are dependencies of the given [node]
+DepNode[string] dagCollectDependencies(DepNode node) @safe
+{
+    DepNode[string] res;
+
+    void doNode(DepNode n) @safe
+    {
+        res[n.pack.name] = n;
+        foreach (e; n.downEdges)
+        {
+            if (e.down.resolvedNode)
+            {
+                doNode(e.down.resolvedNode);
+            }
+        }
+    }
+
+    foreach (e; node.downEdges)
+    {
+        if (e.down.resolvedNode)
+        {
+            doNode(e.down.resolvedNode);
+        }
+    }
+
+    return res;
+}
 
 /// Fetch languages for each resolved node
 /// This is used to compute the right profile to build
 /// The dependency tree.
 /// Each node is associated with its language + the cumulated
 /// languages of its dependencies
-void dagFetchLanguages(DepPack root, const(Recipe) rootRecipe, CacheRepo cacheRepo) @safe
-in(dagIsResolved(root))
-in(root.name == rootRecipe.name)
-in(root.resolvedNode.ver == rootRecipe.ver)
+void dagFetchLanguages(DepDAG dag, Recipe rootRecipe, CacheRepo cacheRepo) @safe
+in(dagIsResolved(dag))
+in(dag.root.name == rootRecipe.name)
+in(dag.root.resolvedNode.ver == rootRecipe.ver)
 {
     import std.algorithm : sort, uniq;
     import std.array : array;
@@ -516,8 +514,8 @@ in(root.resolvedNode.ver == rootRecipe.ver)
         if (!pack.resolvedNode)
             return;
 
-        const recipe = pack is root ? rootRecipe : cacheRepo.packRecipe(pack.name,
-                pack.resolvedNode.ver);
+        const recipe = pack is dag.root ? rootRecipe
+            : cacheRepo.packRecipe(pack.name, pack.resolvedNode.ver);
 
         // resolvedNodes may have been previously traversed, we add the previously found languages
         auto all = fromDeps ~ recipe.langs ~ pack.resolvedNode.langs;
@@ -530,320 +528,13 @@ in(root.resolvedNode.ver == rootRecipe.ver)
 
     }
 
-    auto leaves = collectDAGLeaves(root);
+    auto leaves = dag.collectLeaves();
     foreach (l; leaves)
         traverse(l, []);
 }
 
-/// Serialize a resolved DAG to lock-file content
-string dagToLockFile(DepPack root, bool emitAllVersions = true) @safe
-in(emitAllVersions || dagIsResolved(root))
-{
-    // using own writing logic because std.json do not preserve any field
-    // ordering
-
-    import std.algorithm : map;
-    import std.array : appender, join, replicate;
-    import std.format : format;
-
-    auto w = appender!string;
-    int indent = 0;
-
-    void line(Args...)(string lfmt, Args args) @safe
-    {
-        static if (Args.length == 0)
-        {
-            w.put(replicate("  ", indent) ~ lfmt ~ "\n");
-        }
-        else
-        {
-            w.put(replicate("  ", indent) ~ format(lfmt, args) ~ "\n");
-        }
-    }
-
-    line("# AUTO GENERATED FILE - DO NOT EDIT!!!");
-    line("# dop lock-file v1");
-
-    traversePacksTopDown(root, (DepPack pack) @trusted {
-        line("");
-        line("package: %s", pack.name);
-
-        indent++;
-        scope (success)
-            indent--;
-
-        foreach (v; pack.allVersions)
-        {
-            auto n = pack.getNode(v);
-
-            if (n is null && !emitAllVersions)
-                continue;
-
-            string attr;
-            if (n is null)
-            {
-                attr = " [excluded]";
-            }
-            else if (n is pack.resolvedNode)
-            {
-                attr = " [resolved]";
-            }
-
-            line("version: %s%s", v, attr);
-
-            if (n !is null)
-            {
-                indent++;
-                scope (success)
-                    indent--;
-
-                if (n.langs.length)
-                {
-                    line("langs: %s", n.langs.strFromLangs().join(", "));
-                }
-                foreach (e; n.downEdges)
-                {
-
-                    line("dependency: %s %s", e.down.name, e.spec);
-                }
-            }
-        }
-    });
-
-    return w.data;
-}
-
-/// Serialize a resolved DAG to a lock-file
-void dagToLockFile(DepPack root, string filename, bool emitAllVersions = true) @safe
-{
-    import std.file : write;
-
-    const content = dagToLockFile(root, emitAllVersions);
-    write(filename, content);
-}
-
-class InvalidLockFileException : Exception
-{
-    string filename;
-    int line;
-    string reason;
-
-    this(string filename, int line, string reason) @safe
-    {
-        import std.format : format;
-
-        this.filename = filename;
-        this.line = line;
-        this.reason = reason;
-
-        const fn = filename ? filename ~ ":" : "lock-file:";
-        super(format("%s(%s): Error: invalid lock-file - %s", fn, line, reason));
-    }
-}
-
-/// Deserialize a lock-file content to a DAG
-///
-/// Params:
-///     content: the content of a lock-file
-///     filename: optional filename for error reporting
-/// Returns: The deserialized DAG
-DepPack dagFromLockFileContent(string content, string filename = null) @safe
-{
-    import std.algorithm : map;
-    import std.array : array, split;
-    import std.conv : to;
-    import std.exception : enforce;
-    import std.string : endsWith, indexOf, lineSplitter, startsWith, strip;
-
-    struct Ver
-    {
-        string pack;
-        Semver ver;
-        bool resolved;
-        bool excluded;
-    }
-
-    struct Lng
-    {
-        string pack;
-        Semver ver;
-        Lang[] langs;
-    }
-
-    struct Dep
-    {
-        string pack;
-        Semver ver;
-        string down;
-        VersionSpec spec;
-    }
-
-    string curpack;
-    Semver curver;
-    bool seenver;
-
-    string[] packs;
-    Ver[] vers;
-    Lng[] langs;
-    Dep[] deps;
-
-    int line;
-    foreach (l; lineSplitter(content).map!(l => l.strip()))
-    {
-        enum lockfilemark = "# dop lock-file v";
-        enum pmark = "package: ";
-        enum vmark = "version: ";
-        enum lmark = "langs: ";
-        enum dmark = "dependency: ";
-        enum resolvedmark = " [resolved]";
-        enum excludedmark = " [excluded]";
-
-        line++;
-
-        try
-        {
-            if (l.startsWith(lockfilemark))
-            {
-                l = l[lockfilemark.length .. $];
-                enforce(l.to!int == 1, new InvalidLockFileException(filename,
-                        line, "Unsupported lock-file version " ~ l));
-            }
-            else if (l.length == 0 || l.startsWith('#'))
-            {
-                continue;
-            }
-            else if (l.startsWith(pmark))
-            {
-                curpack = l[pmark.length .. $];
-                seenver = false;
-                packs ~= curpack;
-            }
-            else if (l.startsWith(vmark))
-            {
-                enforce(curpack, new InvalidLockFileException(filename, line,
-                        "Ill-formed lock-file"));
-                l = l[vmark.length .. $];
-                bool resolved;
-                bool excluded;
-                if (l.endsWith(resolvedmark))
-                {
-                    resolved = true;
-                    l = l[0 .. $ - resolvedmark.length];
-                }
-                else if (l.endsWith(excludedmark))
-                {
-                    excluded = true;
-                    l = l[0 .. $ - excludedmark.length];
-                }
-                curver = Semver(l);
-                seenver = true;
-                vers ~= Ver(curpack, curver, resolved, excluded);
-            }
-            else if (l.startsWith(lmark))
-            {
-                enforce(curpack && seenver, new InvalidLockFileException(filename,
-                        line, "Ill-formed lock-file"));
-                l = l[lmark.length .. $];
-                auto entries = l.split(',').map!(l => l.strip()).array;
-                langs ~= Lng(curpack, curver, strToLangs(entries));
-            }
-            else if (l.startsWith(dmark))
-            {
-                enforce(curpack && seenver, new InvalidLockFileException(filename,
-                        line, "Ill-formed lock-file"));
-
-                l = l[dmark.length .. $];
-                const splt = indexOf(l, " ");
-                enforce(l.length >= 3 && splt > 0 && splt < l.length - 1, // @suppress(dscanner.suspicious.length_subtraction)
-                        new InvalidLockFileException(filename, line, "Can't parse dependency"));
-
-                deps ~= Dep(curpack, curver, l[0 .. splt], VersionSpec(l[splt + 1 .. $]));
-            }
-            else
-            {
-                throw new InvalidLockFileException(filename, line, "Unexpected input: " ~ l);
-            }
-        }
-        catch (InvalidSemverException ex)
-        {
-            throw new InvalidLockFileException(filename, line, ex.msg);
-        }
-        catch (InvalidVersionSpecException ex)
-        {
-            throw new InvalidLockFileException(filename, line, ex.msg);
-        }
-    }
-
-    DepPack[string] depacks;
-    DepPack root;
-
-    foreach (p; packs)
-    {
-        Semver[] allVers;
-
-        // all structs are ordered, so we can always expect match at start of vers and none after
-        uint count;
-        foreach (v; vers)
-        {
-            if (v.pack == p)
-            {
-                allVers ~= v.ver;
-                count++;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        auto pack = new DepPack(p, allVers);
-
-        foreach (v; vers[0 .. count])
-        {
-            if (v.resolved)
-            {
-                pack.resolvedNode = pack.getNode(v.ver);
-            }
-            else if (v.excluded)
-            {
-                pack.removeNode(v.ver);
-            }
-        }
-        vers = vers[count .. $];
-
-        depacks[p] = pack;
-        if (root is null)
-            root = pack;
-    }
-
-    foreach (l; langs)
-    {
-        auto node = depacks[l.pack].getNode(l.ver);
-        node.langs = l.langs;
-    }
-
-    foreach (d; deps)
-    {
-        auto up = depacks[d.pack].getNode(d.ver);
-        auto down = depacks[d.down];
-        DepEdge.create(up, down, d.spec);
-    }
-
-    return root;
-}
-
-/// Deserialize DAG from lock-file [filename]
-DepPack dagFromLockFile(string filename) @trusted
-{
-    import std.file : read;
-    import std.exception : assumeUnique;
-
-    const content = cast(string) assumeUnique(read(filename));
-    return dagFromLockFileContent(content, filename);
-}
-
 /// Issue a GraphViz' Dot representation of a DAG
-string dagToDot(DepPack root) @safe
+string dagToDot(DepDAG dag) @safe
 {
     import std.algorithm : find;
     import std.array : appender, replicate;
@@ -899,12 +590,13 @@ string dagToDot(DepPack root) @safe
 
         // write clusters / pack
 
-        traversePacksTopDown(root, (DepPack pack) @safe {
+        foreach (pack; dag.traverseTopDown(Yes.root))
+        {
             const name = format("cluster_%s", packNum++);
             packGNames[pack.name] = name;
 
             const(Semver)[] allVersions = pack.allVersions;
-            const(Semver)[] compatVersions = pack.compatibleVersions;
+            const(Semver)[] consideredVersions = pack.consideredVersions;
 
             block("subgraph " ~ name, {
 
@@ -917,7 +609,7 @@ string dagToDot(DepPack root) @safe
                     const ngn = format("ver_%s", nodeNum++);
                     nodeGNames[nid] = ngn;
 
-                    const compat = compatVersions.find(v).length > 0;
+                    const considered = consideredVersions.find(v).length > 0;
                     string style = "dashed";
                     string color = "";
                     if (pack.resolvedNode && pack.resolvedNode.ver == v)
@@ -925,7 +617,7 @@ string dagToDot(DepPack root) @safe
                         style = `"filled,solid"`;
                         color = ", color=teal";
                     }
-                    else if (compat)
+                    else if (considered)
                     {
                         style = `"filled,solid"`;
                     }
@@ -935,11 +627,12 @@ string dagToDot(DepPack root) @safe
             });
             line("");
 
-        });
+        }
 
         // write all edges
 
-        traversePacksTopDown(root, (DepPack pack) @safe {
+        foreach (pack; dag.traverseTopDown(Yes.root))
+        {
             foreach (n; pack.nodes)
             {
                 const ngn = nodeGName(pack.name, n.ver);
@@ -954,7 +647,7 @@ string dagToDot(DepPack root) @safe
                     // it makes the arrows point towards it, but stop at the subgraph border
 
                     auto downNode = e.down.resolvedNode
-                    ? e.down.resolvedNode.ver : e.down.compatibleVersions[$ - 1];
+                        ? e.down.resolvedNode.ver : e.down.consideredVersions[$ - 1];
                     const downNgn = nodeGName(e.down.name, downNode);
 
                     string head = "";
@@ -968,57 +661,85 @@ string dagToDot(DepPack root) @safe
                     line(`%s -> %s [%slabel=" %s  "];`, ngn, downNgn, head, e.spec);
                 }
             }
-        });
+        }
     });
 
     return w.data;
 }
 
 /// Write Graphviz' dot representation of a DAG to [filename]
-void dagToDot(DepPack root, string filename) @safe
+void dagToDot(DepDAG dag, string filename) @safe
 {
     import std.file : write;
 
-    const dot = dagToDot(root);
+    const dot = dagToDot(dag);
     write(filename, dot);
+}
+
+/// Write Graphviz' dot represtation of a DAG directly to a png file
+/// Requires dot command line tool to be in the PATH
+void dagToDotPng(DepDAG dag, string filename) @safe
+{
+    import std.process : pipeProcess, Redirect;
+
+    const dot = dagToDot(dag);
+
+    const cmd = ["dot", "-Tpng", "-o", filename];
+    auto pipes = pipeProcess(cmd, Redirect.stdin);
+
+    pipes.stdin.write(dot);
+}
+
+version (unittest)
+{
+    import test.profile : ensureDefaultProfile;
 }
 
 @("Test general graph utility")
 unittest
 {
-    import std.algorithm : canFind;
+    import std.algorithm : canFind, map;
+    import std.array : array;
 
     auto cacheRepo = TestCacheRepo.withBase();
+    auto profile = ensureDefaultProfile();
 
-    auto dag = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
+    const heuristics = Heuristics.pickHighest;
 
-    auto leaves = collectDAGLeaves(dag);
+    auto dag = prepareDepDAG(packE.recipe("1.0.0"), profile, cacheRepo, heuristics);
+
+    auto leaves = dag.collectLeaves();
     assert(leaves.length == 1);
     assert(leaves[0].name == "a");
 
-    string[] names;
-    traversePacksTopDown(dag, (p) @safe { names ~= p.name; });
+    string[] names = dag.traverseTopDown(Yes.root).map!(p => p.name).array;
     assert(names.length == 5);
     assert(names[0] == "e");
     assert(names.canFind("a", "b", "c", "d", "e"));
 
-    names = null;
-    traversePacksBottomUp(dag, (p) @safe { names ~= p.name; });
+    names = dag.traverseTopDown(No.root).map!(p => p.name).array;
+    assert(names.length == 4);
+    assert(names.canFind("a", "b", "c", "d"));
+
+    names = dag.traverseBottomUp(Yes.root).map!(p => p.name).array;
     assert(names.length == 5);
     assert(names[0] == "a");
     assert(names.canFind("a", "b", "c", "d", "e"));
 
-    checkDepDAGCompat(dag);
-    resolveDepDAG(dag, cacheRepo, Heuristics.preferCached);
+    names = dag.traverseBottomUp(No.root).map!(p => p.name).array;
+    assert(names.length == 4);
+    assert(names[0] == "a");
+    assert(names.canFind("a", "b", "c", "d"));
 
-    names = null;
-    traverseResolvedNodesTopDown(dag, (n) @safe { names ~= n.pack.name; });
+    // checkDepDAGCompat(dag);
+    resolveDepDAG(dag, cacheRepo);
+
+    names = dag.traverseTopDownResolved(Yes.root).map!(n => n.pack.name).array;
     assert(names.length == 5);
     assert(names[0] == "e");
     assert(names.canFind("a", "b", "c", "d", "e"));
 
-    names = null;
-    traverseResolvedNodesBottomUp(dag, (n) @safe { names ~= n.pack.name; });
+    names = dag.traverseBottomUpResolved(Yes.root).map!(n => n.pack.name).array;
     assert(names.length == 5);
     assert(names[0] == "a");
     assert(names.canFind("a", "b", "c", "d", "e"));
@@ -1027,16 +748,19 @@ unittest
 @("Test Heuristic.preferCached")
 unittest
 {
-    auto cacheRepo = TestCacheRepo.withBase();
+    import std.algorithm : each;
 
-    auto dag = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
-    checkDepDAGCompat(dag);
-    resolveDepDAG(dag, cacheRepo, Heuristics.preferCached);
+    auto cacheRepo = TestCacheRepo.withBase();
+    auto profile = ensureDefaultProfile();
+
+    const heuristics = Heuristics.preferCached;
+
+    auto dag = prepareDepDAG(packE.recipe("1.0.0"), profile, cacheRepo, heuristics);
+    // checkDepDAGCompat(dag);
+    resolveDepDAG(dag, cacheRepo);
 
     Semver[string] resolvedVersions;
-    traverseResolvedNodesTopDown(dag, (n) @safe {
-        resolvedVersions[n.pack.name] = n.ver;
-    });
+    dag.traverseTopDownResolved(Yes.root).each!(n => resolvedVersions[n.pack.name] = n.ver);
 
     assert(resolvedVersions["a"] == "1.1.0");
     assert(resolvedVersions["b"] == "0.0.1");
@@ -1048,16 +772,19 @@ unittest
 @("Test Heuristic.pickHighest")
 unittest
 {
-    auto cacheRepo = TestCacheRepo.withBase();
+    import std.algorithm : each;
 
-    auto dag = prepareDepDAG(packE.recipe("1.0.0"), cacheRepo);
-    checkDepDAGCompat(dag);
-    resolveDepDAG(dag, cacheRepo, Heuristics.pickHighest);
+    auto cacheRepo = TestCacheRepo.withBase();
+    auto profile = ensureDefaultProfile();
+
+    const heuristics = Heuristics.pickHighest;
+
+    auto dag = prepareDepDAG(packE.recipe("1.0.0"), profile, cacheRepo, heuristics);
+    // checkDepDAGCompat(dag);
+    resolveDepDAG(dag, cacheRepo);
 
     Semver[string] resolvedVersions;
-    traverseResolvedNodesTopDown(dag, (n) @safe {
-        resolvedVersions[n.pack.name] = n.ver;
-    });
+    dag.traverseTopDownResolved(Yes.root).each!(n => resolvedVersions[n.pack.name] = n.ver);
 
     assert(resolvedVersions["a"] == "2.0.0");
     assert(resolvedVersions["b"] == "0.0.2");
@@ -1070,12 +797,15 @@ unittest
 unittest
 {
     auto cacheRepo = TestCacheRepo.withBase();
+    auto profile = ensureDefaultProfile();
 
-    const recipe = packE.recipe("1.0.0");
+    const heuristics = Heuristics.pickHighest;
 
-    auto dag = prepareDepDAG(recipe, cacheRepo);
+    auto recipe = packE.recipe("1.0.0");
+    auto dag = prepareDepDAG(recipe, profile, cacheRepo, heuristics);
+
     checkDepDAGCompat(dag);
-    resolveDepDAG(dag, cacheRepo, Heuristics.pickHighest);
+    resolveDepDAG(dag, cacheRepo);
     dagFetchLanguages(dag, recipe, cacheRepo);
 
     auto nodes = dagCollectResolved(dag);
@@ -1085,25 +815,6 @@ unittest
     assert(nodes["c"].langs == [Lang.cpp, Lang.c]);
     assert(nodes["d"].langs == [Lang.d, Lang.cpp, Lang.c]);
     assert(nodes["e"].langs == [Lang.d, Lang.cpp, Lang.c]);
-}
-
-@("Test Serialization")
-unittest
-{
-    auto cacheRepo = TestCacheRepo.withBase();
-
-    const recipe = packE.recipe("1.0.0");
-
-    auto dag1 = prepareDepDAG(recipe, cacheRepo);
-    checkDepDAGCompat(dag1);
-    resolveDepDAG(dag1, cacheRepo, Heuristics.pickHighest);
-    dagFetchLanguages(dag1, recipe, cacheRepo);
-
-    const lock = dagToLockFile(dag1, true);
-    auto dag2 = dagFromLockFileContent(lock);
-
-    assert(lock == dagToLockFile(dag2, true));
-    assert(dagToDot(dag1) == dagToDot(dag2));
 }
 
 private:
@@ -1134,6 +845,117 @@ in(compatibleVersions.length > 0 && isStrictlyMonotonic(compatibleVersions))
     }
 }
 
+DepPack[] getMoreDown(DepPack pack)
+{
+    DepPack[] downs;
+    foreach (n; pack.nodes)
+    {
+        foreach (e; n.downEdges)
+        {
+            downs ~= e.down;
+        }
+    }
+    return downs;
+}
+
+DepPack[] getMoreUp(DepPack pack)
+{
+    import std.algorithm : map;
+    import std.array : array;
+
+    return pack.upEdges.map!(e => e.up.pack).array;
+}
+
+alias DepthFirstTopDownRange = DepthFirstRange!getMoreDown;
+alias DepthFirstBottomUpRange = DepthFirstRange!getMoreUp;
+
+struct DepthFirstRange(alias getMore)
+{
+    static struct Stage
+    {
+        DepPack[] packs;
+        size_t ind;
+    }
+
+    Stage[] stack;
+    DepPack[] visited;
+
+    this(DepPack[] starter) @safe
+    {
+        stack = [Stage(starter, 0)];
+    }
+
+    this(Stage[] stack, DepPack[] visited) @safe
+    {
+        this.stack = stack;
+        this.visited = visited;
+    }
+
+    @property bool empty() @safe
+    {
+        return stack.length == 0;
+    }
+
+    @property DepPack front() @safe
+    {
+        auto stage = stack[$ - 1];
+        return stage.packs[stage.ind];
+    }
+
+    void popFront() @trusted
+    {
+        import std.algorithm : canFind;
+
+        auto stage = stack[$ - 1];
+        auto pack = stage.packs[stage.ind];
+
+        visited ~= pack;
+
+        while (1)
+        {
+            popFrontImpl(pack);
+            if (!empty)
+            {
+                pack = front;
+                if (visited.canFind(pack))
+                    continue;
+            }
+            break;
+        }
+    }
+
+    void popFrontImpl(DepPack frontPack)
+    {
+        // getting more on this way if possible
+        DepPack[] more = getMore(frontPack);
+        if (more.length)
+        {
+            stack ~= Stage(more, 0);
+        }
+        else
+        {
+            // otherwise going to sibling
+            stack[$ - 1].ind += 1;
+            // unstack while sibling are invalid
+            while (stack[$ - 1].ind == stack[$ - 1].packs.length)
+            {
+                stack = stack[0 .. $ - 1];
+                if (!stack.length)
+                    return;
+                else
+                    stack[$ - 1].ind += 1;
+            }
+        }
+    }
+
+    @property DepthFirstRange!(getMore) save() @safe
+    {
+        return DepthFirstRange!(getMore)(stack.dup, visited.dup);
+    }
+}
+
+package:
+
 version (unittest)
 {
     struct TestPackVersion
@@ -1149,13 +971,13 @@ version (unittest)
         TestPackVersion[] nodes;
         Lang[] langs;
 
-        const(Recipe) recipe(string ver)
+        Recipe recipe(string ver)
         {
             foreach (n; nodes)
             {
                 if (n.ver == ver)
                 {
-                    return Recipe.mock(name, Semver(ver), n.deps, langs);
+                    return Recipe.mock(name, Semver(ver), n.deps, langs, "1");
                 }
             }
             assert(false, "wrong version");
@@ -1218,7 +1040,7 @@ version (unittest)
         }
 
         /// Get the dependencies of a package in its specified version
-        const(Recipe) packRecipe(string packname, const(Semver) ver) @safe
+        Recipe packRecipe(string packname, Semver ver, string revision) @safe
         {
             import std.algorithm : find;
             import std.exception : enforce;
@@ -1226,7 +1048,8 @@ version (unittest)
 
             TestPackage p = packs[packname];
             TestPackVersion pv = p.nodes.find!(pv => pv.ver == ver).front;
-            return Recipe.mock(packname, ver, pv.deps, p.langs);
+            const rev = revision ? revision : "1";
+            return Recipe.mock(packname, ver, pv.deps, p.langs, rev);
         }
 
         /// Get the available versions of a package
@@ -1239,7 +1062,7 @@ version (unittest)
         }
 
         /// Check whether a package version is in local cache or not
-        bool packIsCached(string packname, const(Semver) ver) @safe
+        bool packIsCached(string packname, Semver ver, string revision) @safe
         {
             import std.algorithm : find;
             import std.range : front;

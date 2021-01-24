@@ -1,17 +1,8 @@
-module dopamine.api;
+module dopamine.api.transport;
 
-import dopamine.login;
-import dopamine.recipe;
-import dopamine.semver;
-
-import std.algorithm;
-import std.array;
-import std.format;
-import std.exception;
 import std.json;
 import std.net.curl;
-
-@safe:
+import std.traits;
 
 /// An error that correspond to a server response code >= 400
 class ErrorResponseException : Exception
@@ -81,7 +72,7 @@ struct Response(T)
     }
 }
 
-private template mapResp(alias pred)
+template mapResp(alias pred)
 {
     auto mapResp(T)(Response!T resp)
     {
@@ -97,156 +88,92 @@ private template mapResp(alias pred)
     }
 }
 
-/// A Package root object as retrieved with GET /packages
-struct Package
+struct ApiTransport
 {
-    string id;
-    string name;
-    string[] versions;
-}
+    import dopamine.login : LoginKey;
 
-private Package packageFromJson(const(JSONValue) json)
-{
-    Package p;
-    p.id = json["id"].str;
-    p.name = json["name"].str;
-    p.versions = json["versions"].arrayNoRef.map!(v => v.str).array;
-    return p;
-}
+    string host = "http://localhost:3000";
+    string ver = "v1";
+    LoginKey login;
 
-/// A Package version object
-/// This is the actual package definition with recipe
-struct PackageVersion
-{
-    string packageId;
-    string name;
-    Semver ver;
-    /// Content of dopamine.lua file. Only needed to display it in frontend.
-    /// It is sent when the version is published, but not sent back in the GET
-    /// requests
-    string luaDef;
-    const(Recipe) recipe;
-}
-
-private PackageVersion packageVersionFromJson(const(JSONValue) json)
-{
-    const recipe = recipeParseJson(json["recipe"]);
-    return PackageVersion(json["packageId"].str, json["name"].str,
-            Semver(json["version"].str), null, recipe);
-}
-
-struct API
-{
-    private
+    /// build a resource url
+    /// Parameters formatting:
+    /// If [path] contain format specifiers (e.g. "%s"), [args] must have the corresponding values
+    /// Query formatting:
+    /// If the last argument is a `string[string]` associative array, it is used to format a GET query
+    /// e.g. path?param1=value1&param2=value2
+    string resource(Args...)(string path, Args args)
+    in(path.length == 0 || path[0] == '/')
     {
-        string _host = "http://localhost:3000";
-        string _ver = "v1";
-        LoginKey _login;
-    }
-
-    @property string host() const
-    {
-        return _host;
-    }
-
-    @property void host(string host)
-    {
-        _host = host;
-    }
-
-    @property string ver() const
-    {
-        return _ver;
-    }
-
-    @property void ver(string ver)
-    {
-        _ver = ver;
-    }
-
-    void readLogin()
-    {
-        import dopamine.login : isLoggedIn, readLoginKey;
-
-        enforce(isLoggedIn,
-                "Not logged-in. Get a CLI-key on the frontend and run `dop login [your key]`");
-        _login = readLoginKey();
-    }
-
-    @property LoginKey login() const
-    {
-        return _login;
-    }
-
-    Response!Package getPackageByName(string name)
-    {
-        const uri = format("%s?name=%s", resource("/packages"), name);
-        return jsonGet(uri).mapResp!(jv => packageFromJson(jv));
-    }
-
-    Response!Package postPackage(string name)
-    {
-        const uri = resource("/packages");
-        JSONValue json;
-        json["name"] = name;
-        return jsonPost(uri, json).mapResp!(jv => packageFromJson(jv));
-    }
-
-    Response!PackageVersion getPackageVersion(string packageId, string ver)
-    {
-        const uri = resource(format("/packages/%s/versions/%s", packageId, ver));
-        return jsonGet(uri).mapResp!(jv => packageVersionFromJson(jv));
-    }
-
-    Response!PackageVersion postPackageVersion(PackageVersion pver)
-    {
-        const uri = resource(format("/packages/%s/versions", pver.packageId));
-        JSONValue jv;
-        jv["name"] = pver.name;
-        jv["version"] = pver.ver.toString();
-        jv["luaDef"] = pver.luaDef;
-        jv["recipe"] = recipeToJson(pver.recipe);
-        return jsonPost(uri, jv).mapResp!(jv => packageVersionFromJson(jv));
-    }
-
-    private string resource(string path)
-    {
-        return format("%s/api/%s%s", _host, _ver, path);
-    }
-
-    private string resource(string path, string[string] params)
-    {
+        import std.algorithm : map;
         import std.array : join;
+        import std.format : format;
 
-        const query = params.byKeyValue().map!(kv => format("%s=%s", kv.key, kv.value)).join("&");
-        const querySt = query.length ? "?" : "";
+        enum hasQuery = Args.length > 0 && isStringDict!(Args[$ - 1]);
+        enum hasParam = Args.length > (hasQuery ? 1 : 0);
 
-        return format("%s/api/%s%s%s%s", _host, _ver, path, querySt, query);
+        static if (hasParam)
+        {
+            enum paramEnd = Args.length - (hasQuery ? 1 : 0);
+            path = format(path, args[0 .. paramEnd]);
+        }
+
+        static if (hasQuery)
+        {
+            const queryStr = args[$ - 1].byKeyValue()
+                .map!(kv => format("%s=%s", kv.key, kv.value)).join("&");
+            const query = queryStr.length ? "?" ~ queryStr : "";
+        }
+        else
+        {
+            enum query = "";
+        }
+
+        return format("%s/api/%s%s%s", host, ver, path, query);
     }
 
-    private Response!JSONValue jsonGet(string url)
+    ///
+    unittest
     {
-        return rawGet(url, true).mapResp!(raw => toJson(raw));
+        ApiTransport transport;
+        transport.host = "http://api.net";
+        transport.ver = "v2";
+
+        assert(transport.resource("/resource") == "http://api.net/api/v2/resource");
+        assert(transport.resource("/resource/%s/field",
+                "id") == "http://api.net/api/v2/resource/id/field");
+        assert(transport.resource("/resource", ["p1": "v1",
+                    "p2": "v2"]) == "http://api.net/api/v2/resource?p1=v1&p2=v2");
+
+        assert(transport.resource("/resource/%s/field", "id", [
+                    "p1": "v1",
+                    "p2": "v2"
+                ]) == "http://api.net/api/v2/resource/id/field?p1=v1&p2=v2");
     }
 
-    private Response!JSONValue jsonPost(string url, const ref JSONValue bodi)
+    Response!JSONValue jsonGet(string url)
+    {
+        return rawGet(url).mapResp!(raw => toJson(raw));
+    }
+
+    Response!JSONValue jsonPost(string url, const ref JSONValue bodi)
     {
         const rawbody = fromJson(bodi);
-        return rawPost(url, cast(const(ubyte)[]) rawbody, true).mapResp!(raw => toJson(raw));
+        return rawPost(url, cast(const(ubyte)[]) rawbody, "application/json").mapResp!(raw => toJson(raw));
     }
 
-    private Response!(ubyte[]) rawGet(string url, bool json = false)
+    Response!(ubyte[]) rawGet(string url)
     {
-        return rawReq(url, HTTP.Method.get, [], json);
+        return rawReq(url, HTTP.Method.get);
     }
 
-    private Response!(ubyte[]) rawPost(string url, scope const(void)[] bodi, bool json = false)
+    Response!(ubyte[]) rawPost(string url, scope const(void)[] bodi, string contentType)
     {
-        return rawReq(url, HTTP.Method.post, bodi, json);
+        return rawReq(url, HTTP.Method.post, bodi, contentType);
     }
 
-    private Response!(ubyte[]) rawReq(string url, HTTP.Method method,
-            scope const(void)[] bodi, bool json) @trusted
+    Response!(ubyte[]) rawReq(string url, HTTP.Method method,
+            scope const(void)[] bodi=null, string contentType = null) @trusted
     {
         import std.algorithm : min;
         import std.conv : to;
@@ -257,17 +184,17 @@ struct API
         auto http = HTTP();
         http.url = url;
         http.method = method;
-        if (_login)
+        if (login)
         {
-            http.addRequestHeader("Authorization", format("Bearer %s", _login.key));
+            http.addRequestHeader("Authorization", format("Bearer %s", login.key));
         }
         if (bodi.length)
         {
             assert(method != HTTP.Method.get);
 
-            if (json)
+            if (contentType)
             {
-                http.addRequestHeader("Content-Type", "application/json");
+                http.addRequestHeader("Content-Type", contentType);
             }
 
             http.contentLength = bodi.length;
@@ -318,6 +245,9 @@ struct API
         return Response!(ubyte[])(data, status.code, status.reason, error);
     }
 }
+
+private enum isStringDict(T) = isAssociativeArray!T && is(KeyType!T == string)
+    && is(ValueType!T == string);
 
 private JSONValue toJson(ubyte[] raw) @trusted
 {

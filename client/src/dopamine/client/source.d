@@ -1,14 +1,17 @@
 module dopamine.client.source;
 
-import dopamine.client.util;
-
+import dopamine.client.recipe;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
-import dopamine.source;
 import dopamine.state;
+import dopamine.util;
 
-string enforceSourceDirReady(PackageDir dir, const(Recipe) recipe)
+import std.getopt;
+import std.file;
+import std.path;
+
+string enforceSourceReady(PackageDir dir, Recipe recipe)
 {
     import std.exception : enforce;
 
@@ -17,35 +20,62 @@ string enforceSourceDirReady(PackageDir dir, const(Recipe) recipe)
             error("Error"), info(recipe.name), info("dop source")));
 }
 
-string prepareSourceDir(PackageDir dir, const(Recipe) recipe)
-{
-    return recipe.source.fetch(dir);
-}
-
+/// dop source command
+/// used to download the source of a package
 int sourceMain(string[] args)
 {
-    const dir = PackageDir.enforced(".");
+    string dest = ".";
+    bool force;
 
-    const recipe = parseRecipe(dir);
+    auto helpInfo = getopt(args, "dest", &dest, "force|f", &force);
 
-    if (!recipe.outOfTree)
+    if (helpInfo.helpWanted)
     {
-        logInfo("Source integrated to package: nothing to do");
+        defaultGetoptPrinter("dop source command", helpInfo.options);
         return 0;
     }
 
-    auto sourceDir = checkSourceReady(dir, recipe);
+    const dir = PackageDir.enforced(".");
+    auto recipe = parseRecipe(dir);
 
-    if (sourceDir)
+    if (recipe.inTreeSrc)
     {
-        logInfo("Source was previously extracted to '%s'\nNothing to do.", sourceDir);
+        if (dest)
+        {
+            logWarning("%s: Ignoring %s for in-tree source", warning("Warning"), info("--dest"));
+        }
+        logInfo("%s: in-tree at %s - nothing to do", info("Source"), info(recipe.source()));
+        return 0;
+    }
+
+    if (!exists(dest))
+    {
+        mkdirRecurse(dest);
+    }
+
+    const srcReady = checkSourceReady(dir, recipe);
+    if (!force && srcReady)
+    {
+        logInfo("source already exists at %s", info(srcReady));
+        logInfo("use %s to download anyway", info("--force"));
+        return 0;
+    }
+
+    auto flag = dir.sourceFlag;
+    flag.remove();
+
+    auto srcDir = dest.fromDir!(() => recipe.source());
+    if (dest == ".")
+    {
+        srcDir = srcDir.relativePath(dest);
     }
     else
     {
-        sourceDir = prepareSourceDir(dir, recipe);
-        logInfo("Source extracted to '%s'", info(sourceDir));
-
+        srcDir = srcDir.absolutePath(dest).relativePath();
     }
+
+    flag.write(srcDir);
+    logInfo("%s: %s - %s", info("Source"), success("OK"), srcDir);
 
     return 0;
 }

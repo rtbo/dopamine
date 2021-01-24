@@ -1,10 +1,11 @@
 module dopamine.recipe;
 
-import dopamine.build;
+import dopamine.lua.lib;
+import dopamine.lua.profile;
+import dopamine.lua.util;
 import dopamine.dependency;
 import dopamine.profile;
 import dopamine.semver;
-import dopamine.source;
 
 import bindbc.lua;
 
@@ -12,441 +13,441 @@ import std.exception;
 import std.json;
 import std.string;
 import std.stdio;
+import std.variant;
 
-class Recipe
+enum BuildOptionType
 {
-    private
+    boolean,
+    str,
+    choice,
+    number,
+}
+
+alias BuildOptionVal = Algebraic!(string, bool, int);
+
+struct BuildOptionDef
+{
+    BuildOptionType type;
+    string[] choices;
+    BuildOptionVal def;
+}
+
+struct BuildDirs
+{
+    string src;
+    string install;
+}
+
+struct DepInfo
+{
+    string installDir;
+}
+
+struct Recipe
+{
+    private RecipePayload d;
+
+    private this(RecipePayload d)
+    in(d !is null && d.rc == 1)
     {
-        string _name;
-        string _description;
-        Semver _ver;
-        string _license;
-        string _copyright;
-        Lang[] _langs;
+        this.d = d;
+    }
 
-        Dependency[] _dependencies;
+    this(this) @safe
+    {
+        if (d !is null)
+            d.incr();
+    }
 
-        Source _repo;
-        Source _source;
-        BuildSystem _build;
+    ~this() @safe
+    {
+        if (d !is null)
+            d.decr();
+    }
+
+    bool opCast(T : bool)() const
+    {
+        return d !is null;
     }
 
     @property string name() const @safe
     {
-        return _name;
+        return d.name;
     }
 
     @property string description() const @safe
     {
-        return _description;
+        return d.description;
     }
 
     @property Semver ver() const @safe
     {
-        return _ver;
+        return d.ver;
     }
 
     @property string license() const @safe
     {
-        return _license;
+        return d.license;
     }
 
     @property string copyright() const @safe
     {
-        return _copyright;
+        return d.copyright;
     }
 
     @property const(Lang)[] langs() const @safe
     {
-        return _langs;
+        return d.langs;
     }
 
-    @property const(Source) repo() const @safe
+    @property bool hasDependencies() const @safe
     {
-        return _repo;
+        return d.depFunc || d.dependencies.length != 0;
     }
 
-    @property const(Dependency)[] dependencies() const @safe
+    @property const(Dependency)[] dependencies(const(Profile) profile)
     {
-        return _dependencies;
-    }
+        if (!d.depFunc)
+            return d.dependencies;
 
-    @property const(Source) source() const @safe
-    {
-        return _source;
-    }
+        auto L = d.L;
 
-    @property bool outOfTree() const @safe
-    {
-        return _repo !is _source;
-    }
+        // the dependencies func takes a profile as argument
+        // and return dependency table
+        lua_getglobal(L, "dependencies");
+        assert(lua_type(L, -1) == LUA_TFUNCTION);
 
-    @property const(BuildSystem) build() const @safe
-    {
-        return _build;
-    }
+        luaPushProfile(L, profile);
 
-    package static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs) @safe
-    {
-        auto r = new Recipe;
-        r._name = name;
-        r._ver = ver;
-        r._dependencies = deps;
-        r._langs = langs;
-        return r;
-    }
-}
-
-const(Recipe) recipeParseJson(const ref JSONValue json) @safe
-{
-    auto r = new Recipe;
-
-    string optionalStr(JSONValue jv, string key) @safe
-    {
-        if (key in jv)
-            return jv[key].str;
-        return null;
-    }
-
-    r._name = json["name"].str;
-    r._ver = Semver(json["version"].str);
-    r._description = json["description"].str;
-    r._license = json["license"].str;
-    r._copyright = optionalStr(json, "copyright");
-    r._langs = jsonLangArray(json["langs"].arrayNoRef);
-
-    if ("dependencies" in json)
-    {
-        const deps = json["dependencies"].arrayNoRef;
-        foreach (dep; deps)
+        // 1 argument, 1 result
+        if (lua_pcall(L, 1, 1, 0) != LUA_OK)
         {
-            Dependency d;
-            d.name = dep["name"].str;
-            d.spec = VersionSpec(dep["version"].str);
-            r._dependencies ~= d;
+            throw new Exception("cannot get dependencies: " ~ luaTo!string(L, -1));
         }
+
+        scope (success)
+            lua_pop(L, 1);
+
+        return readDependencies(L);
     }
 
-    r._repo = source(jsonObject(json["repo"].objectNoRef));
-
-    if ("source" in json)
+    @property string filename() const @safe
     {
-        r._source = source(jsonObject(json["source"].objectNoRef));
-    }
-    else
-    {
-        r._source = r._repo;
+        return d.filename;
     }
 
-    r._build = buildSystem(jsonObject(json["build"].objectNoRef));
-
-    return r;
-}
-
-@("test recipeParseJson A")
-unittest
-{
-    import test.util : testDataContent;
-
-    const ajson = testDataContent("recipe_a-1.0.0.json");
-    auto json = parseJSON(ajson);
-    const a = recipeParseJson(json);
-
-    assert(a.name == "a");
-    assert(a.description == "test package A");
-    assert(a.ver == "1.0.0");
-    assert(!a.copyright);
-    assert(a.langs == [Lang.d]);
-    assert(!a.dependencies);
-    assert(a.repo && a.repo.type == SourceType.git);
-    assert(a.source is a.repo);
-    assert(!a.outOfTree);
-    assert(a.build && a.build.name == "Meson");
-}
-
-@("test recipeParseJson B")
-unittest
-{
-    import test.util : testDataContent;
-
-    const bjson = testDataContent("recipe_b-1.0.0.json");
-    auto json = parseJSON(bjson);
-    const b = recipeParseJson(json);
-
-    assert(b.name == "b");
-    assert(b.description == "test package B");
-    assert(b.ver == "0.5.0");
-    assert(b.copyright);
-    assert(b.langs == [Lang.d, Lang.c]);
-    assert(b.dependencies == [Dependency("a", VersionSpec(">=1.0.0"))]);
-    assert(b.repo && b.repo.type == SourceType.git);
-    assert(b.source && b.source.type == SourceType.archive);
-    assert(b.outOfTree);
-    assert(b.build && b.build.name == "CMake");
-}
-
-JSONValue recipeToJson(const(Recipe) recipe) @safe
-{
-    JSONValue json;
-    if (recipe.name.length)
-        json["name"] = recipe.name;
-    json["version"] = recipe.ver.toString();
-    if (recipe.description.length)
-        json["description"] = recipe.description;
-    if (recipe.license.length)
-        json["license"] = recipe.license;
-    if (recipe.copyright.length)
-        json["copyright"] = recipe.copyright;
-    if (recipe.langs.length)
-        json["langs"] = recipe.langs.strFromLangs();
-    if (recipe.dependencies)
+    @property string revision()
     {
-        JSONValue[] deps;
-        foreach (dep; recipe.dependencies)
+        if (d.revision)
+            return d.revision;
+
+        auto L = d.L;
+
+        lua_getglobal(L, "revision");
+        scope (success)
+            lua_pop(L, 1);
+
+        if (d.filename && lua_type(L, -1) == LUA_TNIL)
         {
-            JSONValue val;
-            val["name"] = dep.name;
-            val["version"] = dep.spec.toString();
-            deps ~= val;
+            return sha1RevisionFromFile(d.filename);
         }
-        json["dependencies"] = deps;
-    }
-    if (recipe.repo)
-        json["repo"] = recipe.repo.toJson();
 
-    if (recipe.source && recipe.source !is recipe.repo)
-    {
-        json["source"] = recipe.source.toJson();
-    }
-    if (recipe.build)
-        json["build"] = recipe.build.toJson();
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "Package recipe is missing a recipe function");
 
-    return json;
-}
-
-@("Consistent json recipes A")
-unittest
-{
-    import test.util : testDataContent;
-
-    const ajson = testDataContent("recipe_a-1.0.0.json");
-    auto json = parseJSON(ajson);
-    const a = recipeParseJson(json);
-    auto json2 = recipeToJson(a);
-
-    assert(json.toPrettyString() == json2.toPrettyString());
-}
-
-@("Consistent json recipes B")
-unittest
-{
-    import test.util : testDataContent;
-
-    const ajson = testDataContent("recipe_b-1.0.0.json");
-    auto json = parseJSON(ajson);
-    const a = recipeParseJson(json);
-    auto json2 = recipeToJson(a);
-
-    assert(json.toPrettyString() == json2.toPrettyString());
-}
-
-void initLua() @trusted
-{
-    version (BindBC_Static)
-    {
-    }
-    else
-    {
-        const ret = loadLua();
-        if (ret != luaSupport)
+        // no argument, 1 result
+        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
         {
-            if (ret == luaSupport.noLibrary)
+            throw new Exception("Cannot get recipe revision: " ~ luaTo!string(L, -1));
+        }
+
+        d.revision = luaTo!string(L, -1);
+        return d.revision;
+    }
+
+    /// Returns: whether the source is included with the package
+    @property bool inTreeSrc() const
+    {
+        return d.inTreeSrc.length > 0;
+    }
+
+    string source()
+    {
+        if (d.inTreeSrc)
+            return d.inTreeSrc;
+
+        auto L = d.L;
+
+        lua_getglobal(L, "source");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a source function");
+
+        // no argument, 1 result
+        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        {
+            throw new Exception("Cannot get source: " ~ luaTo!string(L, -1));
+        }
+
+        return L.luaPop!string();
+    }
+
+    string build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
+    {
+        auto L = d.L;
+
+        lua_getglobal(L, "build");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
+
+        lua_createtable(L, 0, 2);
+        const dirsInd = lua_gettop(L);
+        luaSetTable(L, dirsInd, "src", dirs.src);
+        luaSetTable(L, dirsInd, "install", dirs.install);
+
+        luaPushProfile(L, profile);
+
+        if (depInfos)
+        {
+            lua_createtable(L, 0, cast(int)depInfos.length);
+            const depInfosInd = lua_gettop(L);
+            foreach (k, di; depInfos)
             {
-                throw new Exception("could not find lua library");
-            }
-            else if (luaSupport.badLibrary)
-            {
-                throw new Exception("could not find the right lua library");
+                lua_pushlstring(L, k.ptr, k.length);
+
+                lua_createtable(L, 0, 1);
+                luaSetTable(L, -1, "install_dir", di.installDir);
+
+                lua_settable(L, depInfosInd);
             }
         }
+
+        const nparams = depInfos ? 3 : 2;
+
+        // nparams argument, 1 result
+        if (lua_pcall(L, nparams, 1, 0) != LUA_OK)
+        {
+            throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
+        }
+
+        scope (exit)
+            lua_pop(L, 1);
+
+        string result = dirs.install;
+        switch (lua_type(L, -1))
+        {
+        case LUA_TSTRING:
+            result = luaTo!string(L, -1);
+            break;
+        case LUA_TNIL:
+            break;
+        default:
+            throw new Exception("invalid return from build");
+        }
+        return result;
+    }
+
+    static Recipe parseFile(string path, string revision = null)
+    {
+        import std.file : read;
+
+        auto d = RecipePayload.parse(null, path, revision);
+        return Recipe(d);
+    }
+
+    static Recipe parseString(const(char)[] content, string revision = null)
+    {
+        auto d = RecipePayload.parse(content, null, revision);
+        return Recipe(d);
+    }
+
+    static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs, string revision) @trusted
+    {
+        auto d = new RecipePayload();
+        d.name = name;
+        d.ver = ver;
+        d.dependencies = deps;
+        d.langs = langs;
+        d.revision = revision;
+        return Recipe(d);
     }
 }
 
-const(Recipe) recipeParseFile(string path) @trusted
+package class RecipePayload
 {
-    auto L = luaL_newstate();
-    luaL_openlibs(L);
+    string name;
+    string description;
+    Semver ver;
+    string license;
+    string copyright;
+    Lang[] langs;
 
-    // preloading dop.lua
-    lua_getglobal(L, "package");
-    lua_getfield(L, -1, "preload");
+    Dependency[] dependencies;
+    bool depFunc;
 
-    lua_pushcfunction(L, &dopModuleLoader);
-    lua_setfield(L, -2, "dop");
+    string inTreeSrc;
 
-    // popping package.preload and dopModuleLoader
-    lua_pop(L, 2);
+    string filename;
+    string revision;
 
-    if (luaL_dofile(L, path.toStringz))
+    lua_State* L;
+    int rc;
+
+    this()
     {
-        throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
-                -1)).idup);
+        L = luaL_newstate();
+        luaL_openlibs(L);
+
+        // setting the payload to ["recipe"] key in the registry
+        lua_pushlightuserdata(L, cast(void*) this);
+        lua_setfield(L, LUA_REGISTRYINDEX, "recipe");
+
+        luaPreloadDopLib(L);
+
+        rc = 1;
     }
 
-    auto r = new Recipe;
-
-    r._name = enforce(globalStringVar(L, "name"), "name field is mandatory");
-    r._ver = Semver(enforce(globalStringVar(L, "version"), "version field is mandatory"));
-    r._description = globalStringVar(L, "description");
-    r._license = globalStringVar(L, "license");
-    r._copyright = globalStringVar(L, "copyright");
-    r._langs = globalArrayTableVar(L, "langs").strToLangs();
-
-    r._dependencies = readDependencies(L);
-
-    r._repo = source(globalDictTableVar(L, "repo"));
-    if (globalIsNil(L, "source") || globalEqual(L, "repo", "source"))
+    void incr() @safe
     {
-        r._source = r._repo;
+        rc++;
     }
-    else
+
+    void decr() @trusted
     {
-        r._source = source(globalDictTableVar(L, "source"));
+        rc--;
+        if (!rc)
+        {
+            lua_close(L);
+            L = null;
+        }
     }
-    r._build = buildSystem(globalDictTableVar(L, "build"));
 
-    assert(lua_gettop(L) == 0, "Lua stack not clean");
+    private static RecipePayload parse(const(char)[] lua, string filename, string revision)
+    in((filename && !lua) || (!filename && lua))
+    {
+        import std.path : isAbsolute;
 
-    lua_close(L);
+        auto d = new RecipePayload();
+        auto L = d.L;
 
-    return r;
+        if (filename)
+        {
+            if (luaL_dofile(L, filename.toStringz))
+            {
+                throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                        -1)).idup);
+            }
+        }
+        else
+        {
+            assert(lua);
+            if (luaL_dostring(L, lua.toStringz))
+            {
+                throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                        -1)).idup);
+            }
+        }
 
+        d.name = luaGetGlobal!string(L, "name", null);
+        d.ver = Semver(luaGetGlobal!string(L, "version"));
+        d.description = luaGetGlobal!string(L, "description", null);
+        d.license = luaGetGlobal!string(L, "license", null);
+        d.copyright = luaGetGlobal!string(L, "copyright", null);
+        d.langs = L.luaWithGlobal!("langs", () => luaReadStringArray(L, -1).strToLangs());
+
+        L.luaWithGlobal!("dependencies", {
+            switch (lua_type(L, -1))
+            {
+            case LUA_TFUNCTION:
+                d.depFunc = true;
+                break;
+            case LUA_TTABLE:
+                d.dependencies = readDependencies(L);
+                break;
+            case LUA_TNIL:
+                break;
+            default:
+                throw new Exception("invalid dependencies specification");
+            }
+        });
+
+        L.luaWithGlobal!("source", {
+            switch (lua_type(L, -1))
+            {
+            case LUA_TSTRING:
+                d.inTreeSrc = luaTo!string(L, -1);
+                enforce(!isAbsolute(d.inTreeSrc),
+                    "constant source must be relative to package file");
+                break;
+            case LUA_TFUNCTION:
+                break;
+            case LUA_TNIL:
+                d.inTreeSrc = ".";
+                break;
+            default:
+                throw new Exception("invalid source specification");
+            }
+        });
+
+        d.filename = filename;
+
+        if (revision)
+        {
+            d.revision = revision;
+        }
+        else
+        {
+            L.luaWithGlobal!("revision", {
+                switch (lua_type(L, -1))
+                {
+                case LUA_TFUNCTION: // will be called from Recipe.revision
+                    break;
+                case LUA_TNIL: // revision must be computed from lua content
+                    // we want to be as lazy as possible, because revision is
+                    // generally needed only when package is uploaded.
+                    // if filename is known, we defer revision to Recipe.revision
+                    // if not known, we compute it now.
+
+                    if (!d.filename)
+                    {
+                        assert(lua.length);
+                        d.revision = sha1RevisionFromContent(lua);
+                    }
+                    break;
+                default:
+                    throw new Exception("Invalid revision specification");
+                }
+            });
+        }
+
+        assert(lua_gettop(L) == 0, "Lua stack not clean");
+
+        return d;
+    }
 }
 
 private:
 
-Source source(string[string] aa) @safe
+string sha1RevisionFromContent(const(char)[] luaContent)
 {
-    enforce(aa["type"] == "source");
+    import std.digest.sha : sha1Of;
+    import std.digest : toHexString, LetterCase;
 
-    switch (aa["method"])
-    {
-    case "git":
-        {
-            auto url = enforce("url" in aa, "url is mandatory for Git source");
-            auto revId = enforce("revId" in aa, "revId is mandatory for Git source");
-            return new GitSource(*url, *revId);
-        }
-
-    case "archive":
-        {
-            auto url = enforce("url" in aa, "url is mandator for Archive source");
-            auto md5 = "md5" in aa;
-            auto sha1 = "sha1" in aa;
-            auto sha256 = "sha256" in aa;
-
-            enforce(md5 || sha1 || sha256,
-                    "you must specify at least one of md5, sha1 or sha256 checksums for Archive");
-
-            Checksum checksum;
-            if (sha256)
-            {
-                checksum.type = Checksum.Type.sha256;
-                checksum.checksum = *sha256;
-            }
-            else if (sha1)
-            {
-                checksum.type = Checksum.Type.sha1;
-                checksum.checksum = *sha1;
-            }
-            else if (md5)
-            {
-                checksum.type = Checksum.Type.md5;
-                checksum.checksum = *md5;
-            }
-
-            return new ArchiveSource(*url, checksum);
-        }
-
-    default:
-        break;
-    }
-
-    throw new Exception("Invalid source method: " ~ aa["method"]);
+    const hash = sha1Of(luaContent);
+    return toHexString!(LetterCase.lower)(hash).idup;
 }
 
-BuildSystem buildSystem(string[string] aa) @safe
+string sha1RevisionFromFile(string filename)
 {
-    enforce(aa["type"] == "build");
+    import std.file : read;
 
-    switch (aa["method"])
-    {
-    case "cmake":
-        return new CMakeBuildSystem();
-    case "meson":
-        return new MesonBuildSystem();
-    default:
-        break;
-    }
-
-    return null;
+    return sha1RevisionFromContent(cast(const(char)[]) read(filename));
 }
 
-string[string] jsonObject(in JSONValue[string] obj) @safe
-{
-    string[string] aa;
-    foreach (k, v; obj)
-    {
-        aa[k] = v.str;
-    }
-    return aa;
-}
-
-string[] jsonArray(in JSONValue[] arr) @safe
-{
-    import std.algorithm : map;
-    import std.array : array;
-
-    return arr.map!(jv => jv.str).array;
-}
-
-Lang[] jsonLangArray(in JSONValue[] arr) @safe
-{
-    import std.algorithm : map;
-    import std.array : array;
-
-    return arr.map!(jv => jv.str.strToLang()).array;
-}
-
-int dopModuleLoader(lua_State* L) nothrow
-{
-    import core.stdc.stdio : fprintf, stderr;
-
-    auto dopMod = import("dop.lua");
-
-    const res = luaL_dostring(L, dopMod.ptr);
-    if (res != LUA_OK)
-    {
-        fprintf(stderr, "Error during 'dop.lua' execution: %s\n", lua_tostring(L, -1));
-        lua_pop(L, 1);
-        return 0;
-    }
-
-    return 1;
-}
-
+/// Read a dependency table from top of the stack
 Dependency[] readDependencies(lua_State* L)
 {
-    lua_getglobal(L, "dependencies");
-
-    scope (success)
-        lua_pop(L, 1);
-
     const typ = lua_type(L, -1);
     if (typ == LUA_TNIL)
         return null;
 
-    enforce(typ == LUA_TTABLE, "Invalid dependencies declaration");
+    enforce(typ == LUA_TTABLE, "invalid dependencies return type");
 
     Dependency[] res;
 
@@ -459,7 +460,7 @@ Dependency[] readDependencies(lua_State* L)
             lua_pop(L, 1);
 
         Dependency dep;
-        dep.name = enforce(getString(L, -2),
+        dep.name = enforce(luaTo!string(L, -2, null),
                 // probably a number key (dependencies specified as array)
                 // relying on lua_tostring for having a correct string inference
                 format("Invalid dependency name: %s", lua_tostring(L, -2)));
@@ -468,11 +469,11 @@ Dependency[] readDependencies(lua_State* L)
         switch (vtyp)
         {
         case LUA_TSTRING:
-            dep.spec = VersionSpec(getString(L, -1));
+            dep.spec = VersionSpec(luaTo!string(L, -1));
             break;
         case LUA_TTABLE:
             {
-                const aa = getStringDictTable(L, -1);
+                const aa = luaReadStringDict(L, -1);
                 dep.spec = VersionSpec(enforce(aa["version"],
                         format("'version' not specified for '%s' dependency", dep.name)));
                 break;
@@ -485,206 +486,4 @@ Dependency[] readDependencies(lua_State* L)
         lua_pop(L, 1);
     }
     return res;
-}
-
-string globalStringVar(lua_State* L, string varName, string def = null)
-{
-    lua_getglobal(L, toStringz(varName));
-
-    scope (success)
-        lua_pop(L, 1);
-
-    auto res = getString(L, -1);
-
-    return res ? res : def;
-}
-
-bool globalBoolVar(lua_State* L, string varName, bool def = false)
-{
-    lua_getglobal(L, toStringz(varName));
-
-    scope (success)
-        lua_pop(L, 1);
-
-    if (lua_type(L, -1) != LUA_TBOOLEAN)
-        return def;
-
-    return lua_toboolean(L, -1) != 0;
-}
-
-string[string] globalDictTableVar(lua_State* L, string varName)
-{
-    lua_getglobal(L, toStringz(varName));
-    scope (success)
-        lua_pop(L, 1);
-    return getStringDictTable(L, -1);
-}
-
-string[] globalArrayTableVar(lua_State* L, string varName)
-{
-    lua_getglobal(L, toStringz(varName));
-    scope (success)
-        lua_pop(L, 1);
-    return getStringArrayTable(L, -1);
-}
-
-bool globalIsNil(lua_State* L, string var)
-{
-    lua_getglobal(L, toStringz(var));
-    scope (success)
-        lua_pop(L, 1);
-    return lua_isnil(L, -1);
-}
-
-bool globalEqual(lua_State* L, string var1, string var2)
-{
-    lua_getglobal(L, toStringz(var1));
-    lua_getglobal(L, toStringz(var2));
-    scope (success)
-        lua_pop(L, 2);
-    return lua_equal(L, -2, -1) == 1;
-}
-
-/// Get a string at index ind in the stack.
-string getString(lua_State* L, int ind) @trusted
-{
-    if (lua_type(L, ind) != LUA_TSTRING)
-        return null;
-
-    size_t len;
-    const ptr = lua_tolstring(L, ind, &len);
-    return ptr[0 .. len].idup;
-}
-
-/// Get all strings in a table at stack index [ind] who have string keys.
-string[string] getStringDictTable(lua_State* L, int ind)
-{
-    if (lua_type(L, ind) != LUA_TTABLE)
-        return null;
-
-    string[string] aa;
-
-    lua_pushnil(L); // first key
-
-    // fixing table ind if relative from top
-    if (ind < 0)
-        ind -= 1;
-
-    while (lua_next(L, ind) != 0)
-    {
-        if (lua_type(L, -2) != LUA_TSTRING)
-        {
-            lua_pop(L, 1);
-            continue;
-        }
-
-        // uses 'key' (at index -2) and 'value' (at index -1)
-        const key = getString(L, -2);
-        const val = getString(L, -1);
-
-        if (key && val)
-            aa[key] = val;
-
-        // removes 'value'; keeps 'key' for next iteration
-        lua_pop(L, 1);
-    }
-
-    return aa;
-}
-
-/// Get all strings in a table at stack index [ind] who have integer keys.
-string[] getStringArrayTable(lua_State* L, int ind)
-{
-    if (lua_type(L, ind) != LUA_TTABLE)
-        return null;
-
-    const len = lua_rawlen(L, ind);
-
-    string[] arr;
-    arr.length = len;
-
-    foreach (i; 0 .. len)
-    {
-        const luaInd = i + 1;
-        lua_pushinteger(L, luaInd);
-        lua_gettable(L, -2);
-
-        arr[i] = getString(L, -1);
-
-        lua_pop(L, 1);
-    }
-
-    return arr;
-}
-
-// some debugging functions
-
-void printStack(lua_State* L)
-{
-    import std.stdio : writefln;
-    import std.string : fromStringz;
-
-    const n = lua_gettop(L);
-    writefln("Stack has %s elements", n);
-
-    foreach (i; 1 .. n + 1)
-    {
-        const s = luaL_typename(L, i).fromStringz.idup;
-        writef("%s = %s", i, s);
-        switch (lua_type(L, i))
-        {
-        case LUA_TNUMBER:
-            writefln(" %g", lua_tonumber(L, i));
-            break;
-        case LUA_TSTRING:
-            writefln(" %s", fromStringz(lua_tostring(L, i)));
-            break;
-        case LUA_TBOOLEAN:
-            writefln(" %s", (lua_toboolean(L, i) ? "true" : "false"));
-            break;
-        case LUA_TNIL:
-            writeln();
-            break;
-        case LUA_TTABLE:
-            //printTable(L, i);
-            writefln(" %X", lua_topointer(L, i));
-            break;
-        case LUA_TFUNCTION:
-            {
-
-                lua_Debug d;
-                lua_pushvalue(L, i);
-                lua_getinfo(L, ">n", &d);
-                writefln(" %X - %s", lua_topointer(L, i), d.name.fromStringz);
-                break;
-            }
-        default:
-            writefln(" %X", lua_topointer(L, i));
-            break;
-        }
-    }
-
-}
-
-void printTable(lua_State* L, int ind)
-{
-    import std.stdio : writefln;
-
-    lua_pushnil(L); // first key
-
-    // fixing table ind if relative from top
-    if (ind < 0)
-        ind -= 1;
-
-    while (lua_next(L, ind) != 0)
-    {
-        // uses 'key' (at index -2) and 'value' (at index -1)
-        const key = getString(L, -2);
-        const val = getString(L, -1);
-
-        writefln("[%s] = %s", key, val);
-
-        // removes 'value'; keeps 'key' for next iteration
-        lua_pop(L, 1);
-    }
 }

@@ -147,6 +147,18 @@ struct Semver
                 "metadata contain empty subsection");
     }
 
+    static bool isValid(string ver) @safe
+    {
+        try {
+            const _ = Semver(ver);
+            return true;
+        }
+        catch (InvalidSemverException)
+        {
+            return false;
+        }
+    }
+
     string toString() const pure
     {
         import std.format : format;

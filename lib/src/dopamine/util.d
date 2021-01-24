@@ -46,6 +46,23 @@ out(res; (!location || res.startsWith(location)) && !exists(res))
     return res;
 }
 
+/// execute pred from directory dir
+/// and chdir back to the previous dir afterwards
+/// Returns: whatever pred returns
+auto fromDir(alias pred)(string dir) @system
+{
+    // shortcut if chdir is not needed
+    if (dir == ".")
+        return pred();
+
+    const cwd = getcwd();
+    chdir(dir);
+    scope (exit)
+        chdir(cwd);
+
+    return pred();
+}
+
 /// Check if array has duplicates
 /// Will try first as if the array is sorted
 /// and will fallback to brute force if not
@@ -119,6 +136,13 @@ struct FlagFile
 {
     string path;
 
+    FlagFile absolute(string cwd=getcwd())
+    {
+        import std.path : absolutePath;
+
+        return FlagFile(path.absolutePath(cwd));
+    }
+
     @property bool exists()
     {
         import std.file : exists;
@@ -142,6 +166,15 @@ struct FlagFile
 
         mkdirRecurse(dirName(path));
         write(path, content);
+    }
+
+    void touch()
+    {
+        import std.file : append;
+        import std.path : dirName;
+
+        mkdirRecurse(dirName(path));
+        append(path, []);
     }
 
     void remove()
@@ -277,7 +310,7 @@ void runCommands(in string[][] commands, string workDir = null,
 
     foreach (cmd; commands)
     {
-        log(logLevel, cmd.commandRep);
+        log(logLevel, "%s %s", info(cmd[0]), cmd[1 .. $].commandRep);
         auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
         auto exitcode = pid.wait();
         enforce(exitcode == 0,

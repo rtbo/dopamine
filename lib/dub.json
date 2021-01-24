@@ -5,7 +5,9 @@
   "targetType": "library",
   "targetName": "dopamine",
   "license": "MIT",
-  "stringImportPaths": ["lua"],
+  "stringImportPaths": [
+    "src/dopamine/lua"
+  ],
   "dependencies": {
     "dini": "~>2.0.0"
   },
@@ -23,10 +25,8 @@
       "name": "unittest",
       "versions": ["LUA_53", "BindBC_Static"],
       "libs": ["lua53"],
-      "sourcePaths": ["src"],
-      "sourceFiles": ["test/util.d"],
-      "importPaths": [".", "src"],
-      "stringImportPaths": ["lua", "test/data"]
+      "sourcePaths": ["src", "test"],
+      "importPaths": [".", "src"]
     }
   ]
 }

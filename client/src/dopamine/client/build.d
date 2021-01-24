@@ -1,49 +1,38 @@
 module dopamine.client.build;
 
-import dopamine.client.deps_lock;
+import dopamine.client.depinstall;
+import dopamine.client.deplock;
+import dopamine.client.profile;
+import dopamine.client.recipe;
 import dopamine.client.source;
-import dopamine.client.util;
-
+import dopamine.depcache;
 import dopamine.log;
-import dopamine.profile;
 import dopamine.paths;
 import dopamine.recipe;
 import dopamine.state;
 
-import std.algorithm;
-import std.array;
-import std.digest;
-import std.digest.sha;
 import std.exception;
 import std.file;
-import std.format;
 import std.getopt;
-import std.stdio;
+import std.path;
+import std.typecons;
 
-/// Enforces that a build is ready and installed.
-string enforceBuildReady(PackageDir dir, const(Recipe) recipe, Profile profile)
+string enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
 {
-    const pdirs = dir.profileDirs(profile);
-
-    enforce(checkConfigReady(dir, pdirs),
-            new FormatLogException("%s: Package %s not configured for profile '%s'. Try to run `%s`",
-                error("Error"), info(recipe.name), info(profile.name), info("dop build")));
-    enforce(checkBuildReady(dir, pdirs),
-            new FormatLogException("%s: Package %s not built for profile '%s'. Try to run `%s`",
-                error("Error"), info(recipe.name), info(profile.name), info("dop build")));
-    enforce(checkInstallReady(dir, pdirs),
-            new FormatLogException("%s: Package %s not installed for profile '%s'. Try to run `%s`",
-                error("Error"), info(recipe.name), info(profile.name), info("dop build")));
-
-    return pdirs.install;
+    return enforce(checkBuildReady(dir, profileDirs), new FormatLogException(
+            "%s: package is not built for selected profile. Try to run `%s`",
+            error("Error"), info("dop build")));
 }
 
 int buildMain(string[] args)
 {
     string profileName;
+    string installDir;
+    bool force;
+    bool noNetwork;
 
-    auto helpInfo = getopt(args, "profile",
-            "override profile for this invocation", &profileName,);
+    auto helpInfo = getopt(args, "profile|p", &profileName, "install-dir|i",
+            &installDir, "force", &force, "no-network|N", &noNetwork);
 
     if (helpInfo.helpWanted)
     {
@@ -51,70 +40,41 @@ int buildMain(string[] args)
         return 0;
     }
 
-    const packageDir = PackageDir.enforced(".");
+    const dir = PackageDir.enforced(".");
+    auto recipe = parseRecipe(dir);
 
-    const recipe = parseRecipe(packageDir);
+    auto profile = enforceProfileReady(dir, recipe, profileName);
+    const profileDirs = dir.profileDirs(profile);
 
-    const deps = enforceDepsLocked(packageDir, recipe);
-
-    Lang[] langs = deps.resolvedNode.langs.dup;
-
-    const defaultName = profileDefaultName(langs);
-    const defaultFile = userProfileFile(defaultName);
-
-    if (!exists(defaultFile))
+    const buildReady = checkBuildReady(dir, profileDirs);
+    if (!force && buildReady)
     {
-        logInfo("Default profile does not exist. Will create it.");
-        auto p = detectDefaultProfile(langs);
-        logInfo(p.describe());
-
-        p.saveToFile(defaultFile, false, true);
-        logInfo("Default profile saved to %s", info(defaultFile));
+        logInfo("%s: Already up-to-date at %s (run with %s to overcome)",
+                info("Build"), info("buildReady"), info("--force"));
+        return 0;
     }
 
-    Profile profile;
+    const network = noNetwork ? No.network : Yes.network;
+    auto cache = new DependencyCache(network);
+    scope (exit)
+        cache.dispose();
 
-    if (profileName)
-    {
-        const filename = userProfileFile(profileName);
-        enforce(exists(filename), format("Profile %s does not exist", profileName));
-        profile = Profile.loadFromFile(filename);
-    }
-    else
-    {
-        const filename = packageDir.profileFile();
-        if (!exists(filename))
-        {
-            logInfo("No profile is set, assuming and setting default");
-            profile = Profile.loadFromFile(defaultFile);
-            profile.saveToFile(filename, true, true);
-        }
-        else
-        {
-            profile = Profile.loadFromFile(filename);
-        }
-    }
+    auto dag = enforceLoadLockFile(dir, recipe, profile, cache);
 
-    assert(profile, "profile not set");
+    auto depInfos = buildDependencies(dag, recipe, profile, cache);
 
-    auto sourceDir = enforceSourceDirReady(packageDir, recipe);
+    const srcDir = enforceSourceReady(dir, recipe);
 
-    const dirs = packageDir.profileDirs(profile);
+    if (!installDir)
+        installDir = profileDirs.install;
 
-    if (!checkConfigReady(packageDir, dirs))
-        recipe.build.configure(sourceDir, dirs, profile);
-    if (!checkBuildReady(packageDir, dirs))
-        recipe.build.build(dirs);
-    if (!checkInstallReady(packageDir, dirs))
-    {
-        recipe.build.install(dirs);
-        logInfo("Installed target in %s", info(dirs.install));
-    }
-    else
-    {
-        // can only be reached if package was configured AND built AND installed
-        logInfo("Target already installed in %s\nNothing to do.", info(dirs.install));
-    }
+    const buildDirs = BuildDirs(srcDir, installDir.absolutePath());
+    import std.stdio;
+    writeln(buildDirs);
+    const buildInfo = recipe.build(buildDirs, profile, depInfos);
+    profileDirs.buildFlag.write(buildInfo);
+
+    logInfo("%s: %s - %s", info("Build"), success("OK"), buildInfo);
 
     return 0;
 }

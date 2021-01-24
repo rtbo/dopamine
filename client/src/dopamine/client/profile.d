@@ -1,9 +1,6 @@
 module dopamine.client.profile;
 
-import dopamine.client.util;
-import dopamine.client.deps_lock;
-
-import dopamine.depdag;
+import dopamine.client.recipe;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
@@ -14,8 +11,6 @@ import std.exception;
 import std.getopt;
 import std.file;
 import std.format;
-import std.path;
-import std.stdio;
 
 Profile detectAndWriteDefault(Lang[] langs)
 {
@@ -39,13 +34,12 @@ Profile detectAndWriteDefault(Lang[] langs)
 /// Enforce the loading of a profile.
 /// If name is null, will load the profile from the profile file in .dop/ directory
 /// If name is not null (can be e.g. "default"), will load the profile from the user profile directory
-Profile enforceProfileReady(PackageDir dir, const(Recipe) recipe,
-        DepPack deps, string name = null)
+Profile enforceProfileReady(PackageDir dir, Recipe recipe, string name = null)
 {
     Profile profile;
     if (!name)
     {
-        profile = enforce(checkProfileFile(dir, recipe),
+        profile = enforce(checkProfileFile(dir),
                 new FormatLogException("%s: %s has no defined profile. Try to run `%s`.",
                     error("Error"), info(recipe.name), info("dop profile")));
         if (profile.name)
@@ -61,13 +55,12 @@ Profile enforceProfileReady(PackageDir dir, const(Recipe) recipe,
     else
     {
         string pname;
-        profile = enforce(checkProfileName(dir, deps, name, false, &pname),
+        profile = enforce(checkProfileName(dir, recipe, name, false, &pname),
                 new FormatLogException("%s: %s has no defined profile. Try to run `%s`.",
                     error("Error"), info(recipe.name), info("dop profile")));
         logInfo("%s: %s - %s", info("Profile"), success("OK"), info(pname));
     }
     return profile;
-
 }
 
 int profileMain(string[] args)
@@ -86,9 +79,7 @@ int profileMain(string[] args)
 
     const recipe = parseRecipe(packageDir);
 
-    const deps = enforceDepsLocked(packageDir, recipe);
-
-    auto langs = deps.resolvedNode.langs.dup;
+    auto langs = recipe.langs.dup;
 
     if (detectDef)
     {

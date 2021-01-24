@@ -39,14 +39,14 @@ string userPackageDir(string packname, const(Semver) ver)
     return buildPath(userDopDir(), "packages", format("%s-%s", packname, ver));
 }
 
-string userProfileDir()
+string userProfilesDir()
 {
     return buildPath(userDopDir(), "profiles");
 }
 
 string userProfileFile(string name)
 {
-    return buildPath(userProfileDir(), name ~ ".ini");
+    return buildPath(userProfilesDir(), name ~ ".ini");
 }
 
 string userProfileFile(Profile profile)
@@ -63,6 +63,36 @@ string userProfileDepsInstall(Profile profile)
 string userLoginFile()
 {
     return buildPath(userDopDir(), "login.json");
+}
+
+string cacheDepPackDir(string packname)
+{
+    return buildPath(userDopDir(), "packages", packname);
+}
+
+string cacheDepVerDir(string packname, Semver ver)
+{
+    return buildPath(userDopDir(), "packages", packname, ver.toString());
+}
+
+PackageDir cacheDepRevDir(string packname, Semver ver, string revision)
+{
+    return PackageDir(buildPath(userDopDir(), "packages", packname, ver.toString(), revision));
+}
+
+FlagFile cacheDepRevDirFlag(string packname, Semver ver, string revision)
+{
+    return FlagFile(buildPath(userDopDir(), "packages", packname, ver.toString(), "." ~ revision));
+}
+
+PackageDir cacheDepRevDir(Recipe recipe) @system
+{
+    return cacheDepRevDir(recipe.name, recipe.ver, recipe.revision());
+}
+
+FlagFile cacheDepRevDirFlag(Recipe recipe) @system
+{
+    return cacheDepRevDirFlag(recipe.name, recipe.ver, recipe.revision());
 }
 
 struct PackageDir
@@ -90,7 +120,6 @@ struct PackageDir
     }
 
     @property string dopamineFile() const
-    in(hasDopamineFile)
     {
         return _path("dopamine.lua");
     }
@@ -107,12 +136,6 @@ struct PackageDir
         return _path(".dop");
     }
 
-    @property string sourceDest() const
-    in(hasDopamineFile)
-    {
-        return _path(".dop", "source");
-    }
-
     @property FlagFile sourceFlag() const
     in(hasDopamineFile)
     {
@@ -125,6 +148,7 @@ struct PackageDir
         return _path(".dop", "profile.ini");
     }
 
+    /// Get the default locations for building with profile
     ProfileDirs profileDirs(const(Profile) profile) const @trusted
     in(profile && hasDopamineFile)
     {
@@ -132,7 +156,6 @@ struct PackageDir
 
         ProfileDirs dirs = void;
         dirs.work = _path(".dop", workDir);
-        dirs.build = _path(".dop", workDir, "build");
         dirs.install = _path(".dop", workDir, "install");
         return dirs;
     }
@@ -161,6 +184,13 @@ struct PackageDir
         return _path(".dop", workDir, filename);
     }
 
+    FlagFile archiveFlag(const(Profile) profile) const
+    {
+        const workDir = _workDirName(profile);
+        return FlagFile(_path(".dop", workDir, ".archive"));
+
+    }
+
     static PackageDir enforced(string dir, lazy string msg = null)
     {
         import std.exception : enforce;
@@ -181,7 +211,7 @@ struct PackageDir
 
     private static string _workDirName(const(Profile) profile)
     {
-        return format("%s-%s", profile.digestHash[0 .. 10], profile.name);
+        return profile.digestHash[0 .. 10];
     }
 }
 
@@ -190,26 +220,12 @@ struct ProfileDirs
 {
     /// dop working directory
     string work;
-    /// directory into which build happens
-    string build;
     /// directory into which files are installed
     string install;
 
-    /// FlagFile that indicates that configuration is done
-    FlagFile configFlag() const
-    {
-        return FlagFile(buildPath(work, ".config-ok"));
-    }
-
-    /// FlagFile that indicates that build is done
+    /// FlagFile that indicates that build is done and contain the directory
     FlagFile buildFlag() const
     {
-        return FlagFile(buildPath(work, ".build-ok"));
-    }
-
-    /// FlagFile that indicates that install is done
-    FlagFile installFlag() const
-    {
-        return FlagFile(buildPath(work, ".install-ok"));
+        return FlagFile(buildPath(work, ".build"));
     }
 }

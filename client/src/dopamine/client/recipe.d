@@ -1,12 +1,12 @@
-module dopamine.client.util;
+module dopamine.client.recipe;
 
 import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
 
-const(Recipe) parseRecipe(PackageDir packageDir)
+Recipe parseRecipe(PackageDir dir)
 {
-    const recipe = recipeParseFile(packageDir.dopamineFile());
+    auto recipe = Recipe.parseFile(dir.dopamineFile());
     logInfo("%s: %s - %s-%s", info("Recipe"), success("OK"), recipe.name, recipe.ver);
     return recipe;
 }

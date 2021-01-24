@@ -1,36 +1,33 @@
 module dopamine.client.app;
 
 import dopamine.client.build;
-import dopamine.client.deps_install;
-import dopamine.client.deps_lock;
+import dopamine.client.cache;
+import dopamine.client.deplock;
 import dopamine.client.login;
-import dopamine.client.pack;
 import dopamine.client.profile;
-import dopamine.client.publish;
 import dopamine.client.source;
-import dopamine.client.upload;
+import dopamine.log;
 
-import bindbc.lua;
-
-import std.algorithm;
 import std.getopt;
 import std.file;
 import std.format;
-import std.process;
-import std.stdio;
 
 int main(string[] args)
 {
-    import dopamine.log : error, info, logError, logInfo, FormatLogException;
-    import dopamine.recipe : initLua;
+    import std.algorithm : canFind, remove;
+    import dopamine.lua : initLua;
 
     initLua();
 
     const commandHandlers = [
-        "build" : &buildMain, "deps-lock" : &depsLockMain, "deps-install" : &depsInstallMain,
-        "login" : &loginMain, "package" : &packageMain, "profile" : &profileMain,
-        "publish" : &publishMain, "source" : &sourceMain, "upload" : &uploadMain,
+        "login" : &loginMain, "profile" : &profileMain, "deplock" : &depLockMain,
+        "source" : &sourceMain, "build" : &buildMain, "cache" : &cacheMain,
     ];
+    // TODO: missing commands
+    // - config: specify build options, install path etc.
+    // - package: stage built data in a directory (typically install operation)
+    // - publish: publish a recipe on a remote repo
+    // - upload: upload a build on a remote repo
 
     const commandNames = commandHandlers.keys;
 
@@ -49,13 +46,18 @@ int main(string[] args)
     }
 
     string changeDir;
+    bool verbose;
 
-    auto helpInfo = getopt(globalArgs, "change-dir|C", &changeDir,);
+    auto helpInfo = getopt(globalArgs, "change-dir|C", &changeDir, "verbose|v", &verbose);
 
     if (helpInfo.helpWanted)
     {
         defaultGetoptPrinter("The Dopamine package manager", helpInfo.options);
         return 0;
+    }
+    if (verbose)
+    {
+        minLogLevel = LogLevel.verbose;
     }
     if (changeDir.length)
     {
