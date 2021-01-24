@@ -90,7 +90,14 @@ struct DepDAG
 
     auto traverseBottomUp(Flag!"root" traverseRoot = No.root) @safe
     {
-        auto res = DepthFirstBottomUpRange(collectLeaves());
+        auto leaves = collectLeaves();
+
+        if (!traverseRoot && leaves.length == 1 && leaves[0] is root)
+        {
+            return DepthFirstBottomUpRange([]);
+        }
+
+        auto res = DepthFirstBottomUpRange(leaves);
 
         if (!traverseRoot)
             res.visited ~= root;
@@ -793,6 +800,28 @@ unittest
     assert(resolvedVersions["e"] == "1.0.0");
 }
 
+@("traverse without deps")
+unittest
+{
+    import std.array : array;
+
+    auto pack = TestPackage("a", [TestPackVersion("1.0.1", [], true)], [Lang.c]);
+    auto repo = new TestCacheRepo([]);
+    auto profile = ensureDefaultProfile();
+    const heuristics = Heuristics.pickHighest;
+    auto dag = prepareDepDAG(pack.recipe("1.0.1"), profile, repo, heuristics);
+    resolveDepDAG(dag, repo);
+
+    auto arr = dag.traverseTopDownResolved().array;
+    assert(arr.length == 0);
+    arr = dag.traverseTopDownResolved(Yes.root).array;
+    assert(arr.length == 1);
+    arr = dag.traverseBottomUpResolved().array;
+    assert(arr.length == 0);
+    arr = dag.traverseBottomUpResolved(Yes.root).array;
+    assert(arr.length == 1);
+}
+
 @("Test dagFetchLanguages")
 unittest
 {
@@ -882,7 +911,10 @@ struct DepthFirstRange(alias getMore)
 
     this(DepPack[] starter) @safe
     {
-        stack = [Stage(starter, 0)];
+        if (starter.length)
+            stack = [Stage(starter, 0)];
+        else
+            stack = [];
     }
 
     this(Stage[] stack, DepPack[] visited) @safe
