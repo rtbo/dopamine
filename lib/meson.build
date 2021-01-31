@@ -59,19 +59,56 @@ dop_dep = declare_dependency(
 )
 
 dop_test_src = [
+    'test/main.d',
     'test/profile.d',
     'test/recipe.d',
     'test/util.d',
 ]
 
+unit_threaded_ver = '>=1.0.11'
+
+unit_threaded_deps = [
+    dependency('unit-threaded',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+    dependency('unit-threaded:runner',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+    dependency('unit-threaded:exception',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+    dependency('unit-threaded:assertions',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+    dependency('unit-threaded:integration',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+    dependency('unit-threaded:property',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+    dependency('unit-threaded:from',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+    dependency('unit-threaded:mocks',
+        version: unit_threaded_ver,
+        method: 'dub',
+    ),
+]
+
 dop_test = executable('doptest', dop_src, dop_test_src,
     install: false,
     include_directories: [ dop_inc, include_directories('.') ],
-    dependencies: dop_deps,
+    dependencies: dop_deps + unit_threaded_deps,
     d_import_dirs: dop_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,
-    link_args: [ '--main' ],
 )
 
 test('dop tests', dop_test)
