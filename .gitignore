@@ -15,6 +15,7 @@ dub.selections.json
 client/dop
 lib/dopamine-lib-test-lua53-static
 lib/dopamine-lib-test-unittest
+lib/doptest
 
 #dop
 .dop/

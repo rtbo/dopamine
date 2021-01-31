@@ -23,8 +23,14 @@
     },
     {
       "name": "unittest",
+      "targetType": "executable",
+      "targetName": "doptest",
+      "dependencies": {
+        "unit-threaded": "~>1.0.11"
+      },
       "versions": ["LUA_53", "BindBC_Static"],
       "libs": ["lua53"],
+      "mainSourceFile": "test/main.d",
       "sourcePaths": ["src", "test"],
       "importPaths": [".", "src"]
     }

@@ -176,7 +176,6 @@ function Meson:setup(params)
         table.insert(cmd, '-D' .. k .. '=' .. v)
     end
 
-    cmd['workdir'] = self.src_dir
     cmd['env'] = dop.profile_environment(self.profile)
 
     dop.run_cmd(cmd)
