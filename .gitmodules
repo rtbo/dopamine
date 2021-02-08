@@ -1,0 +1,3 @@
+[submodule "dopamine-web"]
+	path = web
+	url = https://github.com/rtbo/dopamine-web
