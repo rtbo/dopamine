@@ -15,12 +15,12 @@ int loginMain(string[] args)
 
     if (isLoggedIn()) {
         const current = readLoginKey();
-        logInfo("replacing former login key: '%s'", warning(current.keyName));
+        logInfo("%s: Replacing former login key: %s", warning("Warning"), info(current.keyName));
     }
 
-    logInfo("registering new login key: '%s'", success(loginKey.keyName));
-
     writeLoginKey(loginKey);
+
+    logInfo("%s: %s - Registered new key: %s", info("Login"), success("OK"), info(loginKey.keyName));
 
     return 0;
 }
