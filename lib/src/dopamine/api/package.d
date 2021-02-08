@@ -33,13 +33,11 @@ struct API
         transport.ver = ver;
     }
 
-    void readLogin()
+    bool readLogin()
     {
-        import std.exception : enforce;
-
-        enforce(isLoggedIn,
-                "Not logged-in. Get a CLI-key on the frontend and run `dop login [your key]`");
+        if (!isLoggedIn) return false;
         transport.login = readLoginKey();
+        return true;
     }
 
     @property LoginKey login() const
