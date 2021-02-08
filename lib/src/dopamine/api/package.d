@@ -77,6 +77,7 @@ struct API
         JSONValue json;
         json["version"] = prp.ver;
         json["revision"] = prp.rev;
+        json["recipe"] = prp.recipe;
         return transport.jsonPost(uri, json).mapResp!(jv => packageRecipeFromJson(jv));
     }
 

@@ -9,7 +9,7 @@ struct Package
 {
     string id;
     string name;
-    string[] versions;
+    string maintainerId;
 }
 
 string[] jsonStringArray(const(JSONValue) jv)
@@ -28,7 +28,7 @@ package Package packageFromJson(const(JSONValue) json)
     Package p;
     p.id = json["id"].str;
     p.name = json["name"].str;
-    p.versions = json["versions"].jsonStringArray;
+    p.maintainerId = json["maintainerId"].str;
     return p;
 }
 
@@ -66,7 +66,6 @@ struct PackageRecipe
 
 package PackageRecipe packageRecipeFromJson(const(JSONValue) json)
 {
-
     PackageRecipe pr;
     pr.packageId = json["packageId"].str;
     pr.ver = json["version"].str;
