@@ -69,8 +69,6 @@ int buildMain(string[] args)
         installDir = profileDirs.install;
 
     const buildDirs = BuildDirs(srcDir, installDir.absolutePath());
-    import std.stdio;
-    writeln(buildDirs);
     const buildInfo = recipe.build(buildDirs, profile, depInfos);
     profileDirs.buildFlag.write(buildInfo);
 
