@@ -6,6 +6,7 @@ dop_client_src = [
     'src/dopamine/client/deplock.d',
     'src/dopamine/client/login.d',
     'src/dopamine/client/profile.d',
+    'src/dopamine/client/publish.d',
     'src/dopamine/client/recipe.d',
     'src/dopamine/client/source.d',
 ]

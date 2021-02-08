@@ -5,6 +5,7 @@ import dopamine.client.cache;
 import dopamine.client.deplock;
 import dopamine.client.login;
 import dopamine.client.profile;
+import dopamine.client.publish;
 import dopamine.client.source;
 import dopamine.log;
 
@@ -22,6 +23,7 @@ int main(string[] args)
     const commandHandlers = [
         "login" : &loginMain, "profile" : &profileMain, "deplock" : &depLockMain,
         "source" : &sourceMain, "build" : &buildMain, "cache" : &cacheMain,
+        "publish": &publishMain,
     ];
     // TODO: missing commands
     // - config: specify build options, install path etc.
