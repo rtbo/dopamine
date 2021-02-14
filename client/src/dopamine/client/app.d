@@ -13,6 +13,9 @@ import std.getopt;
 import std.file;
 import std.format;
 
+// TODO version from meson
+enum dopVersion = "0.1.0-alpha";
+
 int main(string[] args)
 {
     import std.algorithm : canFind, remove;
@@ -23,7 +26,7 @@ int main(string[] args)
     const commandHandlers = [
         "login" : &loginMain, "profile" : &profileMain, "deplock" : &depLockMain,
         "source" : &sourceMain, "build" : &buildMain, "cache" : &cacheMain,
-        "publish": &publishMain,
+        "publish" : &publishMain,
     ];
     // TODO: missing commands
     // - config: specify build options, install path etc.
@@ -49,12 +52,19 @@ int main(string[] args)
 
     string changeDir;
     bool verbose;
+    bool showVer;
 
-    auto helpInfo = getopt(globalArgs, "change-dir|C", &changeDir, "verbose|v", &verbose);
+    auto helpInfo = getopt(globalArgs, "change-dir|C", &changeDir,
+            "verbose|v", &verbose, "version", &showVer);
 
     if (helpInfo.helpWanted)
     {
         defaultGetoptPrinter("The Dopamine package manager", helpInfo.options);
+        return 0;
+    }
+    if (showVer)
+    {
+        logInfo("dop v%s", dopVersion);
         return 0;
     }
     if (verbose)
