@@ -50,26 +50,38 @@ int buildMain(string[] args)
     if (!force && buildReady)
     {
         logInfo("%s: Already up-to-date at %s (run with %s to overcome)",
-                info("Build"), info("buildReady"), info("--force"));
+                info("Build"), info(buildReady), info("--force"));
         return 0;
     }
+
+    const srcDir = enforceSourceReady(dir, recipe);
 
     const network = noNetwork ? No.network : Yes.network;
     auto cache = new DependencyCache(network);
     scope (exit)
         cache.dispose();
 
-    auto dag = enforceLoadLockFile(dir, recipe, profile, cache);
+    DepInfo[string] depInfos;
 
-    auto depInfos = buildDependencies(dag, recipe, profile, cache);
-
-    const srcDir = enforceSourceReady(dir, recipe);
+    if (recipe.hasDependencies)
+    {
+        auto dag = enforceLoadLockFile(dir, recipe, profile, cache);
+        logInfo("Building dependencies...");
+        depInfos = buildDependencies(dag, recipe, profile, cache);
+        logInfo("%s: %s", info("Dependencies"), success("OK"));
+    }
 
     if (!installDir)
         installDir = profileDirs.install;
 
     const buildDirs = BuildDirs(srcDir, installDir.absolutePath());
+    logInfo("Building %s...", info(recipe.name));
     const buildInfo = recipe.build(buildDirs, profile, depInfos);
+
+    enforce(exists(buildInfo) && isDir(buildInfo), new FormatLogException(
+            "%s: Build successful but the build function did not return the install directory!",
+            error("Error")));
+
     profileDirs.buildFlag.write(buildInfo);
 
     logInfo("%s: %s - %s", info("Build"), success("OK"), buildInfo);
