@@ -35,6 +35,7 @@ private DepInfo[string] collectDepInfos(DepNode node)
     {
         auto dio = cast(DepInfoObj) d.userData;
         depInfos[k] = DepInfo(dio.installDir);
+        d.userData = null;
     }
     return depInfos;
 }
@@ -43,6 +44,8 @@ DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe, Profile profile,
         DependencyCache depcache)
 in(dagIsResolved(dag))
 {
+    import std.path : absolutePath;
+
     if (dag.allLangs.length == 0)
     {
         dagFetchLanguages(dag, recipe, depcache);
@@ -57,7 +60,7 @@ in(dagIsResolved(dag))
         auto drec = depcache.packRecipe(node.pack.name, node.ver, node.revision);
         const ddir = cacheDepRevDir(node.pack.name, node.ver, node.revision);
         auto dprof = profile.subset(drec.langs);
-        const pdirs = ddir.profileDirs(dprof);
+        auto pdirs = ddir.profileDirs(dprof);
         if (!checkBuildReady(ddir, pdirs))
         {
             auto depInfos = collectDepInfos(node);
@@ -65,12 +68,20 @@ in(dagIsResolved(dag))
             auto srcFlag = ddir.sourceFlag.absolute();
             auto bldFlag = pdirs.buildFlag.absolute();
 
-            logInfo("Building %s", info(format("%s-%s", node.pack.name, node.ver)));
+            const depName = format("%s-%s", node.pack.name, node.ver);
+
+            logInfo("Building %s", info(depName));
             ddir.dir.fromDir!({
                 const src = drec.source();
                 srcFlag.write(src);
                 const bd = BuildDirs(src, pdirs.install);
-                drec.build(bd, dprof, depInfos);
+                pdirs.install = drec.build(bd, dprof, depInfos).absolutePath();
+                if (!exists(pdirs.install) && !isDir(pdirs.install))
+                {
+                    throw new FormatLogException("%s: %s built successfully but did not return the build directory",
+                        error("Error"), info(depName));
+                }
+                logInfo("%s: %s - %s", info(depName), success("OK"), pdirs.install);
                 bldFlag.write(pdirs.install);
             });
         }
