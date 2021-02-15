@@ -74,12 +74,15 @@ private string checkFlagFile(PackageDir dir, FlagFile flag, FlagFile previous)
     if (!flag.exists() || !previous.exists())
         return null;
 
-    const tlm = flag.timeLastModified;
+    const flagDir = flag.read();
+    if (!exists(flagDir) || !isDir(flagDir))
+        return null;
 
+    const tlm = flag.timeLastModified;
     if (tlm < previous.timeLastModified || tlm < timeLastModified(dir.dopamineFile))
         return null;
 
-    return flag.read();
+    return flagDir;
 }
 
 /// Check if the build was successfully completed for the given [ProfileDirs]
