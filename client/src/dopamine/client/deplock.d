@@ -29,6 +29,7 @@ DepDAG enforceLoadLockFile(PackageDir dir, Recipe recipe, Profile profile, Cache
     enforce(dag && dagIsResolved(dag), new FormatLogException(
             "%s: Dependencies are not fully locked or resolved. Try to run %s",
             error("Error"), info("dop deplock")));
+    logInfo("%s: %s", info("Dependencies lock"), success("OK"));
     return dag;
 }
 
