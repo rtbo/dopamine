@@ -70,7 +70,7 @@ package PackageRecipe packageRecipeFromJson(const(JSONValue) json)
     pr.packageId = json["packageId"].str;
     pr.ver = json["version"].str;
     pr.rev = json["revision"].str;
-    pr.recipe = json["packageId"].str;
+    pr.recipe = json["recipe"].str;
     pr.maintainerId = json["maintainerId"].str;
     pr.created = json["created"].str;
     return pr;
