@@ -279,7 +279,7 @@ final class DependencyCache : CacheRepo
         write(dir.dopamineFile, resp.payload.recipe);
         auto flag = cacheDepRevDirFlag(packname, ver, revision);
         flag.touch();
-        return Recipe.parseFile(dir.dopamineFile);
+        return Recipe.parseFile(dir.dopamineFile, revision);
     }
 
 }
