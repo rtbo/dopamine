@@ -14,15 +14,15 @@ $ dop [global options] [command] [command options]
 
 ## Global options
 
-- `-C|--change-dir [directory]`
+- `-C|--change-dir [directory]` :heavy_check_mark:
   - Change to directory before executing the command
-- `-v|--verbose`
+- `-v|--verbose` :heavy_check_mark:
   - Enable verbose mode
 - `-c|--no-color`
   - Disable colored output
-- `--version`
+- `--version` :heavy_check_mark:
   - Print client version and exit
-- `--help`
+- `--help` :heavy_check_mark:
   - Print help and exit
 
 ## Commands summary
@@ -49,13 +49,13 @@ The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
   - Shows the currently selected profile
 - `dop profile --describe`
   - Print a detailed description of the current profile.
-- `dop profile default`
+- `dop profile default`  :heavy_check_mark:
   - Sets the default profile as current
   - Use only the languages of the current recipe
 - `dop profile default-lang1[-lang2...]`
   - Sets the default profile as current
   - Use the languages of the current recipe in addition to the one(s) specified
-- `dop profile [name]`
+- `dop profile [name]` :heavy_check_mark:
   - Sets the named profile as current
   - Use only the languages of the current recipe
 - `dop profile --add-[lang] [compiler]`
@@ -71,7 +71,7 @@ The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
 
 For more sophisticated need, the profile files can be edited.
 
-### Profile files
+### Profile files :heavy_check_mark:
 
 Profile files are INI files containing info about:
 
@@ -92,10 +92,10 @@ For example:
 Resolve and locks dependencies.<br>
 _Prerequisite_: A profile must be chosen (dependencies can depend on profile)
 
-- `dop deplock`
+- `dop deplock` :heavy_check_mark:
   - Creates a dependency lockfile for the current package.
   - If one exists already, exits without alteration.
-- `dop deplock -f|--force`
+- `dop deplock -f|--force` :heavy_check_mark:
   - Creates or reset a dependency lock file for the current package
 - `dop deplock --prefer-cached`
   - Creates/reset a dependency lockfile using the `preferCached` heuristic.
@@ -134,7 +134,7 @@ _Prerequisite_: The dependencies must be locked.
 
 Download package source code.
 
-- `dop source`
+- `dop source` :heavy_check_mark:
   - Execute the `source` function of the recipe file.
   - The function is always executed from the package directory.
   - If `source` symbol is a string, the source code is expected
@@ -164,9 +164,9 @@ _Requirements_:
 
 _Command options_:
 
-- `dop build`
+- `dop build` :heavy_check_mark:
   - Execute the `build` function of the recipe file.
-- `dop build --profile [profile]`
+- `dop build --profile [profile]` :heavy_check_mark:
   - Execute the `build` function of the recipe file using `[profile]` as compilation profile instead of the one currently selected.
 - `dop build --debug`
   - Execute the `build` function of the recipe file using a debug variant of the currently selected profile.
