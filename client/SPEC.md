@@ -8,9 +8,46 @@ $ dop [global options] [command] [command options]
 
 ## Paths
 
-| Spec sym.  | Path linux    | Path Windows         | Desciption                 |
-| ---------- | ------------- | -------------------- | -------------------------- |
-| `USER_DIR` | `~/.dopamine` | `%APPDATA%\Dopamine` | Local storage for Dopmaine |
+| Spec. sym.  | Path                  | Description                                 |
+| ----------- | ----------------      | -------------------------------             |
+| `$USER_DIR` | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine    |
+| -           | `$USER_DIR/profiles`  | Local cache for profiles                    |
+| -           | `$USER_DIR/packages`  | Local package cache                         |
+| `$PKG`      | -                     | Refer to a package directory                |
+| `$DOP`      | `$PKG/.dop`           | Package working directory for `dop`         |
+| -           | `$PKG/dop.lock`       | Dependency lock file                        |
+| `$PROF`     | `$DOP/[profile hash]` | Working directory for a profile             |
+| -           | `$PROF/install`       | Install directory for a profile (optional)  |
+
+
+## Recipe file
+
+Each package is decribed by a recipe file, which is a Lua script named `dopamine.lua` located at the package root.
+The recipe file must assign global symbols such as `name`, or `version`.
+There can be 2 sorts of recipe:
+- A dependencies recipe.
+    - This kind of recipe is used to install dependencies locally.
+    - It is not meant to package a piece of software.
+    - Expresses dependencies through the `dependencies` field.
+- A package recipe.
+    - Is a complete recipe that provide data and functions to build and package a piece of software.
+    - It can express dependencies.
+    - Some fields are mandatory for the package to be published:
+        - `name`
+        - `version` (Semver compliant)
+        - `license`
+        - `build` function
+        - TBD
+
+### dop Lua library
+In order to help packaging, a `dop` Lua library is provided by the client.
+It must be imported explicitely like every other Lua library:
+```lua
+local dop = require('dop')
+```
+Recipes may import other libraries, but the `dop` library is the only one that is guaranteed to be always available.
+It contains functions to run commands, concatenate paths, perform various file system operations, compute checksums...<br>
+Documentation TBD, see `lib/src/dopamine/lua` source folder.
 
 ## Global options
 
@@ -29,16 +66,16 @@ $ dop [global options] [command] [command options]
 
 | Command      | Description                                      |
 | ------------ | ------------------------------------------------ |
-| `profile`    | Get, set or adjust the compilation profile       |
+| `profile`    | Get, set or adjust the compilation profile.      |
+| `options`    | Get, set or adjust the package build options.    |
 | `deplock`    | Resolve an and lock dependencies.                |
 | `depinstall` | Install dependencies.                            |
 | `source`     | Download package source.                         |
-| `options`    | Get, set or adjust the package build options.    |
 | `build`      | Build package with selected compilation profile. |
 | `package`    | Package binary for distribution.                 |
 | `cache`      | Add a package in the local cache.                |
 | `publish`    | Publish a package recipe on a repository.        |
-| `upload`     | Upload a built package on a repository.          |
+| `upload`     | Upload a built package to a repository.          |
 
 ## Profile command
 
@@ -46,7 +83,8 @@ Set or get the compilation profile for the current package.
 The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
 
 - `dop profile`
-  - Shows the currently selected profile
+  - Print the name of the currently selected profile or `(no profile selected)`
+  - :x: Wrong implementation: Currently select default profile
 - `dop profile --describe`
   - Print a detailed description of the current profile.
 - `dop profile default`  :heavy_check_mark:
@@ -87,6 +125,8 @@ For example:
 
 - `~/.dopamine/profiles/default-d-c.ini`
 
+## Options command
+
 ## Deplock command
 
 Resolve and locks dependencies.<br>
@@ -114,8 +154,8 @@ _Prerequisite_: A profile must be chosen (dependencies can depend on profile)
 
 ### Lock-file
 
-Lock files are located in the package root in a file named `dop.lock`.
-The format is adhoc and implementation clumsy. It is likely to switch to a well establish standard (e.g. JSON).
+Lock files are located in the package root in a file named `dop.lock`. <br>
+:x: The format is adhoc and implementation clumsy. It is likely to switch to a well establish standard (e.g. JSON).
 
 ## Depinstall command
 
@@ -153,12 +193,16 @@ _Prerequisites_:
 
 _Requirements_:
 
-- The `build` function of the recipe must effectively compile the package using the build system provided by the package source code.
+- The `build` function of the Lua recipe must effectively compile the package using the build system provided by the package source code.
 - The `build` function accepts arguments:
   1. `dirs`: a table containing paths:
      - `dirs.src` to the source directory
-     - `dirs.install` is where to install the compilation if installing
-  2. `profile`: the compilation profile
+     - `dirs.install` is where to install
+  2. `config`: the compilation config table:
+     - `config.profile`: the compilation profile
+     - `config.options`: the compilation options
+     - `config.hash`: A unique hash for the configuration
+     - `config.short_hash`: An abbreviation of the unique hash
   3. `depinfos`: a table containing one entry per dependency, each containing where it is installed.
 - The `build` function may use the install functionality of the build system. If it does, it must install to the `dirs.install` directory.
 
@@ -184,6 +228,7 @@ _Prerequisites_:
 - The dependencies must be installed.
 - The source code must be available
 - The package must be built.
+- The recipe must have a `package` function, or have installed during the `build` command
 
 _Command options_:
 
@@ -192,3 +237,9 @@ _Command options_:
   - If `package` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
 - `dop package [dest]`
   - Same as previous but package to `[dest]`.
+
+## Cache command
+
+## Publish command
+
+## Upload command
