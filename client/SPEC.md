@@ -264,6 +264,7 @@ _Requirements_:
   3. `dest`: directory where to package files
 - If the `dirs.install` and `dest` directories are identical and install functionality was used, the `pack` function may only patch files in that directory.
 - If the `dirs.install` and `dest` directories are different, the `pack` function must effectively copy the necessary files to the `dest` directory, either from `dirs.install` or directly from where the build occurred.
+- If the recipe declares a `patch_install` function, it is executed.
 
 _Command options_:
 

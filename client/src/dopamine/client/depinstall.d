@@ -88,6 +88,11 @@ in(dagIsResolved(dag))
                 }
                 logInfo("%s: %s - %s", info(depName), success("OK"), pdirs.install);
                 bldFlag.write(inst ? pdirs.install : "");
+                if (drec.hasPackFunc)
+                {
+                    drec.pack(bd, dprof, bd.install);
+                }
+                drec.patchInstall(dprof, bd.install);
             });
         }
         else

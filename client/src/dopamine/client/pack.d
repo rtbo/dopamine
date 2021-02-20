@@ -67,6 +67,8 @@ int packageMain(string[] args)
         recipe.pack(bd, profile, absDest);
     }
 
+    recipe.patchInstall(profile, absDest);
+
     logInfo("%s: %s - %s", info("Package"), success("OK"), dest);
     return 0;
 }

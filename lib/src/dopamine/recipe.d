@@ -301,7 +301,38 @@ struct Recipe
         // 3 params, 0 result
         if (lua_pcall(L, 3, 0, 0) != LUA_OK)
         {
-            throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot create package: " ~ luaTo!string(L, -1));
+        }
+    }
+
+    /// Execute the `patch_install` function of this recipe
+    void patchInstall(Profile profile, string dest)
+    {
+        auto L = d.L;
+
+        lua_getglobal(L, "patch_install");
+
+        L.luaWithGlobal!("patch_install", {
+            switch (lua_type(L, -1))
+            {
+            case LUA_TFUNCTION:
+                break;
+            case LUA_TNIL:
+                lua_pop(L, 1);
+                return;
+            default:
+                const typ = luaL_typename(L, -1).fromStringz.idup;
+                throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
+            }
+        });
+
+        pushConfig(L, profile);
+        luaPush(L, dest);
+
+        // 2 params, 0 result
+        if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+        {
+            throw new Exception("Cannot patch installation: " ~ luaTo!string(L, -1));
         }
     }
 
@@ -346,6 +377,7 @@ package class RecipePayload
     string inTreeSrc;
 
     bool packFunc;
+    bool patchInstallFunc;
 
     string filename;
     string revision;
