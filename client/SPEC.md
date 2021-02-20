@@ -6,19 +6,18 @@
 $ dop [global options] [command] [command options]
 ```
 
-## Paths
+## Global options
 
-| Spec. sym.  | Path                  | Description                                 |
-| ----------- | ----------------      | -------------------------------             |
-| `$USER_DIR` | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine    |
-| -           | `$USER_DIR/profiles`  | Local cache for profiles                    |
-| -           | `$USER_DIR/packages`  | Local package cache                         |
-| `$PKG`      | -                     | Refer to a package directory                |
-| `$DOP`      | `$PKG/.dop`           | Package working directory for `dop`         |
-| -           | `$PKG/dop.lock`       | Dependency lock file                        |
-| `$PROF`     | `$DOP/[profile hash]` | Working directory for a profile             |
-| -           | `$PROF/install`       | Install directory for a profile (optional)  |
-
+- `-C|--change-dir [directory]` :heavy_check_mark:
+  - Change to directory before executing the command
+- `-v|--verbose` :heavy_check_mark:
+  - Enable verbose mode
+- `-c|--no-color`
+  - Disable colored output
+- `--version` :heavy_check_mark:
+  - Print client version and exit
+- `--help` :heavy_check_mark:
+  - Print help and exit
 
 ## Recipe file
 
@@ -39,6 +38,8 @@ There can be 2 sorts of recipe:
         - `build` function
         - TBD
 
+When a recipe function is executed, the current directory is always the package root directory.
+
 ### dop Lua library
 In order to help packaging, a `dop` Lua library is provided by the client.
 It must be imported explicitely like every other Lua library:
@@ -49,18 +50,28 @@ Recipes may import other libraries, but the `dop` library is the only one that i
 It contains functions to run commands, concatenate paths, perform various file system operations, compute checksums...<br>
 Documentation TBD, see `lib/src/dopamine/lua` source folder.
 
-## Global options
+## Paths and Files
 
-- `-C|--change-dir [directory]` :heavy_check_mark:
-  - Change to directory before executing the command
-- `-v|--verbose` :heavy_check_mark:
-  - Enable verbose mode
-- `-c|--no-color`
-  - Disable colored output
-- `--version` :heavy_check_mark:
-  - Print client version and exit
-- `--help` :heavy_check_mark:
-  - Print help and exit
+The following table contains paths, that may be referred to with the Spec symbol in the next sections.
+
+| Spec. symbol  | Path                  | Description                                 |
+| ------------- | ----------------      | -------------------------------             |
+| `$USR_DIR`    | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine    |
+|               | `$USR_DIR/profiles`   | Local cache for profiles                    |
+|               | `$USR_DIR/packages`   | Local package cache                         |
+| `$PKG`        |                       | Refer to a package directory                |
+|               | `$PKG/dopamine.lua`   | Package recipe file.
+| `$DOP`        | `$PKG/.dop`           | Package working directory for `dop`         |
+|               | `$PKG/dop.lock`       | Dependency lock file                        |
+| `$PROF`       | `$DOP/[profile hash]` | Working directory for a profile             |
+| `$INST`       | `$PROF/install`       | Install directory for a profile (optional)  |
+| `$SRC_FLG`    | `$DOP/.source`        | Flag file containing the source directory   |
+| `$BLD_FLG`    | `$PROF/.build`        | Flag file containing the install directory  |
+
+### Flag files
+
+Flag files are used to keep track of the state of the package between successive invocations of `dop`.
+`dop` uses their modification date and if required their content to check for the validity of a previous operation.
 
 ## Commands summary
 
@@ -165,18 +176,25 @@ _Prerequisite_: The dependencies must be locked.
 - `dop depinstall`
   - Download and install the dependencies
   - Dependencies that are not built for the chosen profile are built.
-  - They are installed in a per-dependency and per-profile directory under the `~/.dopamine/package` directory.
+  - They are installed in a per-dependency and per-profile directory under the `~/.dopamine/packages` directory.
 - `dop depinstall --stage [prefix]`
   - Same as `dop depinstall` except that dependencies are staged in the given prefix.
-  - The build process will use the dependencies installed in `[prefix]` instead of the ones in the `~/.dopamine/package` directory.
+  - The build process will use the dependencies installed in `[prefix]` instead of the ones in the `~/.dopamine/packages` directory.
 
 ## Source command
 
 Download package source code.
 
+_Requirements_:
+- The `source` recipe function, if provided, must effectively download the package source code and return the path.
+- If the `source` function returns successfully, the return value is written to `$SRC_FLG`.
+- If the package embeds the source code, the `source` symbol may be a constant string, which is interpreted as a relative path from `$PKG` to the source directory.
+- If the `source` symbol is omitted, `'.'` is assumed.
+
+_Command options_:
+
 - `dop source` :heavy_check_mark:
   - Execute the `source` function of the recipe file.
-  - The function is always executed from the package directory.
   - If `source` symbol is a string, the source code is expected
     local with the package, `source` being the relative path to the source directory.
 - ....
@@ -194,10 +212,13 @@ _Prerequisites_:
 _Requirements_:
 
 - The `build` function of the Lua recipe must effectively compile the package using the build system provided by the package source code.
+- The build must happen in a directory within the package that is unique for the build configuration. `dirs.build` is provided as a possible build directory, but other directory can be used if deemed necessary.
 - The `build` function accepts arguments:
   1. `dirs`: a table containing paths:
      - `dirs.src` to the source directory
-     - `dirs.install` is where to install
+     - `dirs.config` is a working directory unique for the (profile + options) configuration
+     - `dirs.build` is a recommended location to build
+     - `dirs.install` is where to install (which is optional)
   2. `config`: the compilation config table:
      - `config.profile`: the compilation profile
      - `config.options`: the compilation options
@@ -205,6 +226,9 @@ _Requirements_:
      - `config.short_hash`: An abbreviation of the unique hash
   3. `depinfos`: a table containing one entry per dependency, each containing where it is installed.
 - The `build` function may use the install functionality of the build system. If it does, it must install to the `dirs.install` directory.
+- If the build is successful, `$BLD_FLG` is written.
+- If the build is successful, the `build` function must return `true` if the install functionality was used.
+  If so, `$INST` must exist and is the path is written to `$BLD_FLG`.
 
 _Command options_:
 
@@ -228,13 +252,24 @@ _Prerequisites_:
 - The dependencies must be installed.
 - The source code must be available
 - The package must be built.
-- The recipe must have a `package` function, or have installed during the `build` command
+- The recipe must have a `pack` function, or have installed during the `build` command
+
+_Requirements_:
+- If the recipe uses the install functionality of the build system, it may or may not declare a `pack` function.
+- If the recipe does not use the install functionality of the build system, it must declare a `pack` function.
+- If `pack` function does not exist and `$INST` and `$STAGE` are different directories, the content of `$INST` is copied to `$STAGE`.
+- The `pack` function takes three arguments:
+  1. `dirs`: the same as for the `build` function
+  2. `config`: the same as for the `build` function
+  3. `dest`: directory where to package files
+- If the `dirs.install` and `dest` directories are identical and install functionality was used, the `pack` function may only patch files in that directory.
+- If the `dirs.install` and `dest` directories are different, the `pack` function must effectively copy the necessary files to the `dest` directory, either from `dirs.install` or directly from where the build occurred.
 
 _Command options_:
 
 - `dop package`
-  - Execute the `package` function of the recipe with the default destination.
-  - If `package` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
+  - Execute the `pack` function of the recipe with the default destination.
+  - If `pack` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
 - `dop package [dest]`
   - Same as previous but package to `[dest]`.
 
