@@ -4,6 +4,7 @@ import dopamine.client.build;
 import dopamine.client.cache;
 import dopamine.client.deplock;
 import dopamine.client.login;
+import dopamine.client.pack;
 import dopamine.client.profile;
 import dopamine.client.publish;
 import dopamine.client.source;
@@ -39,6 +40,7 @@ int main(string[] args)
         Command("deplock", &depLockMain, "Lock dependencies"),
         Command("source", &sourceMain, "Download package source"),
         Command("build", &buildMain, "Build package"),
+        Command("package", &packageMain, "Create package from build"),
         Command("cache", &cacheMain, "Add package to local cache"),
         Command("publish", &publishMain, "Publish package to repository"),
     ];
