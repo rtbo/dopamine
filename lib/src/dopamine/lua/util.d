@@ -54,8 +54,6 @@ void luaPush(T)(lua_State* L, T value) nothrow if (isLuaScalar!T)
 
 T luaTo(T)(lua_State* L, int index) if (isLuaScalar!T)
 {
-    pragma(inline, true);
-
     static if (isSomeString!T)
     {
         enforce(lua_type(L, index) == LUA_TSTRING, "string expected");
@@ -82,8 +80,6 @@ T luaTo(T)(lua_State* L, int index) if (isLuaScalar!T)
 
 T luaTo(T)(lua_State* L, int index, T defaultVal) nothrow if (isLuaScalar!T)
 {
-    pragma(inline, true);
-
     static if (isSomeString!T)
     {
         if (lua_type(L, index) != LUA_TSTRING)
@@ -114,8 +110,6 @@ T luaTo(T)(lua_State* L, int index, T defaultVal) nothrow if (isLuaScalar!T)
 
 T luaPop(T)(lua_State* L) if (isLuaScalar!T)
 {
-    pragma(inline, true);
-
     scope (success)
         lua_pop(L, 1);
     return luaTo!T(L, -1);
@@ -123,8 +117,6 @@ T luaPop(T)(lua_State* L) if (isLuaScalar!T)
 
 T luaPop(T)(lua_State* L, T defaultVal) nothrow if (isLuaScalar!T)
 {
-    pragma(inline, true);
-
     scope (success)
         lua_pop(L, 1);
     return luaTo!T(L, -1, defaultVal);
