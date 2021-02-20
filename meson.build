@@ -1,5 +1,5 @@
 project('dopamine', 'd',
-    version: '0.1.0',
+    version: '0.1.0-alpha.1',
 )
 
 lua_bindings = get_option('lua_bindings')

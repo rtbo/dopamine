@@ -1,6 +1,8 @@
+subdir('src/dopamine')
 
 dop_src = [
     'src/arsd/terminal.d',
+
     'src/bindbc/loader/package.d',
     'src/bindbc/loader/sharedlib.d',
     'src/bindbc/loader/system.d',
@@ -18,6 +20,7 @@ dop_src = [
     'src/bindbc/lua/v53/bindstatic.d',
     'src/bindbc/lua/v53/package.d',
     'src/bindbc/lua/v53/types.d',
+
     'src/dopamine/api/defs.d',
     'src/dopamine/api/package.d',
     'src/dopamine/api/transport.d',
@@ -44,10 +47,13 @@ dop_inc = include_directories('src')
 dop_deps = [ dini_dep ] + lua_deps
 dop_imp = include_directories('src/dopamine/lua')
 
+message(lua_d_versions)
+
 dop_lib = library('dopamine', dop_src,
     install: true,
     include_directories: dop_inc,
     dependencies: dop_deps,
+    # link_whole: dop_conf_lib,
     d_import_dirs: dop_imp,
     d_module_versions: lua_d_versions,
 )

@@ -8,14 +8,12 @@ import dopamine.client.pack;
 import dopamine.client.profile;
 import dopamine.client.publish;
 import dopamine.client.source;
+import dopamine.conf;
 import dopamine.log;
 
 import std.getopt;
 import std.file;
 import std.format;
-
-// TODO version from meson
-enum dopVersion = "0.1.0-alpha";
 
 alias CommandFunc = int function(string[] args);
 
@@ -78,7 +76,7 @@ int main(string[] args)
     }
     if (showVer)
     {
-        logInfo("%s", info(dopVersion));
+        logInfo("%s", info(dopamineVersion));
         return 0;
     }
     if (verbose)
