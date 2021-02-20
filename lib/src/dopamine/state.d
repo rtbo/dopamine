@@ -69,26 +69,37 @@ string checkSourceReady(PackageDir dir, Recipe recipe)
     return sourceDir;
 }
 
-private string checkFlagFile(PackageDir dir, FlagFile flag, FlagFile previous)
+struct BuildState
 {
-    if (!flag.exists() || !previous.exists())
-        return null;
+    bool valid;
+    string installDir;
 
-    const flagDir = flag.read();
-    if (!exists(flagDir) || !isDir(flagDir))
-        return null;
-
-    const tlm = flag.timeLastModified;
-    if (tlm < previous.timeLastModified || tlm < timeLastModified(dir.dopamineFile))
-        return null;
-
-    return flagDir;
+    bool opCast(T : bool)() const
+    {
+        return valid;
+    }
 }
 
 /// Check if the build was successfully completed for the given [ProfileDirs]
-string checkBuildReady(PackageDir dir, ProfileDirs pdirs)
+BuildState checkBuildReady(PackageDir dir, ProfileDirs pdirs)
 {
-    return checkFlagFile(dir, pdirs.buildFlag, dir.sourceFlag);
+    import std.string : strip;
+
+    auto flag = pdirs.buildFlag;
+    auto previous = dir.sourceFlag;
+
+    if (!flag.exists() || !previous.exists())
+        return BuildState(false);
+
+    const flagDir = flag.read().strip("\r\n");
+    if (flagDir.length && (!exists(flagDir) || !isDir(flagDir)))
+        return BuildState(false);
+
+    const tlm = flag.timeLastModified;
+    if (tlm < previous.timeLastModified || tlm < timeLastModified(dir.dopamineFile))
+        return BuildState(false);
+
+    return BuildState(true, flagDir);
 }
 
 /// Check if a lock-file exists and is up-to-date for package in [dir]

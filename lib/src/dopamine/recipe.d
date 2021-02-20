@@ -35,7 +35,19 @@ struct BuildOptionDef
 struct BuildDirs
 {
     string src;
+    string config;
+    string build;
     string install;
+
+    invariant
+    {
+        import std.path : isAbsolute;
+
+        assert(src.isAbsolute);
+        assert(config.isAbsolute);
+        assert(build.isAbsolute);
+        assert(install.isAbsolute);
+    }
 }
 
 struct DepInfo
@@ -144,11 +156,10 @@ struct Recipe
         auto L = d.L;
 
         lua_getglobal(L, "revision");
-        scope (success)
-            lua_pop(L, 1);
 
         if (d.filename && lua_type(L, -1) == LUA_TNIL)
         {
+            lua_pop(L, 1);
             return sha1RevisionFromFile(d.filename);
         }
 
@@ -170,6 +181,8 @@ struct Recipe
         return d.inTreeSrc.length > 0;
     }
 
+    /// Execute the 'source' function if the recipe has one and return its result.
+    /// Otherwise return the 'source' string variable (default to "." if undefined)
     string source()
     {
         if (d.inTreeSrc)
@@ -189,23 +202,48 @@ struct Recipe
         return L.luaPop!string();
     }
 
-    string build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
+    private void pushBuildDirs(lua_State* L, BuildDirs dirs)
+    {
+        lua_createtable(L, 0, 2);
+        const ind = lua_gettop(L);
+        luaSetTable(L, ind, "src", dirs.src);
+        luaSetTable(L, ind, "config", dirs.config);
+        luaSetTable(L, ind, "build", dirs.build);
+        luaSetTable(L, ind, "install", dirs.install);
+    }
+
+    private void pushConfig(lua_State* L, Profile profile)
+    {
+        lua_createtable(L, 0, 4);
+        const ind = lua_gettop(L);
+
+        lua_pushliteral(L, "profile");
+        luaPushProfile(L, profile);
+        lua_settable(L, ind);
+
+        // TODO options
+
+        const hash = profile.digestHash;
+        const shortHash = hash[0 .. 10];
+        luaSetTable(L, ind, "hash", hash);
+        luaSetTable(L, ind, "short_hash", shortHash);
+    }
+
+    /// Execute the `build` function of this recipe
+    bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
     {
         auto L = d.L;
 
         lua_getglobal(L, "build");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
-        lua_createtable(L, 0, 2);
-        const dirsInd = lua_gettop(L);
-        luaSetTable(L, dirsInd, "src", dirs.src);
-        luaSetTable(L, dirsInd, "install", dirs.install);
+        pushBuildDirs(L, dirs);
 
-        luaPushProfile(L, profile);
+        pushConfig(L, profile);
 
         if (depInfos)
         {
-            lua_createtable(L, 0, cast(int)depInfos.length);
+            lua_createtable(L, 0, cast(int) depInfos.length);
             const depInfosInd = lua_gettop(L);
             foreach (k, di; depInfos)
             {
@@ -229,11 +267,11 @@ struct Recipe
         scope (exit)
             lua_pop(L, 1);
 
-        string result = dirs.install;
+        bool result;
         switch (lua_type(L, -1))
         {
-        case LUA_TSTRING:
-            result = luaTo!string(L, -1);
+        case LUA_TBOOLEAN:
+            result = luaTo!bool(L, -1);
             break;
         case LUA_TNIL:
             break;
@@ -241,6 +279,30 @@ struct Recipe
             throw new Exception("invalid return from build");
         }
         return result;
+    }
+
+    @property bool hasPackFunc() const
+    {
+        return d.packFunc;
+    }
+
+    /// Execute the `package` function of this recipe
+    void pack(BuildDirs dirs, Profile profile, string dest)
+    in(d.packFunc, "Recipe has no 'package' function")
+    {
+        auto L = d.L;
+
+        lua_getglobal(L, "pack");
+
+        pushBuildDirs(L, dirs);
+        pushConfig(L, profile);
+        luaPush(L, dest);
+
+        // 3 params, 0 result
+        if (lua_pcall(L, 3, 0, 0) != LUA_OK)
+        {
+            throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
+        }
     }
 
     static Recipe parseFile(string path, string revision = null)
@@ -282,6 +344,8 @@ package class RecipePayload
     bool depFunc;
 
     string inTreeSrc;
+
+    bool packFunc;
 
     string filename;
     string revision;
@@ -381,7 +445,21 @@ package class RecipePayload
                 d.inTreeSrc = ".";
                 break;
             default:
-                throw new Exception("invalid source specification");
+                throw new Exception("Invalid 'source' symbol: expected a function, a string or nil");
+            }
+        });
+
+        L.luaWithGlobal!("pack", {
+            switch (lua_type(L, -1))
+            {
+            case LUA_TFUNCTION:
+                d.packFunc = true;
+                break;
+            case LUA_TNIL:
+                break;
+            default:
+                const typ = luaL_typename(L, -1).fromStringz.idup;
+                throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
             }
         });
 

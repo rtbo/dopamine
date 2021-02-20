@@ -17,7 +17,7 @@ import std.getopt;
 import std.path;
 import std.typecons;
 
-string enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
+BuildState enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
 {
     return enforce(checkBuildReady(dir, profileDirs), new FormatLogException(
             "%s: package is not built for selected profile. Try to run `%s`",
@@ -27,12 +27,11 @@ string enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
 int buildMain(string[] args)
 {
     string profileName;
-    string installDir;
     bool force;
     bool noNetwork;
 
-    auto helpInfo = getopt(args, "profile|p", &profileName, "install-dir|i",
-            &installDir, "force", &force, "no-network|N", &noNetwork);
+    auto helpInfo = getopt(args, "profile|p", &profileName, "force|f",
+            &force, "no-network|N", &noNetwork);
 
     if (helpInfo.helpWanted)
     {
@@ -46,11 +45,10 @@ int buildMain(string[] args)
     auto profile = enforceProfileReady(dir, recipe, profileName);
     const profileDirs = dir.profileDirs(profile);
 
-    const buildReady = checkBuildReady(dir, profileDirs);
-    if (!force && buildReady)
+    const buildState = checkBuildReady(dir, profileDirs);
+    if (!force && buildState)
     {
-        logInfo("%s: Already up-to-date at %s (run with %s to overcome)",
-                info("Build"), info(buildReady), info("--force"));
+        logInfo("%s: Already up-to-date (run with %s to overcome)", info("Build"), info("--force"));
         return 0;
     }
 
@@ -71,20 +69,27 @@ int buildMain(string[] args)
         logInfo("%s: %s", info("Dependencies"), success("OK"));
     }
 
-    if (!installDir)
-        installDir = profileDirs.install;
+    const buildDirs = profileDirs.buildDirs(srcDir);
+    const installDir = buildDirs.install;
 
-    const buildDirs = BuildDirs(srcDir, installDir.absolutePath());
     logInfo("Building %s...", info(recipe.name));
-    const buildInfo = recipe.build(buildDirs, profile, depInfos);
+    const installed = recipe.build(buildDirs, profile, depInfos);
 
-    enforce(exists(buildInfo) && isDir(buildInfo), new FormatLogException(
-            "%s: Build successful but the build function did not return the install directory!",
-            error("Error")));
+    if (installed)
+    {
+        enforce(exists(installDir) && isDir(installDir), new FormatLogException(
+                "%s: Build reports installation but the install directory does not exist!",
+                error("Error")));
+    }
+    else
+    {
+        enforce(recipe.hasPackFunc, new FormatLogException(
+                "%s: Build did not install, recipe must have a 'package' function", error("Error")));
+    }
 
-    profileDirs.buildFlag.write(buildInfo);
+    profileDirs.buildFlag.write(installed ? profileDirs.install : "");
 
-    logInfo("%s: %s - %s", info("Build"), success("OK"), buildInfo);
+    logInfo("%s: %s%s", info("Build"), success("OK"), installed ? " - " ~ profileDirs.install : "");
 
     return 0;
 }

@@ -156,6 +156,7 @@ struct PackageDir
 
         ProfileDirs dirs = void;
         dirs.work = _path(".dop", workDir);
+        dirs.build = _path(".dop", workDir, "build");
         dirs.install = _path(".dop", workDir, "install");
         return dirs;
     }
@@ -220,6 +221,8 @@ struct ProfileDirs
 {
     /// dop working directory
     string work;
+    /// Directory recommendation for the build
+    string build;
     /// directory into which files are installed
     string install;
 
@@ -227,5 +230,12 @@ struct ProfileDirs
     FlagFile buildFlag() const
     {
         return FlagFile(buildPath(work, ".build"));
+    }
+
+    /// Return a BuildDirs object to pass to the recipe for building and packaging
+    BuildDirs buildDirs(in string src, in string base = getcwd()) const
+    {
+        return BuildDirs(src.absolutePath(base), work.absolutePath(base),
+                build.absolutePath(base), install.absolutePath(base));
     }
 }

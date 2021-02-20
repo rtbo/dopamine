@@ -7,7 +7,8 @@ function source()
     return '.'
 end
 
-function build(dirs, profile)
+function build(dirs, config)
+    local profile = config.profile
     local meson = dop.Meson:new(profile)
 
     local build = dop.path('..', '..', 'gen', 'pkga', 'build', profile.digest_hash)
@@ -18,4 +19,6 @@ function build(dirs, profile)
         meson:compile()
         meson:install()
     end)
+
+    return true
 end

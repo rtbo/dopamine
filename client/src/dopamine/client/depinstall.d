@@ -41,7 +41,7 @@ private DepInfo[string] collectDepInfos(DepNode node)
 }
 
 DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe, Profile profile,
-        DependencyCache depcache)
+        DependencyCache depcache, string stageDest=null)
 in(dagIsResolved(dag))
 {
     import std.path : absolutePath;
@@ -60,7 +60,7 @@ in(dagIsResolved(dag))
         auto drec = depcache.packRecipe(node.pack.name, node.ver, node.revision);
         const ddir = cacheDepRevDir(node.pack.name, node.ver, node.revision);
         auto dprof = profile.subset(drec.langs);
-        auto pdirs = ddir.profileDirs(dprof);
+        const pdirs = ddir.profileDirs(dprof);
         if (!checkBuildReady(ddir, pdirs))
         {
             auto depInfos = collectDepInfos(node);
@@ -72,17 +72,22 @@ in(dagIsResolved(dag))
 
             logInfo("Building %s", info(depName));
             ddir.dir.fromDir!({
-                const src = drec.source();
-                srcFlag.write(src);
-                const bd = BuildDirs(src, pdirs.install);
-                pdirs.install = drec.build(bd, dprof, depInfos).absolutePath();
-                if (!exists(pdirs.install) && !isDir(pdirs.install))
+                auto src = checkSourceReady(ddir, drec);
+                if (!src)
+                {
+                    src = drec.source();
+                    srcFlag.write(src);
+                }
+
+                const bd = pdirs.buildDirs(src);
+                const inst = drec.build(bd, dprof, depInfos);
+                if (inst && (!exists(pdirs.install) || !isDir(pdirs.install)))
                 {
                     throw new FormatLogException("%s: %s built successfully but did not return the build directory",
                         error("Error"), info(depName));
                 }
                 logInfo("%s: %s - %s", info(depName), success("OK"), pdirs.install);
-                bldFlag.write(pdirs.install);
+                bldFlag.write(inst ? pdirs.install : "");
             });
         }
         else

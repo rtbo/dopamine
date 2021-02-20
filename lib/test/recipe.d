@@ -51,11 +51,14 @@ unittest
     auto recipe = pkgRecipe("pkga");
 
     const srcDir = testPath("data/pkga");
+    const workDir = testPath("gen/pkga");
+    const buildDir = testPath("gen/pkga/build");
     const installDir = testPath("gen/pkga/install");
+    const bd = BuildDirs(srcDir, workDir, buildDir, installDir);
     auto profile = ensureDefaultProfile();
 
     srcDir.fromDir!({
-        recipe.build(BuildDirs(".", installDir), profile);
+        recipe.build(bd, profile);
     });
 }
 
