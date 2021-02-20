@@ -193,6 +193,33 @@ struct FlagFile
     }
 }
 
+/// Copy [from] to [to].
+/// If [from] is a file, do a simple copy.
+/// If [from] is a directory, do a recursive copy.
+void copyRecurse(string from, string to) @system
+{
+    import std.file: copy, dirEntries, isDir, isFile, mkdirRecurse, SpanMode;
+    import std.path: buildNormalizedPath, buildPath;
+
+    from = buildNormalizedPath(from);
+    to = buildNormalizedPath(to);
+
+    if (isDir(from))
+    {
+        mkdirRecurse(to);
+
+        auto entries = dirEntries(from, SpanMode.breadth);
+        foreach (entry; entries)
+        {
+            auto dst = buildPath(to, entry.name[from.length + 1 .. $]);
+                // + 1 for the directory separator
+            if (isFile(entry.name)) copy(entry.name, dst);
+            else mkdirRecurse(dst);
+        }
+    }
+    else copy(from, to);
+}
+
 /// Get all entries directly contained by dir
 string[] allEntries(string dir) @trusted
 {
