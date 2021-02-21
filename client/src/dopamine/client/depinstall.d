@@ -13,9 +13,10 @@ import dopamine.state;
 import dopamine.util;
 
 import std.exception;
+import std.getopt;
 import std.file;
 import std.format;
-import std.getopt;
+import std.path;
 import std.typecons;
 
 private class DepInfoObj
@@ -33,15 +34,15 @@ private DepInfo[string] collectDepInfos(DepNode node)
     auto deps = dagCollectDependencies(node);
     foreach (k, d; deps)
     {
+        logInfo("collecting %s", k);
         auto dio = cast(DepInfoObj) d.userData;
         depInfos[k] = DepInfo(dio.installDir);
-        d.userData = null;
     }
     return depInfos;
 }
 
 DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe, Profile profile,
-        DependencyCache depcache, string stageDest=null)
+        DependencyCache depcache, string stageDest = null)
 in(dagIsResolved(dag))
 {
     import std.path : absolutePath;
@@ -61,45 +62,53 @@ in(dagIsResolved(dag))
         const ddir = cacheDepRevDir(node.pack.name, node.ver, node.revision);
         auto dprof = profile.subset(drec.langs);
         const pdirs = ddir.profileDirs(dprof);
-        if (!checkBuildReady(ddir, pdirs))
-        {
-            auto depInfos = collectDepInfos(node);
+        auto depInfos = collectDepInfos(node);
 
-            auto srcFlag = ddir.sourceFlag.absolute();
-            auto bldFlag = pdirs.buildFlag.absolute();
+        auto srcFlag = ddir.sourceFlag.absolute();
+        auto bldFlag = pdirs.buildFlag.absolute();
 
-            const depName = format("%s-%s", node.pack.name, node.ver);
+        const depName = format("%s-%s", node.pack.name, node.ver);
 
-            logInfo("Building %s", info(depName));
-            ddir.dir.fromDir!({
-                auto src = checkSourceReady(ddir, drec);
-                if (!src)
-                {
-                    src = drec.source();
-                    srcFlag.write(src);
-                }
+        ddir.dir.fromDir!({
+            auto src = checkSourceReady(ddir, drec);
+            if (!src)
+            {
+                src = drec.source();
+                srcFlag.write(src);
+            }
 
-                const bd = pdirs.buildDirs(src);
+            const bd = pdirs.buildDirs(src);
+            if (!checkBuildReady(ddir, pdirs))
+            {
+                logInfo("Building %s...", info(depName));
                 const inst = drec.build(bd, dprof, depInfos);
                 if (inst && (!exists(pdirs.install) || !isDir(pdirs.install)))
                 {
                     throw new FormatLogException("%s: %s built successfully but did not return the build directory",
                         error("Error"), info(depName));
                 }
-                logInfo("%s: %s - %s", info(depName), success("OK"), pdirs.install);
-                bldFlag.write(inst ? pdirs.install : "");
-                if (drec.hasPackFunc)
+                else if (!inst)
                 {
-                    drec.pack(bd, dprof, bd.install);
+                    throw new FormatLogException("%s: %s build function did not install and has no package function",
+                        error("Error"), info(depName));
                 }
-                drec.patchInstall(dprof, bd.install);
-            });
-        }
-        else
-        {
-            logVerbose("%s: Already up-to-date", info(format("%s-%s", node.pack.name, node.ver)));
-        }
-        node.userData = new DepInfoObj(pdirs.install);
+                bldFlag.write(inst ? pdirs.install : "");
+                logInfo("%s: %s - %s", info(depName), success("OK"), pdirs.install);
+            }
+
+            if (drec.hasPackFunc)
+            {
+                drec.pack(bd, dprof, stageDest ? stageDest : bd.install);
+            }
+            else if (stageDest)
+            {
+                copyRecurse(pdirs.install, stageDest);
+            }
+
+            drec.patchInstall(dprof, bd.install);
+        });
+        logInfo("setting %s: ", depName, stageDest ? stageDest : pdirs.install);
+        node.userData = new DepInfoObj(stageDest ? stageDest : pdirs.install);
     }
 
     return collectDepInfos(dag.root.resolvedNode);
@@ -107,10 +116,12 @@ in(dagIsResolved(dag))
 
 int depInstallMain(string[] args)
 {
+    string stageDest;
     string profileName;
     bool noNetwork;
 
-    auto helpInfo = getopt(args, "profile|p", &profileName, "no-network|N", &noNetwork);
+    auto helpInfo = getopt(args, "stage", &stageDest, "profile|p",
+            &profileName, "no-network|N", &noNetwork);
 
     if (helpInfo.helpWanted)
     {
@@ -139,7 +150,7 @@ int depInstallMain(string[] args)
 
     auto profile = enforceProfileReady(dir, recipe, profileName);
 
-    buildDependencies(dag, recipe, profile, depcache);
+    buildDependencies(dag, recipe, profile, depcache, stageDest.absolutePath());
 
     logInfo("%s: %s", info("Dependencies"), success("OK"));
 

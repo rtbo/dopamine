@@ -2,6 +2,7 @@ module dopamine.client.app;
 
 import dopamine.client.build;
 import dopamine.client.cache;
+import dopamine.client.depinstall;
 import dopamine.client.deplock;
 import dopamine.client.login;
 import dopamine.client.pack;
@@ -36,6 +37,7 @@ int main(string[] args)
         Command("login", &loginMain, "Register login credientials"),
         Command("profile", &profileMain, "Set compilation profile for the current package"),
         Command("deplock", &depLockMain, "Lock dependencies"),
+        Command("depinstall", &depInstallMain, "Install dependencies"),
         Command("source", &sourceMain, "Download package source"),
         Command("build", &buildMain, "Build package"),
         Command("package", &packageMain, "Create package from build"),
