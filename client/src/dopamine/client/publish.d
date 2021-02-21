@@ -11,6 +11,7 @@ import dopamine.state;
 
 import std.exception;
 import std.file;
+import std.format;
 import std.getopt;
 
 int publishMain(string[] args)
@@ -45,6 +46,9 @@ int publishMain(string[] args)
 
     logInfo("%s: %s - %s", info("Login Key"), success("OK"), api.login.keyName);
 
+    // Checking revision now as it may throw an error
+    const revision = recipe.revision();
+
     auto packResp = api.getPackageByName(recipe.name);
     if (!packResp)
     {
@@ -74,12 +78,14 @@ int publishMain(string[] args)
 
     const recipeLua = cast(string) assumeUnique(read(dir.dopamineFile()));
 
-    const post = PackageRecipePost(pack.id, recipe.ver.toString(), recipe.revision(), recipeLua);
+    const post = PackageRecipePost(pack.id, recipe.ver.toString(), revision, recipeLua);
 
     const resp = api.postRecipe(post);
 
     enforce(resp, new FormatLogException(`%s: Unexpected server response: %s - %s`,
             error("Error"), error(resp.code.to!string), resp.error));
+
+    logInfo("%s: %s - %s/%s", info("Publish"), success("OK"), info(format("%s-%s", recipe.name, recipe.ver)), revision);
 
     return 0;
 }
