@@ -312,19 +312,17 @@ struct Recipe
 
         lua_getglobal(L, "patch_install");
 
-        L.luaWithGlobal!("patch_install", {
-            switch (lua_type(L, -1))
-            {
-            case LUA_TFUNCTION:
-                break;
-            case LUA_TNIL:
-                lua_pop(L, 1);
-                return;
-            default:
-                const typ = luaL_typename(L, -1).fromStringz.idup;
-                throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
-            }
-        });
+        switch (lua_type(L, -1))
+        {
+        case LUA_TFUNCTION:
+            break;
+        case LUA_TNIL:
+            lua_pop(L, 1);
+            return;
+        default:
+            const typ = luaL_typename(L, -1).fromStringz.idup;
+            throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
+        }
 
         pushConfig(L, profile);
         luaPush(L, dest);
