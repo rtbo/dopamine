@@ -136,7 +136,7 @@ struct FlagFile
 {
     string path;
 
-    FlagFile absolute(string cwd=getcwd())
+    FlagFile absolute(string cwd = getcwd())
     {
         import std.path : absolutePath;
 
@@ -193,31 +193,119 @@ struct FlagFile
     }
 }
 
-/// Copy [from] to [to].
-/// If [from] is a file, do a simple copy.
-/// If [from] is a directory, do a recursive copy.
-void copyRecurse(string from, string to) @system
+/// Copy from [src] to [dest].
+/// If [src] is a file, do a simple copy.
+/// If [src] is a directory, do a recursive copy.
+/// If [preserveLinks] is true, links in [src] are reproduced in [dest]
+/// If [preserveLinks] is false, a copy of the linked files in [src] are created in [dest]
+/// [preserveLinks] has no effect on Windows (acts as preserveLinks==false)
+void copyRecurse(string src, string dest, bool preserveLinks = true) @system
 {
-    import std.file: copy, dirEntries, isDir, isFile, mkdirRecurse, SpanMode;
-    import std.path: buildNormalizedPath, buildPath;
+    import std.exception : enforce;
+    import std.path : buildNormalizedPath, buildPath, dirName;
+    import std.string : startsWith;
 
-    from = buildNormalizedPath(from);
-    to = buildNormalizedPath(to);
+    src = buildNormalizedPath(src);
+    dest = buildNormalizedPath(dest);
 
-    if (isDir(from))
+    if (isDir(src))
     {
-        mkdirRecurse(to);
+        mkdirRecurse(dest);
 
-        auto entries = dirEntries(from, SpanMode.breadth);
+        auto entries = dirEntries(src, SpanMode.breadth);
         foreach (entry; entries)
         {
-            auto dst = buildPath(to, entry.name[from.length + 1 .. $]);
-                // + 1 for the directory separator
-            if (isFile(entry.name)) copy(entry.name, dst);
-            else mkdirRecurse(dst);
+            const dst = buildPath(dest, entry.name[src.length + 1 .. $]);
+            // + 1 for the directory separator
+
+            version (Posix)
+            {
+                if (preserveLinks && isSymlink(entry.name))
+                {
+                    const link = readLink(entry.name);
+                    const fullPath = buildPath(dirName(entry.name), link).buildNormalizedPath();
+                    enforce(fullPath.startsWith(src),
+                            new FormatLogException("%s: %s links to %s which is outside of %s",
+                                error("Error"), entry.name, fullPath, src));
+
+                    symlink(link, dst);
+                    continue;
+                }
+            }
+
+            if (isFile(entry.name))
+                copy(entry.name, dst);
+            else
+                mkdirRecurse(dst);
         }
     }
-    else copy(from, to);
+    else
+        copy(src, dest);
+}
+
+@("copyRecurse")
+@system unittest
+{
+    import unit_threaded.should : should;
+    import std.path : buildPath;
+
+    const src = tempPath();
+    mkdirRecurse(src);
+    const dest = tempPath();
+
+    scope (exit)
+    {
+        rmdirRecurse(src);
+        rmdirRecurse(dest);
+    }
+
+    // building tree:
+    //  - file1.txt
+    //  - file2.txt
+    //  - file3.txt
+    //  - subdir/file4.txt
+    //  - link1.txt -> file1.txt
+    //  - link2.txt -> link1.txt
+    //  - link3.txt -> subdir/file4.txt
+    //  - subdir/link4.txt -> file4.txt
+    //  - subdir/link5.txt -> link4.txt
+    // (symlinks only created and tested on Posix)
+    mkdir(buildPath(src, "subdir"));
+    write(buildPath(src, "file1.txt"), "file1");
+    write(buildPath(src, "file2.txt"), "file2");
+    write(buildPath(src, "file3.txt"), "file3");
+    write(buildPath(src, "subdir", "file4.txt"), "file4");
+
+    version (Posix)
+    {
+        symlink("file1.txt", buildPath(src, "link1.txt"));
+        symlink("link1.txt", buildPath(src, "link2.txt"));
+        symlink("subdir/file4.txt", buildPath(src, "link3.txt"));
+        symlink("file4.txt", buildPath(src, "subdir", "link4.txt"));
+        symlink("link4.txt", buildPath(src, "subdir", "link5.txt"));
+    }
+
+    copyRecurse(src, dest);
+
+    read(buildPath(dest, "file1.txt")).should == "file1";
+    read(buildPath(dest, "file2.txt")).should == "file2";
+    read(buildPath(dest, "file3.txt")).should == "file3";
+    read(buildPath(dest, "subdir", "file4.txt")).should == "file4";
+
+    version (Posix)
+    {
+        read(buildPath(dest, "link1.txt")).should == "file1";
+        read(buildPath(dest, "link2.txt")).should == "file1";
+        read(buildPath(dest, "link3.txt")).should == "file4";
+        read(buildPath(dest, "subdir", "link4.txt")).should == "file4";
+        read(buildPath(dest, "subdir", "link5.txt")).should == "file4";
+
+        readLink(buildPath(dest, "link1.txt")).should == "file1.txt";
+        readLink(buildPath(dest, "link2.txt")).should == "link1.txt";
+        readLink(buildPath(dest, "link3.txt")).should == "subdir/file4.txt";
+        readLink(buildPath(dest, "subdir", "link4.txt")).should == "file4.txt";
+        readLink(buildPath(dest, "subdir", "link5.txt")).should == "link4.txt";
+    }
 }
 
 /// Get all entries directly contained by dir
