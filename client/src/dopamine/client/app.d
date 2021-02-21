@@ -42,9 +42,6 @@ int main(string[] args)
         Command("cache", &cacheMain, "Add package to local cache"),
         Command("publish", &publishMain, "Publish package to repository"),
     ];
-    // TODO: missing commands
-    // - config: specify build options, install path etc.
-    // - upload: upload a build on a remote repo
 
     const commandNames = commands.map!(c => c.name).array;
 
