@@ -232,6 +232,12 @@ struct ProfileDirs
         return FlagFile(buildPath(work, ".build"));
     }
 
+    /// FlagFile that tracks installation of dependencies
+    FlagFile depsFlag() const
+    {
+        return FlagFile(buildPath(work, ".deps"));
+    }
+
     /// Return a BuildDirs object to pass to the recipe for building and packaging
     BuildDirs buildDirs(in string src, in string base = getcwd()) const
     {

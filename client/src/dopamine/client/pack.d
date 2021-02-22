@@ -48,16 +48,16 @@ int packageMain(string[] args)
     const absDest = dest.absolutePath().buildNormalizedPath();
     const absInst = profileDirs.install.absolutePath().buildNormalizedPath();
 
-    enforce(buildState.installDir.length || recipe.hasPackFunc);
-    enforce(!buildState.installDir.length || (exists(buildState.installDir)
-            && isDir(buildState.installDir)));
+    enforce(buildState.dir.length || recipe.hasPackFunc);
+    enforce(!buildState.dir.length || (exists(buildState.dir)
+            && isDir(buildState.dir)));
 
     if (!recipe.hasPackFunc)
     {
         if (absInst != absDest)
         {
             // Copy profileDirs.install to dest
-            copyRecurse(absInst, absDest);
+            installRecurse(absInst, absDest);
         }
     }
     else

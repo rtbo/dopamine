@@ -5,6 +5,9 @@ import arsd.terminal;
 import std.format;
 import std.stdio;
 
+alias Color = arsd.terminal.Color;
+alias Bright = arsd.terminal.Bright;
+
 enum LogLevel
 {
     verbose,

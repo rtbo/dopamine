@@ -34,15 +34,14 @@ private DepInfo[string] collectDepInfos(DepNode node)
     auto deps = dagCollectDependencies(node);
     foreach (k, d; deps)
     {
-        logInfo("collecting %s", k);
         auto dio = cast(DepInfoObj) d.userData;
         depInfos[k] = DepInfo(dio.installDir);
     }
     return depInfos;
 }
 
-DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe, Profile profile,
-        DependencyCache depcache, string stageDest = null)
+DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
+        const(Profile) profile, DependencyCache depcache, string stageDest = null)
 in(dagIsResolved(dag))
 {
     import std.path : absolutePath;
@@ -102,16 +101,20 @@ in(dagIsResolved(dag))
             }
             else if (stageDest)
             {
-                copyRecurse(pdirs.install, stageDest);
+                installRecurse(pdirs.install, stageDest);
             }
 
             drec.patchInstall(dprof, bd.install);
         });
-        logInfo("setting %s: ", depName, stageDest ? stageDest : pdirs.install);
         node.userData = new DepInfoObj(stageDest ? stageDest : pdirs.install);
     }
 
     return collectDepInfos(dag.root.resolvedNode);
+}
+
+private string normalized(string path)
+{
+    return path.length ? buildNormalizedPath(absolutePath(path)) : null;
 }
 
 int depInstallMain(string[] args)
@@ -119,9 +122,10 @@ int depInstallMain(string[] args)
     string stageDest;
     string profileName;
     bool noNetwork;
+    bool force;
 
     auto helpInfo = getopt(args, "stage", &stageDest, "profile|p",
-            &profileName, "no-network|N", &noNetwork);
+            &profileName, "no-network|N", &noNetwork, "force|f", &force);
 
     if (helpInfo.helpWanted)
     {
@@ -137,6 +141,21 @@ int depInstallMain(string[] args)
         return 0;
     }
 
+    const profile = enforceProfileReady(dir, recipe, profileName);
+    const pdirs = dir.profileDirs(profile);
+
+    const depState = checkDepInstalled(dir, pdirs);
+    if (!force && depState && normalized(depState.dir) == normalized(stageDest))
+    {
+        if (stageDest)
+            logInfo("%s: Already up-to-date at %s. Run with %s to overcome.",
+                    info("Dependencies"), stageDest, info("--force"));
+        else
+            logInfo("%s: Already up-to-date. Run with %s to overcome.",
+                    info("Dependencies"), info("--force"));
+        return 0;
+    }
+
     const network = noNetwork ? No.network : Yes.network;
     auto depcache = new DependencyCache(network);
     scope (exit)
@@ -148,11 +167,14 @@ int depInstallMain(string[] args)
     enforce(dagIsResolved(dag), new FormatLogException("%s: Dependencies not properly locked. Try to run %s",
             error("Error"), info("dop deplock --force")));
 
-    auto profile = enforceProfileReady(dir, recipe, profileName);
-
     buildDependencies(dag, recipe, profile, depcache, stageDest.absolutePath());
 
-    logInfo("%s: %s", info("Dependencies"), success("OK"));
+    dir.profileDirs(profile).depsFlag.write(stageDest);
+
+    if (stageDest)
+        logInfo("%s: %s - %s", info("Dependencies"), success("OK"), stageDest);
+    else
+        logInfo("%s: %s", info("Dependencies"), success("OK"));
 
     return 0;
 }

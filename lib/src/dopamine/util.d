@@ -193,13 +193,50 @@ struct FlagFile
     }
 }
 
-/// Copy from [src] to [dest].
-/// If [src] is a file, do a simple copy.
-/// If [src] is a directory, do a recursive copy.
+/// Install a single file, that is copy it to dest unless dest exists and is not older.
+/// Posix only: If preserveLinks is true and src is a symlink, dest is created as a symlink.
+void installFile(string src, string dest, bool preserveLinks = true)
+in(src.exists && src.isFile)
+{
+    import std.path : dirName;
+    import std.typecons : Yes;
+
+    version (Posix)
+    {
+        const removeLink = dest.exists && dest.isSymlink;
+
+        if (removeLink)
+            remove(dest);
+
+        if (preserveLinks && isSymlink(src))
+        {
+            const link = readLink(src);
+            mkdirRecurse(dest.dirName);
+            symlink(link, dest);
+
+            logVerbose("%s %s -> %s", removeLink ? "Recreating symlink" : "Creating symlink  ",
+                    info(dest), color(Color.cyan, link));
+            return;
+        }
+    }
+
+    if (dest.exists && dest.timeLastModified >= src.timeLastModified)
+    {
+        logVerbose("Up-to-date         %s", info(dest));
+        return;
+    }
+
+    logVerbose("Installing         %s", info(dest));
+    copy(src, dest, Yes.preserveAttributes);
+}
+
+/// Recursively install from [src] to [dest].
+/// If [src] is a file, do a single file install.
+/// If [src] is a directory, do a recursive install.
 /// If [preserveLinks] is true, links in [src] are reproduced in [dest]
 /// If [preserveLinks] is false, a copy of the linked files in [src] are created in [dest]
 /// [preserveLinks] has no effect on Windows (acts as preserveLinks==false)
-void copyRecurse(string src, string dest, bool preserveLinks = true) @system
+void installRecurse(string src, string dest, bool preserveLinks = true) @system
 {
     import std.exception : enforce;
     import std.path : buildNormalizedPath, buildPath, dirName;
@@ -227,23 +264,20 @@ void copyRecurse(string src, string dest, bool preserveLinks = true) @system
                     enforce(fullPath.startsWith(src),
                             new FormatLogException("%s: %s links to %s which is outside of %s",
                                 error("Error"), entry.name, fullPath, src));
-
-                    symlink(link, dst);
-                    continue;
                 }
             }
 
             if (isFile(entry.name))
-                copy(entry.name, dst);
+                installFile(entry.name, dst, preserveLinks);
             else
                 mkdirRecurse(dst);
         }
     }
     else
-        copy(src, dest);
+        installFile(src, dest, preserveLinks);
 }
 
-@("copyRecurse")
+@("installRecurse")
 @system unittest
 {
     import unit_threaded.should : should;
@@ -285,7 +319,7 @@ void copyRecurse(string src, string dest, bool preserveLinks = true) @system
         symlink("link4.txt", buildPath(src, "subdir", "link5.txt"));
     }
 
-    copyRecurse(src, dest);
+    installRecurse(src, dest);
 
     read(buildPath(dest, "file1.txt")).should == "file1";
     read(buildPath(dest, "file2.txt")).should == "file2";

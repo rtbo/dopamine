@@ -170,9 +170,14 @@ Lock files are located in the package root in a file named `dop.lock`. <br>
 
 ## Depinstall command
 
-Download and install dependencies of a package
+Download and install dependencies of a package.<br>
+
 _Prerequisite_: The dependencies must be locked.
 
+_State_:
+ - `$PROF/.deps` flag file tracks whether the dependencies were installed. If empty, deps were installed under `$USR_DIR/packages`, otherwise the content points to the dependencies prefix.
+
+_Command invocations_:
 - `dop depinstall`
   - Download and install the dependencies
   - Dependencies that are not built for the chosen profile are built.

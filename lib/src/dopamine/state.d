@@ -45,6 +45,29 @@ Profile checkProfileName(PackageDir dir, Recipe recipe, string name = "default",
     return profile;
 }
 
+struct FlagState
+{
+    bool valid;
+    string dir;
+
+    this(bool valid, string dir=null)
+    {
+        this.valid = valid;
+        this.dir = dir;
+    }
+
+    this(string dir)
+    {
+        this.valid = true;
+        this.dir = dir;
+    }
+
+    bool opCast(T : bool)() const
+    {
+        return valid;
+    }
+}
+
 /// Check if the source code is ready and up-to-date for package in [dir]
 /// Returns: the path to the source directory, or null
 string checkSourceReady(PackageDir dir, Recipe recipe)
@@ -69,19 +92,8 @@ string checkSourceReady(PackageDir dir, Recipe recipe)
     return sourceDir;
 }
 
-struct BuildState
-{
-    bool valid;
-    string installDir;
-
-    bool opCast(T : bool)() const
-    {
-        return valid;
-    }
-}
-
 /// Check if the build was successfully completed for the given [ProfileDirs]
-BuildState checkBuildReady(PackageDir dir, ProfileDirs pdirs)
+FlagState checkBuildReady(PackageDir dir, ProfileDirs pdirs)
 {
     import std.string : strip;
 
@@ -89,17 +101,17 @@ BuildState checkBuildReady(PackageDir dir, ProfileDirs pdirs)
     auto previous = dir.sourceFlag;
 
     if (!flag.exists() || !previous.exists())
-        return BuildState(false);
+        return FlagState(false);
 
     const flagDir = flag.read().strip("\r\n");
     if (flagDir.length && (!exists(flagDir) || !isDir(flagDir)))
-        return BuildState(false);
+        return FlagState(false);
 
     const tlm = flag.timeLastModified;
     if (tlm < previous.timeLastModified || tlm < timeLastModified(dir.dopamineFile))
-        return BuildState(false);
+        return FlagState(false);
 
-    return BuildState(true, flagDir);
+    return FlagState(true, flagDir);
 }
 
 /// Check if a lock-file exists and is up-to-date for package in [dir]
@@ -115,4 +127,26 @@ DepDAG checkLoadLockFile(PackageDir dir)
         return DepDAG.init;
 
     return dagFromLockFile(lf);
+}
+
+FlagState checkDepInstalled(PackageDir dir, ProfileDirs pdirs)
+{
+    return checkFlagState(dir, pdirs.depsFlag());
+}
+
+private FlagState checkFlagState(PackageDir pdir, FlagFile flg)
+{
+    import std.string : strip;
+
+    if (!flg.exists)
+        return FlagState(false);
+
+    const dir = flg.read().strip("\r\n");
+    if (dir.length && (!dir.exists || !dir.isDir))
+        return FlagState(false);
+
+    if (flg.timeLastModified < pdir.dopamineFile.timeLastModified)
+        return FlagState(false);
+
+    return FlagState(dir);
 }

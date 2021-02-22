@@ -17,7 +17,7 @@ import std.getopt;
 import std.path;
 import std.typecons;
 
-BuildState enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
+FlagState enforceBuildReady(PackageDir dir, ProfileDirs profileDirs)
 {
     return enforce(checkBuildReady(dir, profileDirs), new FormatLogException(
             "%s: package is not built for selected profile. Try to run `%s`",
