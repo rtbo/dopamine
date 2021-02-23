@@ -116,9 +116,11 @@ int luaDopNativeModule(lua_State* L) nothrow
     const boolconsts = ["posix" : posix];
     const funcs = [
         "trim" : &luaTrim, "path" : &luaPath, "cwd" : &luaCwd,
-        "chdir" : &luaChangeDir, "mkdir" : &luaMkdir, "run_cmd" : &luaRunCmd,
-        "profile_environment" : &luaProfileEnvironment, "download" : &luaDownload,
-        "checksum" : &luaChecksum, "create_archive" : &luaCreateArchive,
+        "chdir" : &luaChangeDir, "mkdir" : &luaMkdir,
+        "install_file" : &luaInstallFile, "install_dir" : &luaInstallDir,
+        "run_cmd" : &luaRunCmd, "profile_environment" : &luaProfileEnvironment,
+        "download" : &luaDownload, "checksum" : &luaChecksum,
+        "create_archive" : &luaCreateArchive,
         "extract_archive" : &luaExtractArchive,
     ];
 
@@ -162,13 +164,18 @@ auto catchAll(alias fun)(lua_State* L) nothrow
     assert(false);
 }
 
+const(char)[] checkString(lua_State* L, int ind) nothrow
+{
+    size_t sz;
+    auto p = luaL_checklstring(L, ind, &sz);
+    return p[0 .. sz];
+}
+
 int luaTrim(lua_State* L) nothrow
 {
     import std.ascii : isWhite;
 
-    size_t size;
-    auto p = luaL_checklstring(L, 1, &size);
-    auto s = p[0 .. size];
+    auto s = checkString(L, 1);
 
     while (s.length && s[0].isWhite)
         s = s[1 .. $];
@@ -224,9 +231,8 @@ int luaChangeDir(lua_State* L) nothrow
 {
     import std.file : chdir;
 
-    size_t len;
-    const dir = luaL_checklstring(L, 1, &len);
-    L.catchAll!({ chdir(dir[0 .. len]); });
+    const dir = checkString(L, 1);
+    L.catchAll!({ chdir(dir); });
     return 0;
 }
 
@@ -254,6 +260,30 @@ int luaMkdir(lua_State* L) nothrow
         }
         return 0;
     });
+}
+
+int luaInstallFile(lua_State* L) nothrow
+{
+    import dopamine.util : installFile;
+
+    const src = checkString(L, 1);
+    const dest = checkString(L, 2);
+
+    L.catchAll!({ installFile(src, dest); });
+
+    return 0;
+}
+
+int luaInstallDir(lua_State* L) nothrow
+{
+    import dopamine.util : installRecurse;
+
+    const src = checkString(L, 1);
+    const dest = checkString(L, 2);
+
+    L.catchAll!({ installRecurse(src, dest); });
+
+    return 0;
 }
 
 int luaRunCmd(lua_State* L) nothrow

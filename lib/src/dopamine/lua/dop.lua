@@ -27,6 +27,19 @@ function dop.from_dir(dir, func)
     end
 end
 
+-- Return an object containing a file function to install files and a dir function to install dirs recursively.
+function dop.installer(src_dir, dest_dir)
+    local inst = {
+        file = function(src, dest)
+            dop.install_file(dop.path(src_dir, src), dop.path(dest_dir, dest))
+        end,
+        dir = function(src, dest)
+            dop.install_dir(dop.path(src_dir, src), dop.path(dest_dir, dest))
+        end,
+    }
+    return inst
+end
+
 Git = {}
 Git.__index = Git
 dop.Git = Git
