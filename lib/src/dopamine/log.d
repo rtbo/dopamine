@@ -19,27 +19,27 @@ enum LogLevel
 
 LogLevel minLogLevel = LogLevel.info;
 
-auto color(Color color, string text) @safe
+auto color(Color color, const(char)[] text) @safe
 {
     return ColorizedText(color, text);
 }
 
-auto info(string text) @safe
+auto info(const(char)[] text) @safe
 {
     return ColorizedText(Color.DEFAULT | Bright, text);
 }
 
-auto success(string text) @safe
+auto success(const(char)[] text) @safe
 {
     return ColorizedText(Color.green | Bright, text);
 }
 
-auto warning(string text) @safe
+auto warning(const(char)[] text) @safe
 {
     return ColorizedText(Color.yellow | Bright, text);
 }
 
-auto error(string text) @safe
+auto error(const(char)[] text) @safe
 {
     return ColorizedText(Color.red | Bright, text);
 }
@@ -245,7 +245,7 @@ static ~this()
 struct ColorizedText
 {
     int color;
-    string text;
+    const(char)[] text;
 
     void toString(scope void delegate(const(char)[]) sink)
     {
