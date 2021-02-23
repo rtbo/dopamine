@@ -1,0 +1,5 @@
+{
+	"name": "pkgc",
+    "targetType": "staticLibrary",
+    "sourceFiles": ["pkgc.d"]
+}

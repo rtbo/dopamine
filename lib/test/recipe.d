@@ -9,10 +9,22 @@ import dopamine.recipe;
 import dopamine.util;
 
 import std.file;
+import std.path;
 
-Recipe pkgRecipe(string pkg)
+private Recipe pkgRecipe(string pkg)
 {
     return Recipe.parseFile(testPath("data", pkg, "dopamine.lua"));
+}
+
+private BuildDirs pkgBuildDirs(string pkg)
+{
+    import std.format : format;
+
+    const srcDir = testPath("data", pkg);
+    const workDir = testPath("gen", pkg);
+    const buildDir = testPath("gen", pkg, "build");
+    const installDir = testPath("gen", pkg, "install");
+    return BuildDirs(srcDir, workDir, buildDir, installDir);
 }
 
 @("Read pkga recipe")
@@ -49,15 +61,10 @@ unittest
 unittest
 {
     auto recipe = pkgRecipe("pkga");
-
-    const srcDir = testPath("data/pkga");
-    const workDir = testPath("gen/pkga");
-    const buildDir = testPath("gen/pkga/build");
-    const installDir = testPath("gen/pkga/install");
-    const bd = BuildDirs(srcDir, workDir, buildDir, installDir);
+    const bd = pkgBuildDirs("pkga");
     auto profile = ensureDefaultProfile();
 
-    srcDir.fromDir!({
+    bd.src.fromDir!({
         recipe.build(bd, profile);
     });
 }
@@ -77,3 +84,22 @@ unittest
     assert(debDeps.length == 1);
     assert(debDeps[0] == Dependency("pkga", VersionSpec(">=1.0.0")));
 }
+
+
+@("pkgc.build+pack")
+unittest
+{
+    auto recipe = pkgRecipe("pkgc");
+    const bd = pkgBuildDirs("pkgc");
+
+    auto profile = ensureDefaultProfile();
+
+    bd.src.fromDir!({
+        recipe.build(bd, profile);
+        recipe.pack(bd, profile, bd.install);
+    });
+
+    assert(isFile(buildPath(bd.install, "lib", "libpkgc.a")));
+    assert(isFile(buildPath(bd.install, "include", "d", "pkgc-1.0.0", "pkgc.d")));
+}
+
