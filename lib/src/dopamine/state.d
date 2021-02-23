@@ -95,23 +95,7 @@ string checkSourceReady(PackageDir dir, Recipe recipe)
 /// Check if the build was successfully completed for the given [ProfileDirs]
 FlagState checkBuildReady(PackageDir dir, ProfileDirs pdirs)
 {
-    import std.string : strip;
-
-    auto flag = pdirs.buildFlag;
-    auto previous = dir.sourceFlag;
-
-    if (!flag.exists() || !previous.exists())
-        return FlagState(false);
-
-    const flagDir = flag.read().strip("\r\n");
-    if (flagDir.length && (!exists(flagDir) || !isDir(flagDir)))
-        return FlagState(false);
-
-    const tlm = flag.timeLastModified;
-    if (tlm < previous.timeLastModified || tlm < timeLastModified(dir.dopamineFile))
-        return FlagState(false);
-
-    return FlagState(true, flagDir);
+    return checkFlagState(dir, pdirs.buildFlag());
 }
 
 /// Check if a lock-file exists and is up-to-date for package in [dir]
