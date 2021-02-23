@@ -4,8 +4,9 @@ import dopamine.log;
 
 import std.digest;
 import std.file;
-import std.traits;
+import std.path;
 import std.string;
+import std.traits;
 
 @safe:
 
@@ -195,8 +196,8 @@ struct FlagFile
 
 /// Install a single file, that is copy it to dest unless dest exists and is not older.
 /// Posix only: If preserveLinks is true and src is a symlink, dest is created as a symlink.
-void installFile(string src, string dest, bool preserveLinks = true)
-in(src.exists && src.isFile)
+void installFile(const(char)[] src, const(char)[] dest, bool preserveLinks = true)
+in(src.exists && src.isFile, src ~ " does not exist or is not a file")
 {
     import std.path : dirName;
     import std.typecons : Yes;
@@ -227,6 +228,8 @@ in(src.exists && src.isFile)
     }
 
     logVerbose("Installing         %s", info(dest));
+
+    mkdirRecurse(dest.dirName);
     copy(src, dest, Yes.preserveAttributes);
 }
 
@@ -236,7 +239,7 @@ in(src.exists && src.isFile)
 /// If [preserveLinks] is true, links in [src] are reproduced in [dest]
 /// If [preserveLinks] is false, a copy of the linked files in [src] are created in [dest]
 /// [preserveLinks] has no effect on Windows (acts as preserveLinks==false)
-void installRecurse(string src, string dest, bool preserveLinks = true) @system
+void installRecurse(const(char)[] src, const(char)[] dest, bool preserveLinks = true) @system
 {
     import std.exception : enforce;
     import std.path : buildNormalizedPath, buildPath, dirName;
@@ -249,7 +252,7 @@ void installRecurse(string src, string dest, bool preserveLinks = true) @system
     {
         mkdirRecurse(dest);
 
-        auto entries = dirEntries(src, SpanMode.breadth);
+        auto entries = dirEntries(src.idup, SpanMode.breadth);
         foreach (entry; entries)
         {
             const dst = buildPath(dest, entry.name[src.length + 1 .. $]);
