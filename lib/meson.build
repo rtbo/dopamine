@@ -117,4 +117,6 @@ dop_test = executable('doptest', dop_src, dop_test_src,
     d_unittest: true,
 )
 
-test('dop tests', dop_test)
+test('dop tests', dop_test,
+    args: ['-s', '-d'],
+)
