@@ -102,7 +102,6 @@ install:
   # - cmd: call .appveyor\set_compiler_env.bat
   # - cmd: call .appveyor\install.bat
   - cmd: appveyor DownloadFile "http://downloads.sourceforge.net/project/luabinaries/5.3.6/Tools Executables/lua-5.3.6_Win64_bin.zip"
-  - cmd: dir
   - cmd: 7z x lua-5.3.6_Win64_bin.zip
   - cmd: dir
 
@@ -118,6 +117,7 @@ build_script:
       }
   - ps: $env:compilersetup = "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall";
   - '"%compilersetup%" %compilersetupargs%'
+  - cmd: set Path=.;%Path%
   - cmd: meson --backend=ninja builddir -Ddefault_library=static
   - cmd: meson compile -C builddir
 
