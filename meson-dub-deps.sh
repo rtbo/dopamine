@@ -7,12 +7,12 @@ fi
 
 DC=$1
 
-dub build dini --compiler=$DC
-dub build unit-threaded --compiler=$DC
-dub build unit-threaded:runner --compiler=$DC
-dub build unit-threaded:exception --compiler=$DC
-dub build unit-threaded:assertions --compiler=$DC
-dub build unit-threaded:integration --compiler=$DC
-dub build unit-threaded:property --compiler=$DC
-dub build unit-threaded:from --compiler=$DC
-dub build unit-threaded:mocks --compiler=$DC
+dub build -n dini --compiler=$DC
+dub build -n unit-threaded --compiler=$DC
+dub build -n unit-threaded:runner --compiler=$DC
+dub build -n unit-threaded:exception --compiler=$DC
+dub build -n unit-threaded:assertions --compiler=$DC
+dub build -n unit-threaded:integration --compiler=$DC
+dub build -n unit-threaded:property --compiler=$DC
+dub build -n unit-threaded:from --compiler=$DC
+dub build -n unit-threaded:mocks --compiler=$DC
