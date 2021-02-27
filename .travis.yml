@@ -13,6 +13,7 @@ addons:
     sources:
       - deadsnakes
     packages:
+      - lua5.3
       # dependencies for meson
       - python3.6
       - python3.6-dev
