@@ -65,6 +65,7 @@ dop_dep = declare_dependency(
 )
 
 dop_test_src = [
+    'test/depcache.d',
     'test/main.d',
     'test/profile.d',
     'test/recipe.d',
