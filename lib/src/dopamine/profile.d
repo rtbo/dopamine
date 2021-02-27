@@ -278,7 +278,7 @@ struct Compiler
         return _path;
     }
 
-    bool opCast(T: bool)() const
+    bool opCast(T : bool)() const
     {
         return _name.length && _ver.length && _path.length;
     }
@@ -383,6 +383,17 @@ final class Profile
         return _compilers;
     }
 
+    const(Compiler) compilerFor(Lang lang) const
+    {
+        foreach (c; _compilers)
+        {
+            if (c.lang == lang)
+                return c;
+        }
+
+        throw new Exception("No such compiler in profile: " ~ lang.to!string);
+    }
+
     @property string digestHash() const
     {
         return _digestHash;
@@ -390,25 +401,25 @@ final class Profile
 
     Profile withBasename(string basename) const
     {
-        return new Profile (basename, this.hostInfo, this.buildType, this.compilers.dup);
+        return new Profile(basename, this.hostInfo, this.buildType, this.compilers.dup);
     }
 
     Profile withHostInfo(HostInfo hostInfo) const
     {
-        return new Profile (this.basename, hostInfo, this.buildType, this.compilers.dup);
+        return new Profile(this.basename, hostInfo, this.buildType, this.compilers.dup);
     }
 
     Profile withBuildType(BuildType buildType) const
     {
-        return new Profile (this.basename, this.hostInfo, buildType, this.compilers.dup);
+        return new Profile(this.basename, this.hostInfo, buildType, this.compilers.dup);
     }
 
     Profile withCompilers(Compiler[] compilers) const
     {
-        return new Profile (this.basename, this.hostInfo, this.buildType, compilers);
+        return new Profile(this.basename, this.hostInfo, this.buildType, compilers);
     }
 
-    bool hasAllLangs(const (Lang)[] langs) const @trusted
+    bool hasAllLangs(const(Lang)[] langs) const @trusted
     {
         import std.algorithm : canFind;
 
@@ -656,7 +667,7 @@ Profile detectDefaultProfile(Lang[] langs)
         compilers ~= detectDefaultCompiler(lang);
     }
 
-    return new Profile("default", hostInfo, BuildType.release, compilers);
+    return new Profile("default", hostInfo, BuildType.debug_, compilers);
 }
 
 private:
@@ -698,6 +709,7 @@ HostInfo currentHostInfo()
 
     return HostInfo(arch, os);
 }
+
 Compiler detectDefaultCompiler(Lang lang)
 {
     foreach (detectF; defaultDetectOrder[lang])
