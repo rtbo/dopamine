@@ -29,6 +29,7 @@ dop_src = [
     'src/dopamine/lua/profile.d',
     'src/dopamine/lua/util.d',
     'src/dopamine/archive.d',
+    'src/dopamine/depbuild.d',
     'src/dopamine/depcache.d',
     'src/dopamine/depdag.d',
     'src/dopamine/dependency.d',
@@ -65,9 +66,7 @@ dop_dep = declare_dependency(
 )
 
 dop_test_src = [
-    'test/depcache.d',
     'test/main.d',
-    'test/profile.d',
     'test/recipe.d',
     'test/util.d',
 ]
