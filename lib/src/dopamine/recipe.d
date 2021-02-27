@@ -439,7 +439,7 @@ package class RecipePayload
         }
 
         d.name = luaGetGlobal!string(L, "name", null);
-        d.ver = Semver(luaGetGlobal!string(L, "version"));
+        d.ver = Semver(luaGetGlobal!string(L, "version", "0.0.0"));
         d.description = luaGetGlobal!string(L, "description", null);
         d.license = luaGetGlobal!string(L, "license", null);
         d.copyright = luaGetGlobal!string(L, "copyright", null);
