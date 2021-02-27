@@ -1,17 +1,21 @@
 language: d
 
-dist: focal
+dist: xenial
 
 d:
   - dmd
   - ldc
 
+sudo: required
+
 addons:
   apt:
     update: true
     sources:
-      - ubuntu-toolchain-r-test
       - deadsnakes
+      - sourceline: 'ppa:ubuntu-toolchain-r/test'
+      - sourceline: 'deb https://packagecloud.io/chef/stable/ubuntu/precise main'
+        key_url: 'https://packagecloud.io/gpg.key'
     packages:
       - gcc-8
       # dependencies for meson
