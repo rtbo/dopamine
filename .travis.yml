@@ -25,7 +25,7 @@ addons:
 
 install:
   - python3.6 -m pip install meson ninja
-  - ./meson-dub-deps.sh $DC
+  - bash meson-dub-deps.sh $DC
 
 script:
   - meson setup builddir
