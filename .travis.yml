@@ -1,6 +1,6 @@
 language: d
 
-dist: xenial
+dist: focal
 
 d:
   - dmd
