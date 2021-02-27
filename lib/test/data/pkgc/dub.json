@@ -1,5 +1,6 @@
 {
 	"name": "pkgc",
     "targetType": "staticLibrary",
-    "sourceFiles": ["pkgc.d"]
+    "sourceFiles": ["pkgc.d"],
+    "libs": ["pkga"]
 }

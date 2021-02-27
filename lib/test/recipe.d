@@ -1,8 +1,10 @@
 module test.recipe;
 
+import test.depcache;
 import test.profile;
 import test.util;
 
+import dopamine.depdag;
 import dopamine.dependency;
 import dopamine.profile;
 import dopamine.recipe;
@@ -11,12 +13,12 @@ import dopamine.util;
 import std.file;
 import std.path;
 
-private Recipe pkgRecipe(string pkg)
+package Recipe pkgRecipe(string pkg)
 {
     return Recipe.parseFile(testPath("data", pkg, "dopamine.lua"));
 }
 
-private BuildDirs pkgBuildDirs(string pkg)
+package BuildDirs pkgBuildDirs(string pkg)
 {
     import std.format : format;
 
@@ -64,9 +66,7 @@ unittest
     const bd = pkgBuildDirs("pkga");
     auto profile = ensureDefaultProfile();
 
-    bd.src.fromDir!({
-        recipe.build(bd, profile);
-    });
+    bd.src.fromDir!({ recipe.build(bd, profile); });
 }
 
 @("pkgb.dependencies")
@@ -85,13 +85,11 @@ unittest
     assert(debDeps[0] == Dependency("pkga", VersionSpec(">=1.0.0")));
 }
 
-
 @("pkgc.build+pack")
 unittest
 {
     auto recipe = pkgRecipe("pkgc");
     const bd = pkgBuildDirs("pkgc");
-
     auto profile = ensureDefaultProfile();
 
     bd.src.fromDir!({
@@ -103,3 +101,18 @@ unittest
     assert(isFile(buildPath(bd.install, "include", "d", "pkgc-1.0.0", "pkgc.d")));
 }
 
+@("app.deplock")
+unittest
+{
+    auto recipe = pkgRecipe("app");
+    const bd = pkgBuildDirs("app");
+
+    auto profile = ensureDefaultProfile();
+
+    auto cache = new DepCacheMock();
+
+    auto dag = prepareDepDAG(recipe, profile, cache);
+    resolveDepDAG(dag, cache);
+
+    // TODO
+}
