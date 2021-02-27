@@ -55,6 +55,12 @@ struct DepInfo
     string installDir;
 }
 
+enum RecipeType
+{
+    pack,
+    deps,
+}
+
 struct Recipe
 {
     private RecipePayload d;
@@ -80,6 +86,11 @@ struct Recipe
     bool opCast(T : bool)() const
     {
         return d !is null;
+    }
+
+    @property RecipeType type() const
+    {
+        return d.type;
     }
 
     @property string name() const @safe
@@ -362,6 +373,7 @@ struct Recipe
 
 package class RecipePayload
 {
+    RecipeType type;
     string name;
     string description;
     Semver ver;
@@ -439,7 +451,8 @@ package class RecipePayload
         }
 
         d.name = luaGetGlobal!string(L, "name", null);
-        d.ver = Semver(luaGetGlobal!string(L, "version", "0.0.0"));
+        const verStr = luaGetGlobal!string(L, "version", null);
+        d.ver = verStr ? Semver(verStr) : Semver.init;
         d.description = luaGetGlobal!string(L, "description", null);
         d.license = luaGetGlobal!string(L, "license", null);
         d.copyright = luaGetGlobal!string(L, "copyright", null);
@@ -479,6 +492,21 @@ package class RecipePayload
             }
         });
 
+        bool buildFunc;
+        L.luaWithGlobal!("build", {
+            switch (lua_type(L, -1))
+            {
+            case LUA_TFUNCTION:
+                buildFunc = true;
+                break;
+            case LUA_TNIL:
+                break;
+            default:
+                throw new Exception("Invalid 'build' symbol: expected a function or nil");
+            }
+
+        });
+
         L.luaWithGlobal!("pack", {
             switch (lua_type(L, -1))
             {
@@ -492,7 +520,6 @@ package class RecipePayload
                 throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
             }
         });
-
         d.filename = filename;
 
         if (revision)
@@ -525,6 +552,21 @@ package class RecipePayload
         }
 
         assert(lua_gettop(L) == 0, "Lua stack not clean");
+
+        if (d.name && verStr && buildFunc && d.langs.length)
+        {
+            d.type = RecipeType.pack;
+        }
+        else if (d.dependencies.length || d.depFunc)
+        {
+            d.type = RecipeType.deps;
+        }
+        else
+        {
+            throw new Exception(
+                    "Invalid recipe: " ~ filename
+                    ~ " is neither a package recipe nor a dependency recipe");
+        }
 
         return d;
     }
