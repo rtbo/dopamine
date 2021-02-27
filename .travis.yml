@@ -15,12 +15,14 @@ addons:
     packages:
       # dependencies for meson
       - python3.6
+      - python3.6-dev
+      - python3.6-venv
       - python3-pip
       - python3-setuptools
       - python3-wheel
 
 install:
-  - pip3 install meson ninja
+  - python3.6 -m pip install meson ninja
 
 script:
   - meson setup builddir
