@@ -15,9 +15,9 @@ addons:
     packages:
       # dependencies for meson
       - python3.6
-      - python3.6-pip
-      - python3.6-setuptools
-      - python3.6-wheel
+      - python3-pip
+      - python3-setuptools
+      - python3-wheel
 
 install:
   - pip3 install meson ninja
