@@ -1,8 +1,7 @@
+project('app', 'd')
 
-pkgc_dep = dependency('pkgc',
-    method: 'dub'
-)
+pkgc_dep = dependency('pkgc', method:'dub')
 
-app = executable('app.d',
+app = executable('app', 'app.d',
     dependencies: [pkgc_dep]
 )

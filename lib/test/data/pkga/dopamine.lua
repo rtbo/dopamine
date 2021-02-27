@@ -2,6 +2,7 @@ local dop = require('dop')
 
 name = 'pkga'
 version = '1.0.0'
+langs = {'c'}
 
 function source()
     return '.'

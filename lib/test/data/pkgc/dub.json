@@ -2,5 +2,6 @@
 	"name": "pkgc",
     "targetType": "staticLibrary",
     "sourceFiles": ["pkgc.d"],
+    "importPaths": ["."],
     "libs": ["pkga"]
 }
