@@ -287,7 +287,8 @@ class DepEdge
 }
 
 /// Prepare a dependency DAG for the given recipe and profile.
-DepDAG prepareDepDAG(Recipe recipe, Profile profile, CacheRepo cacheRepo, Heuristics heuristics) @system
+DepDAG prepareDepDAG(Recipe recipe, Profile profile, CacheRepo cacheRepo,
+        Heuristics heuristics = Heuristics.preferCached) @system
 {
     import std.algorithm : canFind, filter, sort, uniq;
     import std.array : array;
