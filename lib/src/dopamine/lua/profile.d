@@ -95,14 +95,11 @@ const(Profile) luaReadProfile(lua_State* L, int ind)
     return profile;
 }
 
-version (unittest)
-{
-    import test.profile;
-}
-
 @("Profile can pass to lua and come back identical")
 unittest
 {
+    import test.util : ensureDefaultProfile;
+
     auto L = luaL_newstate();
     scope (exit)
         lua_close(L);

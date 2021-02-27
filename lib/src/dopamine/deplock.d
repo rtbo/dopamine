@@ -359,7 +359,7 @@ DepDAG dagFromLockFile(string filename) @trusted
 @("Test Lock-file serialization")
 unittest
 {
-    import test.profile : ensureDefaultProfile;
+    import test.util : ensureDefaultProfile;
 
     auto cacheRepo = TestCacheRepo.withBase();
 

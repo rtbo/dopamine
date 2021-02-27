@@ -76,8 +76,7 @@ final class DependencyCache : CacheRepo
     ///     revision = optional revision of the package
     /// Returns: The recipe of the package
     /// Throws: ServerDownException, NoSuchPackageException, NoSuchPackageVersionException
-    /// FIXME: this executes lua code and should be system
-    Recipe packRecipe(string packname, Semver ver, string revision = null) @trusted
+    Recipe packRecipe(string packname, Semver ver, string revision = null) @system
     {
         import std.exception : enforce;
         import std.file : exists;
@@ -120,6 +119,15 @@ final class DependencyCache : CacheRepo
         }
 
         throw new NoSuchVersionException(packname, ver);
+    }
+
+    /// Get the directory of a dependency package
+    /// Params:
+    ///     recipe = name of the package
+    /// Returns: The PackageDir for this package
+    PackageDir packDir(Recipe recipe) @system
+    {
+        return cacheDepRevDir(recipe);
     }
 
     /// Get the available versions of a package

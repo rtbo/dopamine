@@ -14,6 +14,7 @@
 module dopamine.depdag;
 
 import dopamine.dependency;
+import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
@@ -32,7 +33,13 @@ interface CacheRepo
     ///     revision = optional revision of the package
     /// Returns: The recipe of the package
     /// Throws: ServerDownException, NoSuchPackageException, NoSuchPackageVersionException
-    Recipe packRecipe(string packname, Semver ver, string revision = null) @safe;
+    Recipe packRecipe(string packname, Semver ver, string revision = null) @system;
+
+    /// Get the directory of a dependency package
+    /// Params:
+    ///     recipe = name of the package
+    /// Returns: The PackageDir for this package
+    PackageDir packDir(Recipe recipe) @system;
 
     /// Get the available versions of a package
     /// Params:
@@ -504,7 +511,7 @@ DepNode[string] dagCollectDependencies(DepNode node) @safe
 /// The dependency tree.
 /// Each node is associated with its language + the cumulated
 /// languages of its dependencies
-void dagFetchLanguages(DepDAG dag, Recipe rootRecipe, CacheRepo cacheRepo) @safe
+void dagFetchLanguages(DepDAG dag, Recipe rootRecipe, CacheRepo cacheRepo) @system
 in(dagIsResolved(dag))
 in(dag.root.name == rootRecipe.name)
 in(dag.root.resolvedNode.ver == rootRecipe.ver)
@@ -517,7 +524,7 @@ in(dag.root.resolvedNode.ver == rootRecipe.ver)
     // of diamond dependency configuration. In this case, we have to cumulate the languages
     // from all passes
 
-    void traverse(DepPack pack, Lang[] fromDeps) @safe
+    void traverse(DepPack pack, Lang[] fromDeps)
     {
         if (!pack.resolvedNode)
             return;
@@ -700,7 +707,7 @@ void dagToDotPng(DepDAG dag, string filename) @safe
 
 version (unittest)
 {
-    import test.profile : ensureDefaultProfile;
+    import test.util : ensureDefaultProfile;
 }
 
 @("Test general graph utility")
@@ -1083,6 +1090,11 @@ version (unittest)
             TestPackVersion pv = p.nodes.find!(pv => pv.ver == ver).front;
             const rev = revision ? revision : "1";
             return Recipe.mock(packname, ver, pv.deps, p.langs, rev);
+        }
+
+        PackageDir packDir(Recipe recipe)
+        {
+            return cacheDepRevDir(recipe);
         }
 
         /// Get the available versions of a package

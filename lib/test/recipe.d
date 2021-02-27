@@ -1,7 +1,5 @@
 module test.recipe;
 
-import test.depcache;
-import test.profile;
 import test.util;
 
 import dopamine.depdag;
@@ -13,21 +11,7 @@ import dopamine.util;
 import std.file;
 import std.path;
 
-package Recipe pkgRecipe(string pkg)
-{
-    return Recipe.parseFile(testPath("data", pkg, "dopamine.lua"));
-}
-
-package BuildDirs pkgBuildDirs(string pkg)
-{
-    import std.format : format;
-
-    const srcDir = testPath("data", pkg);
-    const workDir = testPath("gen", pkg);
-    const buildDir = testPath("gen", pkg, "build");
-    const installDir = testPath("gen", pkg, "install");
-    return BuildDirs(srcDir, workDir, buildDir, installDir);
-}
+import unit_threaded : should;
 
 @("Read pkga recipe")
 unittest
