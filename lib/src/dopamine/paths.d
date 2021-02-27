@@ -54,12 +54,6 @@ string userProfileFile(Profile profile)
     return userProfileFile(profile.name);
 }
 
-string userProfileDepsInstall(Profile profile)
-{
-    return buildPath(userDopDir, "deps", format("%s-%s",
-            profile.digestHash[0 .. 10], profile.name));
-}
-
 string userLoginFile()
 {
     return buildPath(userDopDir(), "login.json");
@@ -97,7 +91,13 @@ FlagFile cacheDepRevDirFlag(Recipe recipe) @system
 
 struct PackageDir
 {
-    private string _dir;
+    this(string dir, string dopDir = null)
+    {
+        import std.path : buildPath;
+
+        _dir = dir;
+        _dopDir = dopDir ? dopDir : buildPath(dir, ".dop");
+    }
 
     @property string dir() const
     {
@@ -108,15 +108,15 @@ struct PackageDir
     {
         import std.file : exists, isDir;
 
-        return exists(dir) && isDir(dir);
+        return dir.exists && dir.isDir;
     }
 
     @property bool hasDopamineFile() const
     {
         import std.file : exists, isFile;
 
-        const df = _path("dopamine.lua");
-        return exists(df) && isFile(df);
+        const df = dopamineFile;
+        return df.exists && df.isFile;
     }
 
     @property string dopamineFile() const
@@ -125,46 +125,40 @@ struct PackageDir
     }
 
     @property string lockFile() const
-    in(hasDopamineFile)
     {
         return _path("dop.lock");
     }
 
     @property string dopDir() const
-    in(hasDopamineFile)
     {
-        return _path(".dop");
-    }
-
-    @property FlagFile sourceFlag() const
-    in(hasDopamineFile)
-    {
-        return FlagFile(_path(".dop", ".source"));
+        return _dopDir;
     }
 
     @property string profileFile() const
-    in(hasDopamineFile)
     {
-        return _path(".dop", "profile.ini");
+        return _dopPath("profile.ini");
     }
 
-    /// Get the default locations for building with profile
-    ProfileDirs profileDirs(const(Profile) profile) const @trusted
-    in(profile && hasDopamineFile)
+    @property FlagFile sourceFlag() const
     {
-        const workDir = _workDirName(profile);
+        return FlagFile(_dopPath(".source"));
+    }
 
-        ProfileDirs dirs = void;
-        dirs.work = _path(".dop", workDir);
-        dirs.build = _path(".dop", workDir, "build");
-        dirs.install = _path(".dop", workDir, "install");
-        return dirs;
+    @property ProfileDirs profileDirs(const(Profile) profile) const
+    {
+        const dirName = _configDirName(profile);
+
+        ProfileDirs cdir;
+        cdir.work = _dopPath(dirName);
+        cdir.build = _dopPath(dirName, "build");
+        cdir.install = _dopPath(dirName, "install");
+        return cdir;
     }
 
     /// Get the path to the packed archive
     /// Must be called from the package dir
     string archiveFile(const(Profile) profile, const(Recipe) recipe) const
-    in(profile && recipe && hasDopamineFile)
+    in(profile && recipe)
     {
         import dopamine.archive : ArchiveBackend;
 
@@ -179,22 +173,22 @@ struct PackageDir
 
         enforce(archiveFormat.length, "No archive capability");
 
-        const workDir = _workDirName(profile);
+        const dirName = _configDirName(profile);
         const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
                 profile.digestHash[0 .. 10], archiveFormat[0]);
-        return _path(".dop", workDir, filename);
+        return _dopPath(dirName, filename);
     }
 
     FlagFile archiveFlag(const(Profile) profile) const
     {
-        const workDir = _workDirName(profile);
-        return FlagFile(_path(".dop", workDir, ".archive"));
-
+        const dirName = _configDirName(profile);
+        return FlagFile(_dopPath(dirName, ".archive"));
     }
 
     static PackageDir enforced(string dir, lazy string msg = null)
     {
         import std.exception : enforce;
+        import std.format : format;
 
         const pdir = PackageDir(dir);
         enforce(pdir.hasDopamineFile, msg.length ? msg
@@ -202,18 +196,23 @@ struct PackageDir
         return pdir;
     }
 
-    private string _path(Args...)(Args comps) const @trusted
+    private string _path(C...)(C comps) const
     {
-        import std.array : array;
-        import std.exception : assumeUnique;
-
-        return assumeUnique(asNormalizedPath(chainPath(dir, comps)).array);
+        return buildPath(_dir, comps);
     }
 
-    private static string _workDirName(const(Profile) profile)
+    private string _dopPath(C...)(C comps) const
+    {
+        return buildPath(_dopDir, comps);
+    }
+
+    private string _configDirName(const(Profile) profile) const
     {
         return profile.digestHash[0 .. 10];
     }
+
+    private string _dir;
+    private string _dopDir;
 }
 
 /// Structure gathering directories needed during a build
@@ -241,7 +240,18 @@ struct ProfileDirs
     /// Return a BuildDirs object to pass to the recipe for building and packaging
     BuildDirs buildDirs(in string src, in string base = getcwd()) const
     {
+        import std.path : absolutePath;
+
         return BuildDirs(src.absolutePath(base), work.absolutePath(base),
                 build.absolutePath(base), install.absolutePath(base));
     }
+}
+
+@("PackageDir.dopamineFile")
+unittest
+{
+    import unit_threaded : should;
+
+    const dir = PackageDir(".");
+    dir.dopamineFile.should == "./dopamine.lua";
 }
