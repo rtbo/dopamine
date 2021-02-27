@@ -1,0 +1,24 @@
+language: d
+
+dist: xenial
+
+d:
+  - dmd
+  - ldc
+
+addons:
+  apt:
+    packages:
+      # dependencies for meson
+      - python3
+      - python3-pip
+      - python3-setuptools
+      - python3-wheel
+
+install:
+  - pip3 install meson ninja
+
+script:
+  - meson setup builddir
+  - meson compile -C builddir
+  - meson test -C builddir
