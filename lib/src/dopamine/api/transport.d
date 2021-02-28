@@ -132,25 +132,6 @@ struct ApiTransport
         return format("%s/api/%s%s%s", host, ver, path, query);
     }
 
-    ///
-    unittest
-    {
-        ApiTransport transport;
-        transport.host = "http://api.net";
-        transport.ver = "v2";
-
-        assert(transport.resource("/resource") == "http://api.net/api/v2/resource");
-        assert(transport.resource("/resource/%s/field",
-                "id") == "http://api.net/api/v2/resource/id/field");
-        assert(transport.resource("/resource", ["p1": "v1",
-                    "p2": "v2"]) == "http://api.net/api/v2/resource?p1=v1&p2=v2");
-
-        assert(transport.resource("/resource/%s/field", "id", [
-                    "p1": "v1",
-                    "p2": "v2"
-                ]) == "http://api.net/api/v2/resource/id/field?p1=v1&p2=v2");
-    }
-
     Response!JSONValue jsonGet(string url)
     {
         return rawGet(url).mapResp!(raw => toJson(raw));
@@ -159,7 +140,8 @@ struct ApiTransport
     Response!JSONValue jsonPost(string url, const ref JSONValue bodi)
     {
         const rawbody = fromJson(bodi);
-        return rawPost(url, cast(const(ubyte)[]) rawbody, "application/json").mapResp!(raw => toJson(raw));
+        return rawPost(url, cast(const(ubyte)[]) rawbody, "application/json").mapResp!(
+                raw => toJson(raw));
     }
 
     Response!(ubyte[]) rawGet(string url)
@@ -173,7 +155,7 @@ struct ApiTransport
     }
 
     Response!(ubyte[]) rawReq(string url, HTTP.Method method,
-            scope const(void)[] bodi=null, string contentType = null) @trusted
+            scope const(void)[] bodi = null, string contentType = null) @trusted
     {
         import std.algorithm : min;
         import std.conv : to;
@@ -244,6 +226,25 @@ struct ApiTransport
 
         return Response!(ubyte[])(data, status.code, status.reason, error);
     }
+}
+
+@("ApiTransport.resource")
+unittest
+{
+    ApiTransport transport;
+    transport.host = "http://api.net";
+    transport.ver = "v2";
+
+    assert(transport.resource("/resource") == "http://api.net/api/v2/resource");
+    assert(transport.resource("/resource/%s/field",
+            "id") == "http://api.net/api/v2/resource/id/field");
+    assert(transport.resource("/resource", ["p1": "v1",
+                "p2": "v2"]) == "http://api.net/api/v2/resource?p1=v1&p2=v2");
+
+    assert(transport.resource("/resource/%s/field", "id", [
+                "p1": "v1",
+                "p2": "v2"
+            ]) == "http://api.net/api/v2/resource/id/field?p1=v1&p2=v2");
 }
 
 private enum isStringDict(T) = isAssociativeArray!T && is(KeyType!T == string)
