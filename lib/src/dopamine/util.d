@@ -283,7 +283,6 @@ void installRecurse(const(char)[] src, const(char)[] dest, bool preserveLinks = 
 @("installRecurse")
 @system unittest
 {
-    import unit_threaded.should : should;
     import std.path : buildPath;
 
     const src = tempPath();
@@ -324,24 +323,24 @@ void installRecurse(const(char)[] src, const(char)[] dest, bool preserveLinks = 
 
     installRecurse(src, dest);
 
-    read(buildPath(dest, "file1.txt")).should == "file1";
-    read(buildPath(dest, "file2.txt")).should == "file2";
-    read(buildPath(dest, "file3.txt")).should == "file3";
-    read(buildPath(dest, "subdir", "file4.txt")).should == "file4";
+    assert(read(buildPath(dest, "file1.txt")) == "file1");
+    assert(read(buildPath(dest, "file2.txt")) == "file2");
+    assert(read(buildPath(dest, "file3.txt")) == "file3");
+    assert(read(buildPath(dest, "subdir", "file4.txt")) == "file4");
 
     version (Posix)
     {
-        read(buildPath(dest, "link1.txt")).should == "file1";
-        read(buildPath(dest, "link2.txt")).should == "file1";
-        read(buildPath(dest, "link3.txt")).should == "file4";
-        read(buildPath(dest, "subdir", "link4.txt")).should == "file4";
-        read(buildPath(dest, "subdir", "link5.txt")).should == "file4";
+        assert(read(buildPath(dest, "link1.txt")) == "file1");
+        assert(read(buildPath(dest, "link2.txt")) == "file1");
+        assert(read(buildPath(dest, "link3.txt")) == "file4");
+        assert(read(buildPath(dest, "subdir", "link4.txt")) == "file4");
+        assert(read(buildPath(dest, "subdir", "link5.txt")) == "file4");
 
-        readLink(buildPath(dest, "link1.txt")).should == "file1.txt";
-        readLink(buildPath(dest, "link2.txt")).should == "link1.txt";
-        readLink(buildPath(dest, "link3.txt")).should == "subdir/file4.txt";
-        readLink(buildPath(dest, "subdir", "link4.txt")).should == "file4.txt";
-        readLink(buildPath(dest, "subdir", "link5.txt")).should == "link4.txt";
+        assert(readLink(buildPath(dest, "link1.txt")) == "file1.txt");
+        assert(readLink(buildPath(dest, "link2.txt")) == "link1.txt");
+        assert(readLink(buildPath(dest, "link3.txt")) == "subdir/file4.txt");
+        assert(readLink(buildPath(dest, "subdir", "link4.txt")) == "file4.txt");
+        assert(readLink(buildPath(dest, "subdir", "link5.txt")) == "link4.txt");
     }
 }
 
