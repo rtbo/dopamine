@@ -1,10 +1,10 @@
 module dopamine.client.build;
 
-import dopamine.client.depinstall;
 import dopamine.client.deplock;
 import dopamine.client.profile;
 import dopamine.client.recipe;
 import dopamine.client.source;
+import dopamine.depbuild;
 import dopamine.depcache;
 import dopamine.log;
 import dopamine.paths;
