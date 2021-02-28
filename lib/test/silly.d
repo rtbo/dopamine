@@ -1,4 +1,6 @@
-
+/*
+	This is a slightly modified version of silly that allows integration out of DUB
+*/
 /*
  * Silly is a test runner for the D programming language
  *
@@ -19,6 +21,7 @@ version(unittest):
 // }
 
 import test.all_mods : allModules;
+import dopamine.log;
 
 import core.time : Duration, MonoTime;
 import std.ascii : newline;
@@ -64,6 +67,8 @@ shared static this() {
 
 			return UnitTestResult(0, 0, false, false);
 		}
+
+        minLogLevel = verbose ? LogLevel.verbose : LogLevel.silent;
 
 		if(!threads)
 			threads = totalCPUs;
