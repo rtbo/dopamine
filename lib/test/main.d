@@ -13,7 +13,7 @@ shared static this()
 
     initLua();
 
-    minLogLevel = LogLevel.verbose;
+    minLogLevel = LogLevel.silent;
 
     enforce(execute(["dub", "add-path", testPath("data")]).status == 0);
 }
