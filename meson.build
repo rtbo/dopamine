@@ -18,5 +18,7 @@ dini_dep = dependency('dini',
     method: 'dub'
 )
 
+discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
+
 subdir('lib')
 subdir('client')
