@@ -45,8 +45,8 @@ Profile ensureDefaultProfile()
 void cleanGen()
 {
     const genPath = testPath("gen");
-    //if (exists(genPath))
-        //rmdirRecurse(genPath);
+    if (exists(genPath))
+        rmdirRecurse(genPath);
 }
 
 class DepCacheMock : CacheRepo
