@@ -827,3 +827,43 @@ Compiler detectClangpp()
 
     return detectCompiler(["clang++", "--version"], versionRe, "CLANG++", Lang.cpp);
 }
+
+@("detectClang")
+unittest
+{
+    if (findProgram("clang"))
+    {
+        const cl = detectClang();
+        assert(cl.path.length);
+    }
+}
+
+@("detectGcc")
+unittest
+{
+    if (findProgram("gcc"))
+    {
+        const cl = detectGcc();
+        assert(cl.path.length);
+    }
+}
+
+@("detectDmd")
+unittest
+{
+    if (findProgram("dmd"))
+    {
+        const cl = detectDmd();
+        assert(cl.path.length);
+    }
+}
+
+@("detectLdc")
+unittest
+{
+    if (findProgram("ldc"))
+    {
+        const cl = detectLdc();
+        assert(cl.path.length);
+    }
+}
