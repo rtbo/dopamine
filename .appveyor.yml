@@ -7,15 +7,7 @@ environment:
   LUA_VER: 5.3.2
   matrix:
     - DC: dmd
-      DVersion: beta
-      arch: x64
-      compiler: msvc2017
-    - DC: dmd
       DVersion: stable
-      arch: x64
-      compiler: msvc2017
-    - DC: ldc
-      DVersion: beta
       arch: x64
       compiler: msvc2017
     - DC: ldc
