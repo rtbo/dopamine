@@ -190,7 +190,7 @@ BuildType fromConfig(T : BuildType)(string val)
     {
     case "release":
         return T.release;
-    case "debut":
+    case "debug":
         return T.debug_;
     default:
         throw new Exception(format("cannot convert \"%s\" to Build Type", val));
@@ -518,7 +518,7 @@ final class Profile
         {
             app.put(format("basename=%s\n", _basename));
         }
-        app.put(format("buildtype=%s\n", _buildType));
+        app.put(format("buildtype=%s\n", _buildType.toConfig));
 
         app.put("\n");
         _hostInfo.writeIniSection(app);
