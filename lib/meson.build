@@ -1,6 +1,6 @@
 subdir('src/dopamine')
 
-dop_src = [
+dop_src = files([
     'src/arsd/terminal.d',
 
     'src/bindbc/loader/package.d',
@@ -42,7 +42,7 @@ dop_src = [
     'src/dopamine/semver.d',
     'src/dopamine/state.d',
     'src/dopamine/util.d',
-]
+])
 
 dop_inc = include_directories('src')
 dop_deps = [ dini_dep ] + lua_deps
@@ -63,12 +63,18 @@ dop_dep = declare_dependency(
     link_with: dop_lib,
 )
 
-dop_test_src = dop_src + [
+dop_test_src = dop_src + files([
     'test/main.d',
     'test/recipe.d',
     'test/silly.d',
     'test/util.d',
-]
+])
+
+# all_mods defined in test
+# subdir('test')
+# all_mods is hardcoded instead of generating waiting for meson#8435
+# dop_test_src += all_mods
+dop_test_src += files('test/all_mods.d')
 
 dop_test = executable('doptest', dop_test_src,
     install: false,

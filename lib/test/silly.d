@@ -18,7 +18,7 @@ version(unittest):
 // 	static import dub_test_root;
 // }
 
-import test.main : allModules;
+import test.all_mods : allModules;
 
 import core.time : Duration, MonoTime;
 import std.ascii : newline;
