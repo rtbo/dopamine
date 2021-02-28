@@ -117,6 +117,7 @@ build_script:
       }
   - ps: $env:compilersetup = "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall";
   - '"%compilersetup%" %compilersetupargs%'
+  - cmd: rdmd tools/meson_dub_deps.d --dc %DC%
   - cmd: set Path=.;%Path%
   - cmd: meson --backend=ninja builddir -Ddefault_library=static -Dlua_bindings=dynamic
   - cmd: meson compile -C builddir
