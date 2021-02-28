@@ -533,6 +533,10 @@ final class Profile
     {
         import dini : Ini, IniSection;
 
+        import std.stdio;
+        writeln("will parse INI string");
+        writeln(iniString);
+
         auto ini = Ini.ParseString(iniString);
 
         auto enforceSection(string name)
