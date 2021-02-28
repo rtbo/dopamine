@@ -744,7 +744,9 @@ shared static this() @trusted
     }
     else version (Windows)
     {
-        static assert(false, "not implemented");
+        // TODO MSVC
+        order[Lang.c] = [&detectGcc, &detectClang];
+        order[Lang.cpp] = [&detectGpp, &detectClangpp];
     }
 
     import std.exception : assumeUnique;
@@ -824,4 +826,44 @@ Compiler detectClangpp()
     enum versionRe = `^clang.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
 
     return detectCompiler(["clang++", "--version"], versionRe, "CLANG++", Lang.cpp);
+}
+
+@("detectClang")
+unittest
+{
+    if (findProgram("clang"))
+    {
+        const cl = detectClang();
+        assert(cl.path.length);
+    }
+}
+
+@("detectGcc")
+unittest
+{
+    if (findProgram("gcc"))
+    {
+        const cl = detectGcc();
+        assert(cl.path.length);
+    }
+}
+
+@("detectDmd")
+unittest
+{
+    if (findProgram("dmd"))
+    {
+        const cl = detectDmd();
+        assert(cl.path.length);
+    }
+}
+
+@("detectLdc")
+unittest
+{
+    if (findProgram("ldc"))
+    {
+        const cl = detectLdc();
+        assert(cl.path.length);
+    }
 }
