@@ -163,11 +163,16 @@ class FormatLogException : Exception
 unittest
 {
     auto oldInstance = instance;
+    const oldLevel = minLogLevel;
     scope (exit)
+    {
         instance = oldInstance;
+        minLogLevel = oldLevel;
+    }
 
     auto output = new TestLogOutput;
     instance = output;
+    minLogLevel = LogLevel.info;
 
     auto e = new FormatLogException(LogLevel.info, "Test %s and %s. fourty-two = %s",
             ColorizedText(Color.green, "success"), ColorizedText(Color.red, "error"), 42);
