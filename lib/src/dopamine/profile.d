@@ -744,7 +744,9 @@ shared static this() @trusted
     }
     else version (Windows)
     {
-        static assert(false, "not implemented");
+        // TODO MSVC
+        order[Lang.c] = [&detectGcc, &detectClang];
+        order[Lang.cpp] = [&detectGpp, &detectClangpp];
     }
 
     import std.exception : assumeUnique;
