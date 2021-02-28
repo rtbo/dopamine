@@ -48,8 +48,6 @@ dop_inc = include_directories('src')
 dop_deps = [ dini_dep ] + lua_deps
 dop_imp = include_directories('src/dopamine/lua')
 
-message(lua_d_versions)
-
 dop_lib = library('dopamine', dop_src,
     install: true,
     include_directories: dop_inc,
@@ -65,58 +63,22 @@ dop_dep = declare_dependency(
     link_with: dop_lib,
 )
 
-dop_test_src = [
+dop_test_src = dop_src + [
     'test/main.d',
     'test/recipe.d',
+    'test/silly.d',
     'test/util.d',
 ]
 
-unit_threaded_ver = '>=1.0.11'
-
-unit_threaded_deps = [
-    dependency('unit-threaded',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-    dependency('unit-threaded:runner',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-    dependency('unit-threaded:exception',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-    dependency('unit-threaded:assertions',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-    dependency('unit-threaded:integration',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-    dependency('unit-threaded:property',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-    dependency('unit-threaded:from',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-    dependency('unit-threaded:mocks',
-        version: unit_threaded_ver,
-        method: 'dub',
-    ),
-]
-
-dop_test = executable('doptest', dop_src, dop_test_src,
+dop_test = executable('doptest', dop_test_src,
     install: false,
     include_directories: [ dop_inc, include_directories('.') ],
-    dependencies: dop_deps + unit_threaded_deps,
+    dependencies: dop_deps,
     d_import_dirs: dop_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,
 )
 
 test('dop tests', dop_test,
-    args: ['-s', '-d'],
+    args: ['--threads', '1']
 )

@@ -129,4 +129,4 @@ test_script:
   - echo %PATH%
   - "%DC% --version"
   - echo Meson Tests
-  - builddir\lib\doptest.exe -s -d
+  - builddir\lib\doptest.exe --threads 1

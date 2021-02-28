@@ -7,7 +7,6 @@ import std.process;
 
 string dub = "dub";
 string diniVer = "2.0.0";
-string utVer = "1.0.11";
 string dc;
 
 void ensureDubPkg(string name, string ver)
@@ -28,11 +27,10 @@ void ensureDubPkg(string name, string ver)
 
 int main(string[] args)
 {
-    auto helpInfo = getopt(args, "dub", &dub, "dini", &diniVer,
-            "unit-threaded", &utVer, "dc", &dc);
+    auto helpInfo = getopt(args, "dub", &dub, "dini", &diniVer, "dc", &dc);
     if (helpInfo.helpWanted)
     {
-        defaultGetoptPrinter("Some information about the program.", helpInfo.options);
+        defaultGetoptPrinter("Prepare DUB dependencies.", helpInfo.options);
         return 0;
     }
 
@@ -42,14 +40,6 @@ int main(string[] args)
     }
 
     ensureDubPkg("dini", diniVer);
-    ensureDubPkg("unit-threaded", utVer);
-    ensureDubPkg("unit-threaded:runner", utVer);
-    ensureDubPkg("unit-threaded:exception", utVer);
-    ensureDubPkg("unit-threaded:assertions", utVer);
-    ensureDubPkg("unit-threaded:integration", utVer);
-    ensureDubPkg("unit-threaded:property", utVer);
-    ensureDubPkg("unit-threaded:from", utVer);
-    ensureDubPkg("unit-threaded:mocks", utVer);
 
     return 0;
 }

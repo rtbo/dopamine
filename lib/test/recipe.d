@@ -12,8 +12,6 @@ import dopamine.util;
 import std.file;
 import std.path;
 
-import unit_threaded : should;
-
 @("Read pkga recipe")
 unittest
 {

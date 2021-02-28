@@ -250,8 +250,6 @@ struct ProfileDirs
 @("PackageDir.dopamineFile")
 unittest
 {
-    import unit_threaded : should;
-
     const dir = PackageDir(".");
-    dir.dopamineFile.should == "./dopamine.lua";
+    assert(dir.dopamineFile == "./dopamine.lua");
 }
