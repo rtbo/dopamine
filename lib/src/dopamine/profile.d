@@ -321,7 +321,14 @@ struct Compiler
         app.put(format("[compiler.%s]\n", _lang.toConfig()));
         app.put(format("name=%s\n", _name));
         app.put(format("ver=%s\n", _ver));
-        app.put(format("path=%s\n", _path));
+        version (Windows)
+        {
+            app.put(format("path=%s\n", _path.replace("\\", "\\\\")));
+        }
+        else
+        {
+            app.put(format("path=%s\n", _path));
+        }
     }
 }
 
@@ -532,10 +539,6 @@ final class Profile
     static Profile fromIni(string iniString, string defaultName) @trusted
     {
         import dini : Ini, IniSection;
-
-        import std.stdio;
-        writeln("will parse INI string");
-        writeln(iniString);
 
         auto ini = Ini.ParseString(iniString);
 
