@@ -190,7 +190,7 @@ BuildType fromConfig(T : BuildType)(string val)
     {
     case "release":
         return T.release;
-    case "debut":
+    case "debug":
         return T.debug_;
     default:
         throw new Exception(format("cannot convert \"%s\" to Build Type", val));
@@ -321,7 +321,14 @@ struct Compiler
         app.put(format("[compiler.%s]\n", _lang.toConfig()));
         app.put(format("name=%s\n", _name));
         app.put(format("ver=%s\n", _ver));
-        app.put(format("path=%s\n", _path));
+        version (Windows)
+        {
+            app.put(format("path=%s\n", _path.replace("\\", "\\\\")));
+        }
+        else
+        {
+            app.put(format("path=%s\n", _path));
+        }
     }
 }
 
@@ -511,7 +518,7 @@ final class Profile
         {
             app.put(format("basename=%s\n", _basename));
         }
-        app.put(format("buildtype=%s\n", _buildType));
+        app.put(format("buildtype=%s\n", _buildType.toConfig));
 
         app.put("\n");
         _hostInfo.writeIniSection(app);
