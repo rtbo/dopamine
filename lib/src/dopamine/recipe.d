@@ -39,6 +39,11 @@ struct BuildDirs
     string build;
     string install;
 
+    PackDirs toPack(string dest = null) const
+    {
+        return PackDirs(src, config, build, install, dest ? dest : install);
+    }
+
     invariant
     {
         import std.path : isAbsolute;
@@ -47,6 +52,26 @@ struct BuildDirs
         assert(config.isAbsolute);
         assert(build.isAbsolute);
         assert(install.isAbsolute);
+    }
+}
+
+struct PackDirs
+{
+    string src;
+    string config;
+    string build;
+    string install;
+    string dest;
+
+    invariant
+    {
+        import std.path : isAbsolute;
+
+        assert(src.isAbsolute);
+        assert(config.isAbsolute);
+        assert(build.isAbsolute);
+        assert(install.isAbsolute);
+        assert(dest.isAbsolute);
     }
 }
 
@@ -223,6 +248,17 @@ struct Recipe
         luaSetTable(L, ind, "install", dirs.install);
     }
 
+    private void pushPackDirs(lua_State* L, PackDirs dirs)
+    {
+        lua_createtable(L, 0, 2);
+        const ind = lua_gettop(L);
+        luaSetTable(L, ind, "src", dirs.src);
+        luaSetTable(L, ind, "config", dirs.config);
+        luaSetTable(L, ind, "build", dirs.build);
+        luaSetTable(L, ind, "install", dirs.install);
+        luaSetTable(L, ind, "dest", dirs.dest);
+    }
+
     private void pushConfig(lua_State* L, Profile profile)
     {
         lua_createtable(L, 0, 4);
@@ -240,6 +276,27 @@ struct Recipe
         luaSetTable(L, ind, "short_hash", shortHash);
     }
 
+    private void pushDepInfos(lua_State* L, DepInfo[string] depInfos)
+    {
+        if (!depInfos)
+        {
+            lua_pushnil(L);
+            return;
+        }
+
+        lua_createtable(L, 0, cast(int) depInfos.length);
+        const depInfosInd = lua_gettop(L);
+        foreach (k, di; depInfos)
+        {
+            lua_pushlstring(L, k.ptr, k.length);
+
+            lua_createtable(L, 0, 1);
+            luaSetTable(L, -1, "install_dir", di.installDir);
+
+            lua_settable(L, depInfosInd);
+        }
+    }
+
     /// Execute the `build` function of this recipe
     bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
     {
@@ -249,28 +306,11 @@ struct Recipe
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
         pushBuildDirs(L, dirs);
-
         pushConfig(L, profile);
+        pushDepInfos(L, depInfos);
 
-        if (depInfos)
-        {
-            lua_createtable(L, 0, cast(int) depInfos.length);
-            const depInfosInd = lua_gettop(L);
-            foreach (k, di; depInfos)
-            {
-                lua_pushlstring(L, k.ptr, k.length);
-
-                lua_createtable(L, 0, 1);
-                luaSetTable(L, -1, "install_dir", di.installDir);
-
-                lua_settable(L, depInfosInd);
-            }
-        }
-
-        const nparams = depInfos ? 3 : 2;
-
-        // nparams argument, 1 result
-        if (lua_pcall(L, nparams, 1, 0) != LUA_OK)
+        // 3 argument, 1 result
+        if (lua_pcall(L, 3, 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
         }
@@ -297,17 +337,17 @@ struct Recipe
         return d.packFunc;
     }
 
-    /// Execute the `package` function of this recipe
-    void pack(BuildDirs dirs, Profile profile, string dest)
-    in(d.packFunc, "Recipe has no 'package' function")
+    /// Execute the `pack` function of this recipe
+    void pack(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
+    in(d.packFunc, "Recipe has no 'pack' function")
     {
         auto L = d.L;
 
         lua_getglobal(L, "pack");
 
-        pushBuildDirs(L, dirs);
+        pushPackDirs(L, dirs);
         pushConfig(L, profile);
-        luaPush(L, dest);
+        pushDepInfos(L, depInfos);
 
         // 3 params, 0 result
         if (lua_pcall(L, 3, 0, 0) != LUA_OK)
@@ -317,7 +357,7 @@ struct Recipe
     }
 
     /// Execute the `patch_install` function of this recipe
-    void patchInstall(Profile profile, string dest)
+    void patchInstall(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
     {
         auto L = d.L;
 
@@ -335,11 +375,12 @@ struct Recipe
             throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
         }
 
+        pushPackDirs(L, dirs);
         pushConfig(L, profile);
-        luaPush(L, dest);
+        pushDepInfos(L, depInfos);
 
-        // 2 params, 0 result
-        if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+        // 3 params, 0 result
+        if (lua_pcall(L, 3, 0, 0) != LUA_OK)
         {
             throw new Exception("Cannot patch installation: " ~ luaTo!string(L, -1));
         }

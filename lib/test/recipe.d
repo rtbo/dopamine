@@ -88,7 +88,7 @@ unittest
 
     bd.src.fromDir!({
         recipe.build(bd, profile, depInfos);
-        recipe.pack(bd, profile, bd.install);
+        recipe.pack(bd.toPack(), profile, depInfos);
     });
 
     assert(isFile(buildPath(bd.install, "lib", "libpkgc.a")));
@@ -114,9 +114,8 @@ unittest
     auto cache = new DepCacheMock();
     auto dag = prepareDepDAG(recipe, profile, cache);
     resolveDepDAG(dag, cache);
-    buildDependencies(dag, recipe, profile, cache);
 
-    auto depInfos = buildDependencies(dag, recipe, profile, cache, deps);
+    buildDependencies(dag, recipe, profile, cache, deps);
 
     string[string] env;
     env["PKG_CONFIG_PATH"] = pc ~ pathSeparator ~ environment.get("PKG_CONFIG_PATH", "");

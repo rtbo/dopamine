@@ -13,6 +13,32 @@ import std.exception;
 import std.file;
 import std.format;
 
+DepInfo[string] dagCollectDepInfos(DepDAG dag, Recipe recipe,
+        const(Profile) profile, CacheRepo depcache, string stageDest = null)
+in(dagIsResolved(dag))
+{
+    if (dag.allLangs.length == 0)
+    {
+        dagFetchLanguages(dag, recipe, depcache);
+    }
+
+    enforce(!dag.allLangs.length || profile.hasAllLangs(dag.allLangs),
+            new FormatLogException("%s: Profile %s do not have all needed languages to build dependencies",
+                error("Error"), info(profile.name)));
+
+    foreach (node; dag.traverseBottomUpResolved())
+    {
+        auto drec = depcache.packRecipe(node.pack.name, node.ver, node.revision);
+        const ddir = depcache.packDir(drec);
+        auto dprof = profile.subset(drec.langs);
+        const pdirs = ddir.profileDirs(dprof);
+
+        node.userData = new DepInfoObj(stageDest ? stageDest : pdirs.install);
+    }
+
+    return collectDepInfos(dag.root.resolvedNode);
+}
+
 DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
         const(Profile) profile, CacheRepo depcache, string stageDest = null)
 in(dagIsResolved(dag))
@@ -74,14 +100,14 @@ in(dagIsResolved(dag))
 
             if (drec.hasPackFunc)
             {
-                drec.pack(bd, dprof, stageDest ? stageDest : bd.install);
+                drec.pack(bd.toPack(stageDest), dprof, depInfos);
             }
             else if (stageDest)
             {
                 installRecurse(pdirs.install, stageDest);
             }
 
-            drec.patchInstall(dprof, bd.install);
+            drec.patchInstall(bd.toPack(stageDest), dprof, depInfos);
         });
         node.userData = new DepInfoObj(stageDest ? stageDest : pdirs.install);
     }
