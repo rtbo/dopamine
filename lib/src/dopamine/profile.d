@@ -816,14 +816,14 @@ Compiler detectGpp()
 
 Compiler detectClang()
 {
-    enum versionRe = `^\s*clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
+    enum versionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
 
     return detectCompiler(["clang", "--version"], versionRe, "CLANG", Lang.c);
 }
 
 Compiler detectClangpp()
 {
-    enum versionRe = `^\s*clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
+    enum versionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
 
     return detectCompiler(["clang++", "--version"], versionRe, "CLANG++", Lang.cpp);
 }
