@@ -65,6 +65,47 @@ int luaTestPath(lua_State* L) nothrow
     return 1;
 }
 
+int luaTestAssertEq(lua_State* L) nothrow
+{
+    const narg = lua_gettop(L);
+
+    if (narg <= 1)
+        luaL_error(L, "assert_eq needs at least two param");
+
+    for (int i = 2; i <= narg; i++)
+    {
+        if (!lua_rawequal(L, 1, i))
+        {
+            return L.catchAll!({
+                const s1 = luaToString(L, 1);
+                const s2 = luaToString(L, i);
+                const msg = format("assertion failed: '%s' does not equal '%s'", s1, s2);
+                return luaL_error(L, msg.toStringz);
+            });
+        }
+    }
+    return 0;
+}
+
+int luaTestAssertNEq(lua_State* L) nothrow
+{
+    const narg = lua_gettop(L);
+
+    if (narg != 2)
+        luaL_error(L, "assert_neq needs two param");
+
+    if (lua_rawequal(L, 1, 2))
+    {
+        return L.catchAll!({
+            const s1 = luaToString(L, 1);
+            const s2 = luaToString(L, 2);
+            const msg = format("assertion failed: '%s' equals '%s'", s1, s2);
+            return luaL_error(L, msg.toStringz);
+        });
+    }
+    return 0;
+}
+
 auto catchAll(alias fun)(lua_State* L) nothrow
 {
     try
@@ -80,7 +121,10 @@ auto catchAll(alias fun)(lua_State* L) nothrow
 
 int luaTestModule(lua_State* L) nothrow
 {
-    const funcs = ["path" : &luaTestPath,];
+    const funcs = [
+        "path" : &luaTestPath, "assert_eq" : &luaTestAssertEq,
+        "assert_neq" : &luaTestAssertNEq
+    ];
 
     lua_createtable(L, 0, cast(int)(funcs.length));
     const libInd = lua_gettop(L);
