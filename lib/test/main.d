@@ -15,12 +15,12 @@ shared static this()
 
     minLogLevel = LogLevel.silent;
 
-    enforce(execute(["dub", "add-path", testPath("data")]).status == 0);
+    enforce(execute(["dub", "add-path", testPath("pkgs")]).status == 0);
 }
 
 shared static ~this()
 {
-    enforce(execute(["dub", "remove-path", testPath("data")]).status == 0);
+    enforce(execute(["dub", "remove-path", testPath("pkgs")]).status == 0);
 }
 
 int main()

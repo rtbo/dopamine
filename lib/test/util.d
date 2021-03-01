@@ -16,14 +16,14 @@ string testPath(Args...)(Args args)
 
 Recipe pkgRecipe(string pkg)
 {
-    return Recipe.parseFile(testPath("data", pkg, "dopamine.lua"));
+    return Recipe.parseFile(testPath("pkgs", pkg, "dopamine.lua"));
 }
 
 BuildDirs pkgBuildDirs(string pkg)
 {
     import std.format : format;
 
-    const srcDir = testPath("data", pkg);
+    const srcDir = testPath("pkgs", pkg);
     const workDir = testPath("gen", pkg);
     const buildDir = testPath("gen", pkg, "build");
     const installDir = testPath("gen", pkg, "install");
@@ -58,7 +58,7 @@ class DepCacheMock : CacheRepo
 
     PackageDir packDir(Recipe recipe)
     {
-        const dd = testPath("data", recipe.name);
+        const dd = testPath("pkgs", recipe.name);
         const gd = testPath("gen", recipe.name);
         return PackageDir(dd, gd);
     }
