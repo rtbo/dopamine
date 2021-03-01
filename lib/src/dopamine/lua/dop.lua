@@ -40,7 +40,7 @@ function dop.installer(src_dir, dest_dir)
     return inst
 end
 
-Git = {}
+local Git = {}
 Git.__index = Git
 dop.Git = Git
 
@@ -66,7 +66,7 @@ function Git.revision()
     end
 end
 
-CMake = {}
+local CMake = {}
 CMake.__index = CMake
 dop.CMake = CMake
 
@@ -141,7 +141,7 @@ function CMake:install()
     dop.run_cmd(cmd)
 end
 
-Meson = {}
+local Meson = {}
 Meson.__index = Meson
 dop.Meson = Meson
 
