@@ -106,6 +106,14 @@ T luaTo(T)(lua_State* L, int index, T defaultVal) nothrow if (isLuaScalar!T)
     }
 }
 
+/// same as luaTo!string, but allows for casting to string
+string luaToString(lua_State* L, int index)
+{
+    size_t l;
+    const s = lua_tolstring(L, index, &l);
+    return s[0 .. l].idup;
+}
+
 T luaPop(T)(lua_State* L) if (isLuaScalar!T)
 {
     scope (success)
