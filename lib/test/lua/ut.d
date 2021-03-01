@@ -1,11 +1,15 @@
 module test.lua.ut;
 
 import test.lua.lib;
+import test.util;
 
 import dopamine.lua.util;
 import dopamine.util;
 
 import bindbc.lua;
+
+import std.file;
+import std.path;
 import std.string;
 
 /// test assertions in the given lua string
@@ -22,23 +26,25 @@ void testLuaStr(string lua)
     assert(lua_gettop(utL) == 0, "test did not clean lua stack");
 }
 
-/// test assertions in the given lua script
-/// script is executed from the directory it is defined
-void testLuaFile(string filename)
+@("lua.testscripts")
+unittest
 {
-    import std.path : dirName;
+    import std.algorithm : filter;
 
-    const res = filename.dirName.fromDir!({
-        return luaL_dofile(utL, filename.toStringz);
+    testPath("lua").fromDir!({
+        foreach (e; dirEntries(testPath("lua"), SpanMode.breadth).filter!(e => e.name.endsWith(".lua")))
+        {
+            const fn = e.name.baseName;
+            const res = luaL_dofile(utL, e.name.toStringz);
+            string err;
+            if (res != LUA_OK)
+            {
+                err = luaTo!string(utL, -1);
+            }
+            assert(res == LUA_OK, err);
+            assert(lua_gettop(utL) == 0, "test " ~ fn ~ " did not clean lua stack");
+        }
     });
-
-    string err;
-    if (res != LUA_OK)
-    {
-        err = luaTo!string(utL, -1);
-    }
-    assert(res == LUA_OK, err);
-    assert(lua_gettop(utL) == 0, "test did not clean lua stack");
 }
 
 @("lua.run_cmd")
