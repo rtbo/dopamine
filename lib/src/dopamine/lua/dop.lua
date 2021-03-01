@@ -203,4 +203,69 @@ function Meson:install()
     dop.run_cmd({'meson', 'install'})
 end
 
+local PkgConfig = create_class('PkgConfig')
+
+function PkgConfig:new(options)
+    setmetatable(options, self)
+
+    if options.prefix == nil then
+        error('PkgConfig needs a prefix', -2)
+    end
+    if options.name == nil then
+        error('PkgConfig needs a name', -2)
+    end
+    if options.version == nil then
+        error('PkgConfig needs a version', -2)
+    end
+    if options.libs == nil or options.cflags == nil then
+        -- TODO warn
+    end
+
+    return options
+end
+
+function PkgConfig:write(filename)
+    dop.mkdir{dop.dir_name(filename), recurse=true}
+
+    local pc = io.open(filename, 'w')
+
+    -- everything not standard is a custom key variable
+    local stdfields = {
+        'prefix', 'libdir', 'includedir', 'name', 'version',
+        'description', 'libs', 'cflags'
+    }
+
+    function write_field(field, sep)
+        local v = self[field]
+        if v ~= nil then
+            sep = sep or ': '
+            if sep == ': ' then
+                field = field:gsub("^%l", string.upper)
+            end
+            pc:write(field, sep, v, '\n')
+        end
+    end
+
+    write_field('prefix', '=')
+    write_field('libdir', '=')
+    write_field('includedir', '=')
+
+    -- writing custom fields as variable declaration
+    for k, v in pairs(self) do
+        if stdfields[k] == nil then
+            write_field(k, '=')
+        end
+    end
+
+    pc:write('\n')
+
+    write_field('name')
+    write_field('description')
+    write_field('version')
+    write_field('libs')
+    write_field('cflags')
+
+    pc:close()
+end
+
 return dop

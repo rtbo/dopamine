@@ -30,19 +30,16 @@ function pack(dirs, config, depinfos)
     -- pkgapref can very well equal dirs.dest
     local pkgapref = depinfos.pkga.install_dir
 
-    dop.mkdir{
-        pcdir, recurse=true
+    local pc = dop.PkgConfig:new {
+        prefix = dirs.dest,
+        includedir = '${prefix}/include',
+        libdir = '${prefix}/lib',
+        pkga_prefix = pkgapref,
+        name = name,
+        version = version,
+        description = description,
+        libs = '-L${libdir} -lpkgc -L${pkga_prefix} -lpkga',
+        cflags = '-I${includedir}/d/pkgc-'..version,
     }
-    local pc = io.open(dop.path(pcdir, 'pkgc.pc'), 'w')
-    pc:write('prefix=', dirs.dest, '\n')
-    pc:write('libdir=${prefix}/lib\n')
-    pc:write('includedir=${prefix}/include\n')
-    pc:write('pkga_prefix=', pkgapref, '\n')
-    pc:write('\n')
-    pc:write('Name: ', name, '\n')
-    pc:write('Description: ', description, '\n')
-    pc:write('Version: ', version, '\n')
-    pc:write('Libs: -L${libdir} -lpkgc -L${pkga_prefix} -lpkga', '\n')
-    pc:write('Cflags: -I${includedir}/d/pkgc-'..version, '\n')
-    pc:close()
+    pc:write(dop.path(pcdir, 'pkgc.pc'))
 end
