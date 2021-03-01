@@ -33,7 +33,7 @@ void luaPreloadDopLib(lua_State* L)
 
 /// Load the dop module and assign it to the global `dop` variable
 /// This is the eager version of [luaPreloadDopLib]
-void luaLoadDopLib(lua_State *L)
+void luaLoadDopLib(lua_State* L)
 {
     // must start by preloading dop_native because it is imported by 'dop'
     lua_getglobal(L, "package");
@@ -67,7 +67,6 @@ int luaDopModule(lua_State* L) nothrow
     return 1;
 }
 
-
 int luaDopNativeModule(lua_State* L) nothrow
 {
     import std.path : dirSeparator, pathSeparator;
@@ -95,8 +94,8 @@ int luaDopNativeModule(lua_State* L) nothrow
     ];
     const boolconsts = ["posix" : posix];
     const funcs = [
-        "trim" : &luaTrim, "path" : &luaPath, "cwd" : &luaCwd,
-        "chdir" : &luaChangeDir, "mkdir" : &luaMkdir,
+        "trim" : &luaTrim, "path" : &luaPath, "dir_name" : &luaDirName,
+        "cwd" : &luaCwd, "chdir" : &luaChangeDir, "mkdir" : &luaMkdir,
         "install_file" : &luaInstallFile, "install_dir" : &luaInstallDir,
         "run_cmd" : &luaRunCmd, "profile_environment" : &luaProfileEnvironment,
         "download" : &luaDownload, "checksum" : &luaChecksum,
@@ -195,6 +194,102 @@ int luaPath(lua_State* L) nothrow
 
     luaL_pushresult(&buf);
     return 1;
+}
+
+int luaDirName(lua_State* L) nothrow
+{
+    import std.algorithm : canFind;
+    import std.ascii : isAlpha;
+    import std.path : dirSeparator, isAbsolute;
+    import std.range : repeat;
+    import std.string : join;
+
+    version (Windows)
+    {
+        const dirSeps = "\\/";
+    }
+    else
+    {
+        const dirSeps = "/";
+    }
+    size_t l;
+    const ptr = luaL_checklstring(L, 1, &l);
+
+    int num = lua_gettop(L) > 1 ? luaL_checkint(L, 2) : 1;
+
+    return L.catchAll!({
+        auto p = ptr[0 .. l];
+
+        const abs = isAbsolute(p);
+
+        while (num > 0)
+        {
+            if (p.length == 0)
+            {
+                break;
+            }
+
+            // discarding previous trailing sep
+            while (p.length && dirSeps.canFind(p[$ - 1]))
+                p = p[0 .. $ - 1];
+
+            size_t rem = 0;
+            while (p.length > rem && !dirSeps.canFind(p[$ - 1 - rem]))
+                rem++;
+
+            const rp = p[$ - rem .. $];
+            p = p[0 .. $ - rem];
+
+            if (rp == ".")
+                continue; // skip decrem
+            else if (rp == "..")
+            {
+                num++; // one more round needed
+                continue;
+            }
+
+            num--;
+        }
+
+        if (p.length == 0)
+        {
+            if (abs)
+            {
+                throw new Exception("dir_name cannot go further than root!");
+            }
+
+            if (num > 0)
+                p = "..".repeat(num).join(dirSeparator);
+            else
+                p = ".";
+        }
+        else
+        {
+            // Remove last sep if we are not at the root
+            assert(dirSeps.canFind(p[$ - 1]));
+
+            version (Windows)
+            {
+                const isRoot = abs && p.length == 3 && p[0].isAlpha && p[1] == ":"
+                    && dirSeps.canFind(p[2]);
+            }
+            else
+            {
+                const isRoot = abs && p.length == 1;
+            }
+            if (!isRoot)
+            {
+                do
+                {
+                    p = p[0 .. $ - 1];
+                }
+                while (dirSeps.canFind(p[$ - 1]));
+            }
+        }
+
+        luaPush(L, p);
+        return 1;
+    });
 }
 
 int luaCwd(lua_State* L) nothrow
