@@ -30,4 +30,4 @@ install:
 script:
   - meson setup builddir
   - meson compile -C builddir
-  - builddir/lib/doptest --threads 1
+  - meson test -v
