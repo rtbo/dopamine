@@ -107,6 +107,8 @@ The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
 - `dop profile [name]` :heavy_check_mark:
   - Sets the named profile as current
   - Use only the languages of the current recipe
+- `dop profile --add-missing`
+  - Add missing languages to the compilation profile
 - `dop profile --add-[lang] [compiler]`
   - Add language `[lang]` to the compilation profile
   - `[compiler]` is optional and can be a command (e.g. `dmd`) or a path
@@ -264,12 +266,17 @@ _Requirements_:
 - If the recipe does not use the install functionality of the build system, it must declare a `pack` function.
 - If `pack` function does not exist and `$INST` and `$STAGE` are different directories, the content of `$INST` is copied to `$STAGE`.
 - The `pack` function takes three arguments:
-  1. `dirs`: the same as for the `build` function
+  1. `dirs`: a table containing paths:
+     - `dirs.src` to the source directory
+     - `dirs.config` is a working directory unique for the (profile + options) configuration
+     - `dirs.build` is a recommended location to build, it may or may not have been used
+     - `dirs.install` is where to install (which is optional)
+     - `dirs.dest` is where to create the package
   2. `config`: the same as for the `build` function
-  3. `dest`: directory where to package files
-- If the `dirs.install` and `dest` directories are identical and install functionality was used, the `pack` function may only patch files in that directory.
-- If the `dirs.install` and `dest` directories are different, the `pack` function must effectively copy the necessary files to the `dest` directory, either from `dirs.install` or directly from where the build occurred.
-- If the recipe declares a `patch_install` function, it is executed.
+  3. `depinfos`: the same as for the `build` function
+- If the `dirs.install` and `dirs.dest` directories are identical and install functionality was used, the `pack` function may only patch files in that directory.
+- If the `dirs.install` and `dirs.dest` directories are different, the `pack` function must effectively copy the necessary files to the `dirs.dest` directory, either from `dirs.install` or directly from where the build occurred.
+- If the recipe declares a `patch_install` function, it is executed. The `patch_install` function has the same signature as the `pack` function.
 
 _Command options_:
 

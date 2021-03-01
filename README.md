@@ -12,11 +12,12 @@ Package manager for compiled languages.
 ## Highlights
 
 - Is a tool for **developers only**, not for end-users
-- Source package (recipe) and binary packages
+- Recipe package and binary packages
 - Rely on build system provided by the package source. Currently supported:
   - meson
   - cmake
   - dub
+- The recipe can be integrated with the package source code or separate
 - Possibility of _light_ recipes:
   - the _light_ recipe only specify dependencies that are downloaded and staged by the client
   - Dopamine do not get further in your way
@@ -37,7 +38,7 @@ Package manager for compiled languages.
 
 ## Implementation details
 
-- Package recipes are written in Lua
+- Package recipes are Lua scripts
   - The client provides a `dop` lua module with all necessary utilities - no lua library such as LFS is necessary on the user system
   - The package scripts are named `dopamine.lua`
   - The package scripts provide entry points for the client in a form of lua functions that perform special tasks:
