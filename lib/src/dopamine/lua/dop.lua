@@ -5,6 +5,13 @@ for k, v in pairs(require('dop_native')) do
     dop[k] = v
 end
 
+local function create_class(name)
+    local cls = {}
+    cls.__index = cls
+    dop[name] = cls
+    return cls
+end
+
 -- perform closure func from the directory dir
 -- and return its result(s)
 -- will chdir back to previous even if func raise an error
@@ -40,9 +47,7 @@ function dop.installer(src_dir, dest_dir)
     return inst
 end
 
-local Git = {}
-Git.__index = Git
-dop.Git = Git
+local Git = create_class('Git')
 
 -- Return a function that checks if the git repo is clean and return the commit revision
 -- Assign this to your package revision if you want to use git as package revision tracker
@@ -66,9 +71,7 @@ function Git.revision()
     end
 end
 
-local CMake = {}
-CMake.__index = CMake
-dop.CMake = CMake
+local CMake = create_class('CMake')
 
 function CMake:new(profile)
     o = {}
@@ -141,9 +144,7 @@ function CMake:install()
     dop.run_cmd(cmd)
 end
 
-local Meson = {}
-Meson.__index = Meson
-dop.Meson = Meson
+local Meson = create_class('Meson')
 
 function Meson:new(profile)
     o = {}
