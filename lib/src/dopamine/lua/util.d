@@ -1,7 +1,5 @@
 module dopamine.lua.util;
 
-package(dopamine):
-
 import bindbc.lua;
 
 import std.exception;

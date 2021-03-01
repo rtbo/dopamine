@@ -9,12 +9,12 @@ import dopamine.dependency;
 import dopamine.deplock;
 import dopamine.log;
 import dopamine.login;
-import dopamine.lua.lib;
 import dopamine.lua.profile;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.semver;
 import dopamine.util;
+import test.lua.ut;
 import test.recipe;
 
 alias allModules = AliasSeq!(
@@ -30,5 +30,6 @@ alias allModules = AliasSeq!(
     dopamine.profile,
     dopamine.semver,
     dopamine.util,
+    test.lua.ut,
     test.recipe,
 );

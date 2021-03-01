@@ -9,9 +9,6 @@ import std.process : execute;
 shared static this()
 {
     import dopamine.log : minLogLevel, LogLevel;
-    import dopamine.lua : initLua;
-
-    initLua();
 
     minLogLevel = LogLevel.silent;
 

@@ -10,9 +10,10 @@ import dopamine.lua.util;
 import bindbc.lua;
 
 import std.string;
+import std.exception;
 
-package(dopamine):
-
+/// assign `package.preload` such as `local dop = require('dop')` loads
+/// the dop lua library.
 void luaPreloadDopLib(lua_State* L)
 {
     lua_getglobal(L, "package");
@@ -26,6 +27,30 @@ void luaPreloadDopLib(lua_State* L)
 
     // popping package.preload and package
     lua_pop(L, 2);
+
+    assert(lua_gettop(L) == 0);
+}
+
+/// Load the dop module and assign it to the global `dop` variable
+/// This is the eager version of [luaPreloadDopLib]
+void luaLoadDopLib(lua_State *L)
+{
+    // must start by preloading dop_native because it is imported by 'dop'
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "preload");
+
+    lua_pushcfunction(L, &luaDopNativeModule);
+    lua_setfield(L, -2, "dop_native");
+
+    // popping package.preload and package
+    lua_pop(L, 2);
+
+    // push the dop module on the stack
+    luaDopModule(L);
+    // assign it to the 'dop' global
+    lua_setglobal(L, "dop");
+
+    assert(lua_gettop(L) == 0);
 }
 
 private:
@@ -42,51 +67,6 @@ int luaDopModule(lua_State* L) nothrow
     return 1;
 }
 
-unittest
-{
-    import std.path : dirName;
-
-    lua_State* L = luaL_newstate();
-    scope (exit)
-        lua_close(L);
-
-    luaL_openlibs(L);
-    luaPreloadDopLib(L);
-
-    const thisDir = dirName(__FILE_FULL_PATH__);
-    version (Windows)
-    {
-        const lsCmd = "dir";
-    }
-    else
-    {
-        const lsCmd = "ls";
-    }
-
-    const lua = format(`
-        local dop = require('dop')
-
-        local ls_res = dop.from_dir('%s', function()
-            return dop.run_cmd({
-                '%s', '.',
-                catch_output=true,
-            })
-        end)
-
-        assert(string.find(ls_res, 'dop.lua'))
-        assert(string.find(ls_res, 'lib.d'))
-        assert(string.find(ls_res, 'profile.d'))
-        assert(string.find(ls_res, 'util.d'))
-    `, thisDir, lsCmd);
-
-    const res = luaL_dostring(L, lua.toStringz);
-    string err;
-    if (res != LUA_OK)
-    {
-        err = luaTo!string(L, -1);
-    }
-    assert(res == LUA_OK, err);
-}
 
 int luaDopNativeModule(lua_State* L) nothrow
 {

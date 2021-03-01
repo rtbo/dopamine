@@ -68,6 +68,8 @@ dop_test_src = dop_src + files([
     'test/recipe.d',
     'test/silly.d',
     'test/util.d',
+    'test/lua/lib.d',
+    'test/lua/ut.d',
 ])
 
 # all_mods defined in test
