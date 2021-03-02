@@ -231,8 +231,14 @@ function PkgConfig:write(filename)
 
     -- everything not standard is a custom key variable
     local stdfields = {
-        'prefix', 'libdir', 'includedir', 'name', 'version',
-        'description', 'libs', 'cflags'
+        prefix=1,
+        libdir=1,
+        includedir=1,
+        name=1,
+        version=1,
+        description=1,
+        libs=1,
+        cflags=1,
     }
 
     function write_field(field, sep)
@@ -247,8 +253,8 @@ function PkgConfig:write(filename)
     end
 
     write_field('prefix', '=')
-    write_field('libdir', '=')
     write_field('includedir', '=')
+    write_field('libdir', '=')
 
     -- writing custom fields as variable declaration
     for k, v in pairs(self) do
@@ -260,10 +266,10 @@ function PkgConfig:write(filename)
     pc:write('\n')
 
     write_field('name')
-    write_field('description')
     write_field('version')
-    write_field('libs')
+    write_field('description')
     write_field('cflags')
+    write_field('libs')
 
     pc:close()
 end
