@@ -22,14 +22,14 @@ jobs:
 
       - name: Install Ubuntu pkgs
         run: >
-          sudo apt install lua5.3 python3 python3-pip
+          sudo apt-get install lua5.3 python3 python3-pip
           python3-setuptools python3-wheel
 
       - name: Install Meson and Ninja
         run: python3 -m pip install meson ninja
 
       - name: Install Dub dependencies
-        run: rdmd tools/meson-dub-deps.d --dc ${{ matrix.dc }}
+        run: rdmd tools/meson_dub_deps.d --dc $DC
 
       - name: Setup
         run: meson setup builddir
