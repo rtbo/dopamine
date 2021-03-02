@@ -232,13 +232,19 @@ function PkgConfig:write(filename)
     -- everything not standard is a custom key variable
     local stdfields = {
         prefix=1,
-        libdir=1,
+        exec_prefix=1,
         includedir=1,
+        libdir=1,
         name=1,
         version=1,
         description=1,
-        libs=1,
+        url=1,
+        requires=1,
+        ['requires.private']=1,
+        conflicts=1,
         cflags=1,
+        libs=1,
+        ['libs.private']=1,
     }
 
     function write_field(field, sep)
@@ -253,6 +259,7 @@ function PkgConfig:write(filename)
     end
 
     write_field('prefix', '=')
+    write_field('exec_prefix', '=')
     write_field('includedir', '=')
     write_field('libdir', '=')
 
@@ -268,8 +275,15 @@ function PkgConfig:write(filename)
     write_field('name')
     write_field('version')
     write_field('description')
+    if self[url] ~= nil then
+        pc:write('URL: ', self[url], '\n')
+    end
+    write_field('requires')
+    write_field('requires.private')
+    write_field('conflicts')
     write_field('cflags')
     write_field('libs')
+    write_field('libs.private')
 
     pc:close()
 end
