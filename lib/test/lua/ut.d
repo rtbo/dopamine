@@ -20,7 +20,7 @@ void testLuaStr(string lua)
     string err;
     if (res != LUA_OK)
     {
-        err = luaTo!string(utL, -1);
+        err = luaPop!string(utL);
     }
     assert(res == LUA_OK, err);
     assert(lua_gettop(utL) == 0, "test did not clean lua stack");
@@ -32,14 +32,15 @@ unittest
     import std.algorithm : filter;
 
     testPath("lua").fromDir!({
-        foreach (e; dirEntries(testPath("lua"), SpanMode.breadth).filter!(e => e.name.endsWith(".lua")))
+        foreach (e; dirEntries(testPath("lua"), SpanMode.breadth).filter!(
+            e => e.name.endsWith(".lua")))
         {
             const fn = e.name.baseName;
             const res = luaL_dofile(utL, e.name.toStringz);
             string err;
             if (res != LUA_OK)
             {
-                err = luaTo!string(utL, -1);
+                err = luaPop!string(utL);
             }
             assert(res == LUA_OK, err);
             assert(lua_gettop(utL) == 0, "test " ~ fn ~ " did not clean lua stack");
