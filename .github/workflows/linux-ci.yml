@@ -26,7 +26,7 @@ jobs:
           python3-setuptools python3-wheel
 
       - name: Install Meson and Ninja
-        run: python3 -m pip install meson ninja
+        run: sudo python3 -m pip install meson ninja
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc $DC
