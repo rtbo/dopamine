@@ -68,7 +68,7 @@ shared static this() {
 			return UnitTestResult(0, 0, false, false);
 		}
 
-        minLogLevel = verbose ? LogLevel.verbose : LogLevel.silent;
+        minLogLevel = verbose ? LogLevel.verbose : LogLevel.error;
 
 		if(!threads)
 			threads = totalCPUs;

@@ -10,7 +10,7 @@ shared static this()
 {
     import dopamine.log : minLogLevel, LogLevel;
 
-    minLogLevel = LogLevel.silent;
+    minLogLevel = LogLevel.error;
 
     enforce(execute(["dub", "add-path", testPath("pkgs")]).status == 0);
 }
