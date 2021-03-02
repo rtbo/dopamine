@@ -121,4 +121,4 @@ test_script:
   - echo %PATH%
   - "%DC% --version"
   - echo Meson Tests
-  - meson test -v
+  - meson test -v -C builddir

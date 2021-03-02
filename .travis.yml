@@ -30,4 +30,4 @@ install:
 script:
   - meson setup builddir
   - meson compile -C builddir
-  - meson test -v
+  - meson test -v -C builddir
