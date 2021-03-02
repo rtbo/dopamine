@@ -73,6 +73,8 @@ unittest
 
         assert(string.find(ls_res, 'lib.d'))
         assert(string.find(ls_res, 'ut.d'))
+        assert(string.find(ls_res, 'dir_name.lua'))
+        assert(string.find(ls_res, 'pkgconfig.lua'))
     `, thisDir, lsCmd);
 
     testLuaStr(lua);
