@@ -23,23 +23,16 @@ function pack(dirs, config, depinfos)
     install.file('libpkgc.a', 'lib/libpkgc.a');
     install.file('pkgc.d', 'include/d/pkgc-'..version..'/pkgc.d')
 
-    local pcdir = dop.path(dirs.dest, 'lib', 'pkgconfig')
-    local libdir = dop.path(dirs.dest, 'lib')
-    local libdir = dop.path(dirs.dest, 'include')
-
-    -- pkgapref can very well equal dirs.dest
-    local pkgapref = depinfos.pkga.install_dir
-
     local pc = dop.PkgConfig:new {
         prefix = dirs.dest,
         includedir = '${prefix}/include',
         libdir = '${prefix}/lib',
-        pkga_prefix = pkgapref,
         name = name,
         version = version,
         description = description,
-        libs = '-L${libdir} -lpkgc -L${pkga_prefix} -lpkga',
+        requires = 'pkga',
+        libs = '-L${libdir} -lpkgc',
         cflags = '-I${includedir}/d/pkgc-'..version,
     }
-    pc:write(dop.path(pcdir, 'pkgc.pc'))
+    pc:write(dop.path(dirs.dest, 'lib', 'pkgconfig', 'pkgc.pc'))
 end
