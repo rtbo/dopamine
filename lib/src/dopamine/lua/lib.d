@@ -367,7 +367,9 @@ int luaRunCmd(lua_State* L) nothrow
     // integer keys (array) is the actual command
     // ["workdir"]: working directory
     // ["loglevel"]: log level (one of "info" or "verbose") - default "verbose"
-    //               passing false disables the log entirely
+    //               passing false disables the log entirely.
+    //               In case of error and allow_fail is false, stderr and stdout
+    //               will be logged to the error loglevel
     // ["env"]: additional environment
     // ["allow_fail"]: if true, will return if status is not 0
     // ["catch_output"]: if true, will buffer output and return it to caller
@@ -421,6 +423,8 @@ int luaRunCmd(lua_State* L) nothrow
 
         int status;
         string output;
+        string stdoutLog;
+        string stderrLog;
 
         LogLevel ll;
 
@@ -459,6 +463,7 @@ int luaRunCmd(lua_State* L) nothrow
         }
         else
         {
+            import dopamine.util : tempPath;
             import std.stdio : stdin, stderr, stdout, File;
 
             version (Windows)
@@ -472,9 +477,21 @@ int luaRunCmd(lua_State* L) nothrow
 
             if (!logLevel || ll < minLogLevel)
             {
-                childStdout = File(nullFile, "w");
-                childStderr = File(nullFile, "w");
+                // no logging requested, we either send to null, or we cache in logfile to report later
                 config = Config.none;
+
+                if (allowFail)
+                {
+                    childStdout = File(nullFile, "w");
+                    childStderr = File(nullFile, "w");
+                }
+                else
+                {
+                    stdoutLog = tempPath(null, "stdout", ".txt");
+                    stderrLog = tempPath(null, "stderr", ".txt");
+                    childStdout = File(stdoutLog, "w");
+                    childStderr = File(stderrLog, "w");
+                }
             }
 
             auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
@@ -482,7 +499,23 @@ int luaRunCmd(lua_State* L) nothrow
         }
 
         if (status != 0 && !allowFail)
-            return luaL_error(L, "%s returned %d", cmd[0].toStringz, status);
+        {
+            import std.file : read;
+
+            auto msg = format("%s returned %d.", cmd[0], status);
+            if (stdoutLog)
+            {
+                const content = cast(const(char)[]) read(stdoutLog);
+                msg ~= "\n----- command stdout -----\n" ~ content;
+            }
+            if (stderrLog)
+            {
+                const content = cast(const(char)[]) read(stderrLog);
+                msg ~= "\n----- command stderr -----\n" ~ content;
+            }
+            msg ~= '\0';
+            return luaL_error(L, &msg[0]);
+        }
 
         if (allowFail && catchOut)
         {
