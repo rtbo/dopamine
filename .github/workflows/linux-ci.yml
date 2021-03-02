@@ -38,4 +38,4 @@ jobs:
         run: meson compile -C builddir
 
       - name: Test
-        run: meson test -v -C builddir
+        run: meson test -v --test-args=-v -C builddir
