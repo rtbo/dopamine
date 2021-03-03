@@ -28,7 +28,7 @@ jobs:
           python-version: 3.7
 
       - name: Install Lua
-        uses: xpol/setup-lua@v1
+        uses: xpol/setup-lua@v0.2
         with:
           luaVersion: "5.3"
 
