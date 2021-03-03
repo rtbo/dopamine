@@ -169,6 +169,11 @@ function Meson:setup(params)
                               'install_dir is a mandatory parameter')
 
     self.options['--prefix'] = params.install_dir
+    -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
+    -- e.g. [prefix]/lib/x86_64-linux-gnu
+    -- we don't want this with dopamine because we are not installing
+    -- in the system directories. see meson #5925
+    self.options['--libdir'] = dop.path(params.install_dir, 'lib')
 
     if params.options then
         for k, v in pairs(params.options) do
