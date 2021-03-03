@@ -12,7 +12,7 @@ jobs:
         os: [ubuntu-latest]
         dc: [dmd-latest, ldc-latest]
         # dc: [dmd-latest]
-        lua: ['5.1.5', '5.2.4', '5.3.6']
+        lua: ['5.2.4', '5.3.6']
         # lua: ['5.3.6']
         meson: ['0.57.1']
 
