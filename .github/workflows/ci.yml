@@ -37,9 +37,9 @@ jobs:
           7z x lua.zip -olua
           dir lua
           echo "$PWD/lua"
-          echo $GITHUB_PATH
-          echo "$PWD/lua" >> $GITHUB_PATH
-          cat $GITHUB_PATH
+          echo "$GITHUB_PATH"
+          echo "$PWD/lua" >> "$GITHUB_PATH"
+          cat "$GITHUB_PATH"
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
