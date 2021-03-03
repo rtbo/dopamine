@@ -33,7 +33,11 @@ jobs:
         run: |
           curl -L "http://downloads.sourceforge.net/project/luabinaries/${{ matrix.lua }}/Tools Executables/lua-${{ matrix.lua }}_Win64_bin.zip" -o lua.zip
           7z x lua.zip -olua
+          dir lua
+          echo "$PWD/lua"
+          echo $GITHUB_PATH
           echo "$PWD/lua" >> $GITHUB_PATH
+          cat $GITHUB_PATH
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
@@ -50,5 +54,8 @@ jobs:
           setup-options: -Ddefault_library=static -Dlua_bindings=dynamic -Dlua_version=53
 
       - name: Run tests
-        run: lib/doptest -t 1
+        run: |
+          echo $PATH
+          lib/doptest -t 1
         working-directory: build
+
