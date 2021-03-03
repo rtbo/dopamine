@@ -39,7 +39,6 @@ jobs:
           echo "$PWD/lua"
           echo "$GITHUB_PATH"
           echo "$PWD/lua" >> "$GITHUB_PATH"
-          cat ${{ env.GITHUB_PATH }}
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
