@@ -43,16 +43,10 @@ jobs:
       - run: echo "$HOME/.local/bin" >> $GITHUB_PATH
         if: ${{ matrix.os == 'ubuntu-latest' }}
 
-      - name: Build dopamine
+      - name: Build and test dopamine
         uses: BSFishy/meson-build@v1.0.2
         with:
-          action: build
+          action: test
           directory: build
           meson-version: 0.57.1
           setup-options: -Ddefault_library=static -Dlua_bindings=dynamic -Dlua_version=53
-
-      - name: Run tests
-        run: |
-          lib/doptest -t 1
-        working-directory: build
-
