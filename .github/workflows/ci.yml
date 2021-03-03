@@ -1,0 +1,71 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Installation and tests
+
+    strategy:
+      matrix:
+        # os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
+        dc: [dmd-latest, ldc-latest]
+        # dc: [dmd-latest]
+        lua: ['5.1.5', '5.2.4', '5.3.6']
+        # lua: ['5.3.6']
+        meson: ['0.57.1']
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Extract Lua version
+        #
+        run: |
+          LUA_V_APT=$(echo ${{ matrix.lua }} | cut -d'.' -f 1,2)
+          LUA_V_MESON=$(echo ${{ matrix.lua }} | cut -d'.' -f 1,2 --output-delimiter=)
+          echo "LUA_V_APT=$LUA_V_APT" >> "$GITHUB_ENV"
+          echo "LUA_V_MESON=$LUA_V_MESON" >> "$GITHUB_ENV"
+          echo Lua version: ${{ matrix.lua }}
+          echo Lua version passed to APT: $LUA_V_APT
+          echo Lua version passed to Meson: $LUA_V_MESON
+        shell: bash
+
+      - name: D Compiler Installation
+        uses: dlang-community/setup-dlang@v1.0.6
+        with:
+          compiler: ${{ matrix.dc }}
+
+      - name: Install Lua and Meson Linux
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get install lua$LUA_V_APT liblua$LUA_V_APT-dev
+          sudo python -m pip install meson==${{ matrix.meson }}
+          sudo python -m pip install ninja
+
+      - name: Install Lua and Meson Windows
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          curl -L "http://downloads.sourceforge.net/project/luabinaries/${{ matrix.lua }}/Tools Executables/lua-${{ matrix.lua }}_Win64_bin.zip" -o lua.zip
+          7z x lua.zip -olua
+          echo "$PWD/lua" >> "$GITHUB_PATH"
+          python -m pip install meson==${{ matrix.meson }}
+          python -m pip install ninja
+        shell: bash
+
+      - name: Install Dub dependencies
+        run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
+
+      - name: Build dopamine
+        run: |
+          meson setup build -Ddefault_library=static -Dlua_bindings=dynamic -Dlua_version=$LUA_V_MESON
+          meson compile -C build
+        shell: bash
+
+      - name: Run dopamine tests
+        run: lib/doptest -t 1 -v
+        working-directory: build
+        shell: bash

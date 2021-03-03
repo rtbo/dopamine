@@ -52,8 +52,10 @@ unittest
 unittest
 {
     import std.path : dirName;
+    import std.string : replace;
 
-    const thisDir = dirName(__FILE_FULL_PATH__);
+    const thisDir = dirName(__FILE_FULL_PATH__).replace('\\', '/');
+
     version (Windows)
     {
         const lsCmd = "dir";

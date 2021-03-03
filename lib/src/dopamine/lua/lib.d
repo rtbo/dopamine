@@ -270,7 +270,7 @@ int luaDirName(lua_State* L) nothrow
 
             version (Windows)
             {
-                const isRoot = abs && p.length == 3 && p[0].isAlpha && p[1] == ":"
+                const isRoot = abs && p.length == 3 && p[0].isAlpha && p[1] == ':'
                     && dirSeps.canFind(p[2]);
             }
             else

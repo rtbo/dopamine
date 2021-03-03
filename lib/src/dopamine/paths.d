@@ -251,5 +251,5 @@ struct ProfileDirs
 unittest
 {
     const dir = PackageDir(".");
-    assert(dir.dopamineFile == "./dopamine.lua");
+    assert(dir.dopamineFile == buildPath(".", "dopamine.lua"));
 }
