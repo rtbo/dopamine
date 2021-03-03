@@ -10,6 +10,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         dc: [dmd-latest, ldc-latest]
+        lua: ['5.1.5', '5.2.4', '5.3.6']
 
     runs-on: ${{ matrix.os }}
 
@@ -22,15 +23,16 @@ jobs:
         with:
           compiler: ${{ matrix.dc }}
 
-      - name: Setup python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.7
+      - name: Install Lua
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install lua5.3 liblua5.3-dev
 
       - name: Install Lua
-        uses: xpol/setup-lua@v0.2
-        with:
-          luaVersion: "5.3"
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          curl "http://downloads.sourceforge.net/project/luabinaries/${{ matrix.lua }}/Tools Executables/lua-${{ matrix.lua }}_Win64_bin.zip" -o lua.zip
+          7z x lua.zip -olua
+          echo "$PWD/lua" >> $GITHUB_PATH
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc $DC
@@ -41,7 +43,7 @@ jobs:
           action: build
           directory: build
           meson-version: 0.57.1
-          setup-options: -Ddefault_library=static -Dlua_bindings=dynamic -Dlua_version=53
+          setup-options: -Ddefault_library=static -Dlua_bindings=dynamic -Dlua_version=${{ matrix.lua[0] }}${{ matrix.lua[2] }}
 
       - name: Run tests
         run: lib/doptest -t 1
