@@ -10,7 +10,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         dc: [dmd-latest, ldc-latest]
-        lua: ['5.1.5', '5.2.4', '5.3.6']
+        lua: ['5.3.6']
+        # lua: ['5.1.5', '5.2.4', '5.3.6']
 
     runs-on: ${{ matrix.os }}
 
@@ -46,7 +47,7 @@ jobs:
           action: build
           directory: build
           meson-version: 0.57.1
-          setup-options: -Ddefault_library=static -Dlua_bindings=dynamic -Dlua_version=${{ matrix.lua[0] }}${{ matrix.lua[2] }}
+          setup-options: -Ddefault_library=static -Dlua_bindings=dynamic -Dlua_version=53
 
       - name: Run tests
         run: lib/doptest -t 1
