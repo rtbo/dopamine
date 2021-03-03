@@ -23,19 +23,22 @@ jobs:
         with:
           compiler: ${{ matrix.dc }}
 
-      - name: Install Lua
+      - name: Install Lua Linux
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: sudo apt-get install lua5.3 liblua5.3-dev
 
-      - name: Install Lua
+      - name: Install Lua Windows
         if: ${{ matrix.os == 'windows-latest' }}
         run: |
-          curl "http://downloads.sourceforge.net/project/luabinaries/${{ matrix.lua }}/Tools Executables/lua-${{ matrix.lua }}_Win64_bin.zip" -o lua.zip
+          curl -L "http://downloads.sourceforge.net/project/luabinaries/${{ matrix.lua }}/Tools Executables/lua-${{ matrix.lua }}_Win64_bin.zip" -o lua.zip
           7z x lua.zip -olua
           echo "$PWD/lua" >> $GITHUB_PATH
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc $DC
+
+      - run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+        if: ${{ matrix.os == 'ubuntu-latest' }}
 
       - name: Build dopamine
         uses: BSFishy/meson-build@v1.0.2
