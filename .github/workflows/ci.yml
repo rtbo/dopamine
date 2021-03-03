@@ -36,7 +36,7 @@ jobs:
           echo "$PWD/lua" >> $GITHUB_PATH
 
       - name: Install Dub dependencies
-        run: rdmd tools/meson_dub_deps.d --dc $DC
+        run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
 
       - run: echo "$HOME/.local/bin" >> $GITHUB_PATH
         if: ${{ matrix.os == 'ubuntu-latest' }}
