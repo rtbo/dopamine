@@ -421,17 +421,12 @@ string[] searchPatternInEnvPath(in string envPath, in string pattern, in char se
     return res;
 }
 
-void runCommand(in string[] command, string workDir = null,
+void runCommand(in string[] cmd, string workDir = null,
         LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
 {
-    runCommands((&command)[0 .. 1], workDir, logLevel, env);
-}
-
-void runCommands(in string[][] commands, string workDir = null,
-        LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
-{
+    import std.algorithm : canFind;
     import std.conv : to;
-    import std.exception : enforce;
+    import std.exception : assumeUnique, enforce;
     import std.process : Config, escapeShellCommand, Pid, spawnProcess, wait;
     import std.stdio : stdin, stdout, stderr, File;
 
@@ -445,13 +440,17 @@ void runCommands(in string[][] commands, string workDir = null,
     auto childStdout = stdout;
     auto childStderr = stderr;
     auto config = Config.retainStdout | Config.retainStderr;
+    string outLog;
+    string errLog;
 
     // TODO buffer stdout and stderr to populate e.g. CommandFailedException
 
     if (minLogLevel > logLevel)
     {
-        childStdout = File(nullFile, "w");
-        childStderr = File(nullFile, "w");
+        outLog = tempPath(null, "stdout", ".txt");
+        errLog = tempPath(null, "stderr", ".txt");
+        childStdout = File(outLog, "w");
+        childStderr = File(errLog, "w");
     }
 
     if (workDir)
@@ -459,21 +458,41 @@ void runCommands(in string[][] commands, string workDir = null,
         log(logLevel, "Running from %s", info(workDir));
     }
 
-    foreach (cmd; commands)
+    const tplt = cmd[0].canFind(' ') ? `"%s" %s` : "%s %s";
+
+    log(logLevel, tplt, info(cmd[0]), cmd[1 .. $].commandRep);
+    auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
+    const status = pid.wait();
+
+    if (status != 0)
     {
-        log(logLevel, "%s %s", info(cmd[0]), cmd[1 .. $].commandRep);
-        auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
-        auto exitcode = pid.wait();
-        enforce(exitcode == 0,
-                "Command failed with exit code " ~ to!string(exitcode) ~ ": " ~ cmd.commandRep);
+        import std.file : read;
+        import std.format : format;
+
+        string outMsg;
+        string errMsg;
+        if (outLog)
+        {
+            const content = cast(const(char)[]) read(outLog);
+            outMsg = assumeUnique("\n----- command stdout -----\n" ~ content);
+        }
+        if (errLog)
+        {
+            const content = cast(const(char)[]) read(errLog);
+            errMsg = assumeUnique("\n----- command stderr -----\n" ~ content);
+        }
+
+        throw new FormatLogException("%s: %s failed with code %s\n%s%s%s",
+                error("Error"), info(cmd[0]), status, cmd.commandRep, outMsg, errMsg);
     }
 }
 
 @property string commandRep(in string[] cmd)
 {
+    import std.algorithm : canFind, map;
     import std.array : join;
 
-    return cmd.join(" ");
+    return cmd.map!(c => c.canFind(' ') ? '"' ~ c ~ '"' : c).join(" ");
 }
 
 struct SizeOfStr
