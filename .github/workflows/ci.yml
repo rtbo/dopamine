@@ -9,11 +9,11 @@ jobs:
     strategy:
       matrix:
         # os: [ubuntu-latest, windows-latest]
-        # dc: [dmd-latest, ldc-latest]
-        os: [windows-latest]
-        dc: [dmd-latest]
-        lua: ['5.3.6']
+        os: [ubuntu-latest]
+        dc: [dmd-latest, ldc-latest]
+        # dc: [dmd-latest]
         # lua: ['5.1.5', '5.2.4', '5.3.6']
+        lua: ['5.3.6']
 
     runs-on: ${{ matrix.os }}
 
