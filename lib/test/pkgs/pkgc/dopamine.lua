@@ -17,7 +17,7 @@ return {
         }
     end,
 
-    pack = function(self, dirs, config, depinfos)
+    package = function(self, dirs, config, depinfos)
         local install = dop.installer('.', dirs.dest)
 
         install.file('libpkgc.a', 'lib/libpkgc.a');

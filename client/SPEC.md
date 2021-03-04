@@ -259,13 +259,13 @@ _Prerequisites_:
 - The dependencies must be installed.
 - The source code must be available
 - The package must be built.
-- The recipe must have a `pack` function, or have installed during the `build` command
+- The recipe must have a `package` function, or have installed during the `build` command
 
 _Requirements_:
-- If the recipe uses the install functionality of the build system, it may or may not declare a `pack` function.
-- If the recipe does not use the install functionality of the build system, it must declare a `pack` function.
-- If `pack` function does not exist and `$INST` and `$STAGE` are different directories, the content of `$INST` is copied to `$STAGE`.
-- The `pack` function takes three arguments:
+- If the recipe uses the install functionality of the build system, it may or may not declare a `package` function.
+- If the recipe does not use the install functionality of the build system, it must declare a `package` function.
+- If `package` function does not exist and `$INST` and `$STAGE` are different directories, the content of `$INST` is copied to `$STAGE`.
+- The `package` function takes three arguments:
   1. `dirs`: a table containing paths:
      - `dirs.src` to the source directory
      - `dirs.config` is a working directory unique for the (profile + options) configuration
@@ -274,15 +274,15 @@ _Requirements_:
      - `dirs.dest` is where to create the package
   2. `config`: the same as for the `build` function
   3. `depinfos`: the same as for the `build` function
-- If the `dirs.install` and `dirs.dest` directories are identical and install functionality was used, the `pack` function may only patch files in that directory.
-- If the `dirs.install` and `dirs.dest` directories are different, the `pack` function must effectively copy the necessary files to the `dirs.dest` directory, either from `dirs.install` or directly from where the build occurred.
-- If the recipe declares a `patch_install` function, it is executed. The `patch_install` function has the same signature as the `pack` function.
+- If the `dirs.install` and `dirs.dest` directories are identical and install functionality was used, the `package` function may only patch files in that directory.
+- If the `dirs.install` and `dirs.dest` directories are different, the `package` function must effectively copy the necessary files to the `dirs.dest` directory, either from `dirs.install` or directly from where the build occurred.
+- If the recipe declares a `patch_install` function, it is executed. The `patch_install` function has the same signature as the `package` function.
 
 _Command options_:
 
 - `dop package`
-  - Execute the `pack` function of the recipe with the default destination.
-  - If `pack` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
+  - Execute the `package` function of the recipe with the default destination.
+  - If `package` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
 - `dop package [dest]`
   - Same as previous but package to `[dest]`.
 

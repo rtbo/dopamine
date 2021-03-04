@@ -107,7 +107,7 @@ unittest
     assert(debDeps[0] == Dependency("pkga", VersionSpec(">=1.0.0")));
 }
 
-@("pkgc.pack")
+@("pkgc.package")
 unittest
 {
     cleanGen();
@@ -130,7 +130,7 @@ unittest
     assert(isFile(buildPath(bd.install, "include", "d", "pkgc-1.0.0", "pkgc.d")));
 }
 
-@("app.pack")
+@("app.package")
 unittest
 {
     import dopamine.log : LogLevel;

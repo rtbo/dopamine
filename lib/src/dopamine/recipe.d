@@ -392,15 +392,15 @@ struct Recipe
         return d.packFunc;
     }
 
-    /// Execute the `pack` function of this recipe
+    /// Execute the `package` function of this recipe
     void pack(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
     in(isPackage, "Light recipes do not package")
-    in(d.packFunc, "Recipe has no 'pack' function")
+    in(d.packFunc, "Recipe has no 'package' function")
     {
         auto L = d.L;
 
-        lua_getfield(L, 1, "pack");
-        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a pack function");
+        lua_getfield(L, 1, "package");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a 'package' function");
 
         lua_pushvalue(L, 1); // push self
         pushPackDirs(L, dirs);
@@ -637,7 +637,7 @@ package class RecipePayload
                 }
             }
             {
-                lua_getfield(L, 1, "pack");
+                lua_getfield(L, 1, "package");
                 scope (exit)
                     lua_pop(L, 1);
 
@@ -651,7 +651,7 @@ package class RecipePayload
                 default:
                     const typ = luaL_typename(L, -1).fromStringz.idup;
                     throw new Exception(
-                            "invalid pack symbol: expected a function or nil, got " ~ typ);
+                            "invalid 'package' field: expected a function or nil, got " ~ typ);
                 }
             }
             if (revision)
