@@ -388,15 +388,7 @@ struct Recipe
 
     static Recipe parseFile(string path, string revision = null)
     {
-        import std.file : read;
-
-        auto d = RecipePayload.parse(null, path, revision);
-        return Recipe(d);
-    }
-
-    static Recipe parseString(const(char)[] content, string revision = null)
-    {
-        auto d = RecipePayload.parse(content, null, revision);
+        auto d = RecipePayload.parse(path, revision);
         return Recipe(d);
     }
 
@@ -465,30 +457,18 @@ package class RecipePayload
         }
     }
 
-    private static RecipePayload parse(const(char)[] lua, string filename, string revision)
-    in((filename && !lua) || (!filename && lua))
+    private static RecipePayload parse(string filename, string revision)
+    in(filename !is null)
     {
         import std.path : isAbsolute;
 
         auto d = new RecipePayload();
         auto L = d.L;
 
-        if (filename)
+        if (luaL_dofile(L, filename.toStringz))
         {
-            if (luaL_dofile(L, filename.toStringz))
-            {
-                throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
-                        -1)).idup);
-            }
-        }
-        else
-        {
-            assert(lua);
-            if (luaL_dostring(L, lua.toStringz))
-            {
-                throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
-                        -1)).idup);
-            }
+            throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
+                    -1)).idup);
         }
 
         d.name = luaGetGlobal!string(L, "name", null);
@@ -572,19 +552,11 @@ package class RecipePayload
             L.luaWithGlobal!("revision", {
                 switch (lua_type(L, -1))
                 {
-                case LUA_TFUNCTION: // will be called from Recipe.revision
+                case LUA_TFUNCTION:
+                    // will be called from Recipe.revision
                     break;
-                case LUA_TNIL: // revision must be computed from lua content
-                    // we want to be as lazy as possible, because revision is
-                    // generally needed only when package is uploaded.
-                    // if filename is known, we defer revision to Recipe.revision
-                    // if not known, we compute it now.
-
-                    if (!d.filename)
-                    {
-                        assert(lua.length);
-                        d.revision = sha1RevisionFromContent(lua);
-                    }
+                case LUA_TNIL:
+                    // revision will be lazily computed from the file content in Recipe.revision
                     break;
                 default:
                     throw new Exception("Invalid revision specification");
