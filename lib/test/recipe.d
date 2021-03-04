@@ -20,7 +20,7 @@ unittest
     auto recipe = pkgRecipe("light1");
     const profile = ensureDefaultProfile();
 
-    assertEqual(recipe.type, RecipeType.deps);
+    assertEqual(recipe.type, RecipeType.light);
     assert(recipe.hasDependencies);
     const deps = recipe.dependencies(profile);
     const expected = [Dependency("pkga", VersionSpec(">=1.0.0")),];
@@ -35,7 +35,7 @@ unittest
     const debugProf = profile.withBuildType(BuildType.debug_);
     const releaseProf = profile.withBuildType(BuildType.release);
 
-    assertEqual(recipe.type, RecipeType.deps);
+    assertEqual(recipe.type, RecipeType.light);
     assert(recipe.hasDependencies);
     const debugDeps = recipe.dependencies(debugProf);
     const debugExpected = [Dependency("pkga", VersionSpec(">=1.0.0")),];

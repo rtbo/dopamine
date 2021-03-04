@@ -83,7 +83,7 @@ struct DepInfo
 enum RecipeType
 {
     pack,
-    deps,
+    light,
 }
 
 struct Recipe
@@ -122,7 +122,7 @@ struct Recipe
         auto L = cast(lua_State*) d.L; // const cast
         final switch (d.type)
         {
-        case RecipeType.deps:
+        case RecipeType.light:
             assert(lua_gettop(L) == 0, "Light recipe do not have proper stack");
             break;
         case RecipeType.pack:
@@ -144,7 +144,7 @@ struct Recipe
 
     @property bool isLight() const
     {
-        return d.type == RecipeType.deps;
+        return d.type == RecipeType.light;
     }
 
     @property bool isPackage() const
@@ -200,7 +200,7 @@ struct Recipe
 
         final switch (d.type)
         {
-        case RecipeType.deps:
+        case RecipeType.light:
             lua_getglobal(L, "dependencies");
             break;
         case RecipeType.pack:
@@ -210,8 +210,8 @@ struct Recipe
         }
 
         // cannot use isLight or isPackage here because it triggers invariant check
-        const nargs = d.type == RecipeType.deps ? 1 : 2;
-        const funcPos = d.type == RecipeType.deps ? 1 : 2;
+        const nargs = d.type == RecipeType.light ? 1 : 2;
+        const funcPos = d.type == RecipeType.light ? 1 : 2;
 
         assert(lua_type(L, funcPos) == LUA_TFUNCTION);
 
@@ -557,7 +557,7 @@ package class RecipePayload
             });
 
             d.langs = L.luaWithGlobal!("langs", () => luaReadStringArray(L, -1).strToLangs());
-            d.type = RecipeType.deps;
+            d.type = RecipeType.light;
         }
         else if (lua_gettop(L) == 1)
         {
