@@ -14,19 +14,19 @@ string testPath(Args...)(Args args)
     return buildNormalizedPath(dirName(__FILE_FULL_PATH__), args);
 }
 
-Recipe pkgRecipe(string pkg)
+Recipe testRecipe(string name)
 {
-    return Recipe.parseFile(testPath("pkgs", pkg, "dopamine.lua"));
+    return Recipe.parseFile(testPath("recipes", name, "dopamine.lua"));
 }
 
-BuildDirs pkgBuildDirs(string pkg)
+BuildDirs testBuildDirs(string name)
 {
     import std.format : format;
 
-    const srcDir = testPath("pkgs", pkg);
-    const workDir = testPath("gen", pkg);
-    const buildDir = testPath("gen", pkg, "build");
-    const installDir = testPath("gen", pkg, "install");
+    const srcDir = testPath("recipes", name);
+    const workDir = testPath("gen", name);
+    const buildDir = testPath("gen", name, "build");
+    const installDir = testPath("gen", name, "install");
     return BuildDirs(srcDir, workDir, buildDir, installDir);
 }
 
@@ -53,12 +53,12 @@ class DepCacheMock : CacheRepo
 {
     Recipe packRecipe(string packname, Semver, string = null) @trusted
     {
-        return pkgRecipe(packname);
+        return testRecipe(packname);
     }
 
     PackageDir packDir(Recipe recipe)
     {
-        const dd = testPath("pkgs", recipe.name);
+        const dd = testPath("recipes", recipe.name);
         const gd = testPath("gen", recipe.name);
         return PackageDir(dd, gd);
     }

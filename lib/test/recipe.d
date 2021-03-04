@@ -17,7 +17,7 @@ import std.path;
 @("Read light1 deps")
 unittest
 {
-    auto recipe = pkgRecipe("light1");
+    auto recipe = testRecipe("light1");
     const profile = ensureDefaultProfile();
 
     assertEqual(recipe.type, RecipeType.light);
@@ -30,7 +30,7 @@ unittest
 @("Read light2 deps")
 unittest
 {
-    auto recipe = pkgRecipe("light2");
+    auto recipe = testRecipe("light2");
     const profile = ensureDefaultProfile();
     const debugProf = profile.withBuildType(BuildType.debug_);
     const releaseProf = profile.withBuildType(BuildType.release);
@@ -49,7 +49,7 @@ unittest
 @("Read pkga recipe")
 unittest
 {
-    const recipe = pkgRecipe("pkga");
+    const recipe = testRecipe("pkga");
 
     assertEqual(recipe.name, "pkga");
     assertEqual(recipe.ver, "1.0.0");
@@ -62,7 +62,7 @@ unittest
     import std.digest : toHexString, LetterCase;
     import std.digest.sha : sha1Of;
 
-    auto recipe = pkgRecipe("pkga");
+    auto recipe = testRecipe("pkga");
 
     const expected = sha1Of(read(recipe.filename)).toHexString!(LetterCase.lower);
 
@@ -72,7 +72,7 @@ unittest
 @("pkga.source")
 unittest
 {
-    auto recipe = pkgRecipe("pkga");
+    auto recipe = testRecipe("pkga");
 
     assert(recipe.source() == ".");
 }
@@ -82,8 +82,8 @@ unittest
 {
     cleanGen();
 
-    auto recipe = pkgRecipe("pkga");
-    const bd = pkgBuildDirs("pkga");
+    auto recipe = testRecipe("pkga");
+    const bd = testBuildDirs("pkga");
     auto profile = ensureDefaultProfile();
 
     bd.src.fromDir!({ recipe.build(bd, profile); });
@@ -94,7 +94,7 @@ unittest
 {
     cleanGen();
 
-    auto recipe = pkgRecipe("pkgb");
+    auto recipe = testRecipe("pkgb");
 
     const rel = ensureDefaultProfile().withBuildType(BuildType.release);
     const deb = rel.withBuildType(BuildType.debug_);
@@ -112,8 +112,8 @@ unittest
 {
     cleanGen();
 
-    auto recipe = pkgRecipe("pkgc");
-    const bd = pkgBuildDirs("pkgc");
+    auto recipe = testRecipe("pkgc");
+    const bd = testBuildDirs("pkgc");
     auto profile = ensureDefaultProfile();
 
     auto cache = new DepCacheMock();
@@ -139,8 +139,8 @@ unittest
 
     cleanGen();
 
-    auto recipe = pkgRecipe("app");
-    const bd = pkgBuildDirs("app");
+    auto recipe = testRecipe("app");
+    const bd = testBuildDirs("app");
     const deps = testPath("gen", "app", "deps");
     const pc = testPath("gen", "app", "deps", "lib", "pkgconfig");
 
