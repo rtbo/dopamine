@@ -178,7 +178,7 @@ function Meson:setup(params)
     -- e.g. [prefix]/lib/x86_64-linux-gnu
     -- we don't want this with dopamine if we are not installing
     -- to system wide location. see meson #5925
-    if dop.os == 'Linux' and is_system_wide(params.install_dir) then
+    if dop.os == 'Linux' and not is_system_wide(params.install_dir) then
         self.options['--libdir'] = dop.path(params.install_dir, 'lib')
     end
 
