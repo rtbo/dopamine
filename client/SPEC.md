@@ -22,27 +22,28 @@ $ dop [global options] [command] [command options]
 ## Recipe file
 
 Each package is decribed by a recipe file, which is a Lua script named `dopamine.lua` located at the package root.
-The recipe file must assign global symbols such as `name`, or `version`.
 There can be 2 sorts of recipe:
 - A dependencies recipe.
     - This kind of recipe is used to install dependencies locally.
     - It is not meant to package a piece of software.
-    - Expresses dependencies through the `dependencies` field.
+    - Expresses dependencies through the `dependencies` global variable.
 - A package recipe.
     - Is a complete recipe that provide data and functions to build and package a piece of software.
     - It can express dependencies.
-    - Some fields are mandatory for the package to be published:
+    - Recipe is defined by returning a table with various fields
+    - Some fields are mandatory in the recipe table for the package to be published:
         - `name`
         - `version` (Semver compliant)
         - `license`
         - `build` function
         - TBD
+    - When a recipe function is executed, it receives the recipe table as first argument
 
 When a recipe function is executed, the current directory is always the package root directory.
 
 ### dop Lua library
 In order to help packaging, a `dop` Lua library is provided by the client.
-It must be imported explicitely like every other Lua library:
+It is implicitely imported and available in every recipe
 ```lua
 local dop = require('dop')
 ```
@@ -220,7 +221,7 @@ _Requirements_:
 
 - The `build` function of the Lua recipe must effectively compile the package using the build system provided by the package source code.
 - The build must happen in a directory within the package that is unique for the build configuration. `dirs.build` is provided as a possible build directory, but other directory can be used if deemed necessary.
-- The `build` function accepts arguments:
+- The `build` function accepts three arguments in addition to `self` (the recipe table):
   1. `dirs`: a table containing paths:
      - `dirs.src` to the source directory
      - `dirs.config` is a working directory unique for the (profile + options) configuration
@@ -265,7 +266,7 @@ _Requirements_:
 - If the recipe uses the install functionality of the build system, it may or may not declare a `package` function.
 - If the recipe does not use the install functionality of the build system, it must declare a `package` function.
 - If `package` function does not exist and `$INST` and `$STAGE` are different directories, the content of `$INST` is copied to `$STAGE`.
-- The `package` function takes three arguments:
+- The `package` function takes three arguments in addition to `self` (the recipe table):
   1. `dirs`: a table containing paths:
      - `dirs.src` to the source directory
      - `dirs.config` is a working directory unique for the (profile + options) configuration
