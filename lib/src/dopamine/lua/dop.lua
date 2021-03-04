@@ -237,26 +237,26 @@ function PkgConfig:new(options)
 end
 
 function PkgConfig:write(filename)
-    dop.mkdir{dop.dir_name(filename), recurse=true}
+    dop.mkdir {dop.dir_name(filename), recurse = true}
 
     local pc = io.open(filename, 'w')
 
     -- everything not standard is a custom key variable
     local stdfields = {
-        prefix=1,
-        exec_prefix=1,
-        includedir=1,
-        libdir=1,
-        name=1,
-        version=1,
-        description=1,
-        url=1,
-        requires=1,
-        ['requires.private']=1,
-        conflicts=1,
-        cflags=1,
-        libs=1,
-        ['libs.private']=1,
+        prefix = 1,
+        exec_prefix = 1,
+        includedir = 1,
+        libdir = 1,
+        name = 1,
+        version = 1,
+        description = 1,
+        url = 1,
+        requires = 1,
+        ['requires.private'] = 1,
+        conflicts = 1,
+        cflags = 1,
+        libs = 1,
+        ['libs.private'] = 1,
     }
 
     function write_field(field, sep)
@@ -264,7 +264,7 @@ function PkgConfig:write(filename)
         if v ~= nil then
             sep = sep or ': '
             if sep == ': ' then
-                field = field:gsub("^%l", string.upper)
+                field = field:gsub('^%l', string.upper)
             end
             pc:write(field, sep, v, '\n')
         end
