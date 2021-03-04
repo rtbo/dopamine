@@ -12,6 +12,7 @@ string dc;
 // package, option, default version
 alias deps = AliasSeq!(
     "dini", "dini", "2.0.0",
+    "exceptionhandling", "eh", "1.0.0",
 );
 
 string getoptCode()

@@ -15,7 +15,7 @@ endif
 
 dini_dep = dependency('dini',
     version: '~>2.0.0',
-    method: 'dub'
+    method: 'dub',
 )
 
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
