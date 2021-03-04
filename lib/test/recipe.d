@@ -9,16 +9,51 @@ import dopamine.profile;
 import dopamine.recipe;
 import dopamine.util;
 
+import exceptionhandling;
+
 import std.file;
 import std.path;
+
+@("Read light1 deps")
+unittest
+{
+    auto recipe = pkgRecipe("light1");
+    const profile = ensureDefaultProfile();
+
+    assertEqual(recipe.type, RecipeType.deps);
+    assert(recipe.hasDependencies);
+    const deps = recipe.dependencies(profile);
+    const expected = [Dependency("pkga", VersionSpec(">=1.0.0")),];
+    assertEqual(deps, expected);
+}
+
+@("Read light2 deps")
+unittest
+{
+    auto recipe = pkgRecipe("light2");
+    const profile = ensureDefaultProfile();
+    const debugProf = profile.withBuildType(BuildType.debug_);
+    const releaseProf = profile.withBuildType(BuildType.release);
+
+    assertEqual(recipe.type, RecipeType.deps);
+    assert(recipe.hasDependencies);
+    const debugDeps = recipe.dependencies(debugProf);
+    const debugExpected = [Dependency("pkga", VersionSpec(">=1.0.0")),];
+    assertEqual(debugDeps, debugExpected);
+
+    const releaseDeps = recipe.dependencies(releaseProf);
+    const Dependency[] releaseExpected;
+    assertEqual(releaseDeps, releaseExpected);
+}
 
 @("Read pkga recipe")
 unittest
 {
     const recipe = pkgRecipe("pkga");
 
-    assert(recipe.name == "pkga");
-    assert(recipe.ver == "1.0.0");
+    assertEqual(recipe.name, "pkga");
+    assertEqual(recipe.ver, "1.0.0");
+    assertEqual(recipe.langs, [Lang.c]);
 }
 
 @("Read pkga revision")

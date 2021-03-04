@@ -1,24 +1,20 @@
-local dop = require('dop')
+return {
+    name = 'pkga',
+    version = '1.0.0',
+    langs = {'c'},
 
-name = 'pkga'
-version = '1.0.0'
-langs = {'c'}
+    build = function(self, dirs, config)
+        local profile = config.profile
+        local meson = dop.Meson:new(profile)
 
-function source()
-    return '.'
-end
+        dop.mkdir {dirs.build, recurse = true}
 
-function build(dirs, config)
-    local profile = config.profile
-    local meson = dop.Meson:new(profile)
+        meson:setup{build_dir = dirs.build, install_dir = dirs.install}
+        dop.from_dir(dirs.build, function()
+            meson:compile()
+            meson:install()
+        end)
 
-    dop.mkdir {dirs.build, recurse = true}
-
-    meson:setup{build_dir = dirs.build, install_dir = dirs.install}
-    dop.from_dir(dirs.build, function()
-        meson:compile()
-        meson:install()
-    end)
-
-    return true
-end
+        return true
+    end,
+}

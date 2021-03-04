@@ -88,6 +88,12 @@ enum RecipeType
 
 struct Recipe
 {
+    // Implementation note:
+    //  - the Recipe struct acts as a reference counter to the payload (d)
+    //  - the payload carries a Lua state that is unique to the recipe (no state sharing between recipes)
+    //  - in case of a light recipe, the lua stack stays clean between function calls
+    //  - in case of a package recipe, the lua stack keeps the recipe table (self) on top between function calls (and only this table)
+
     private RecipePayload d;
 
     private this(RecipePayload d)
@@ -108,6 +114,24 @@ struct Recipe
             d.decr();
     }
 
+    invariant
+    {
+        if (d is null)
+            return;
+
+        auto L = cast(lua_State*) d.L; // const cast
+        final switch (d.type)
+        {
+        case RecipeType.deps:
+            assert(lua_gettop(L) == 0, "Light recipe do not have proper stack");
+            break;
+        case RecipeType.pack:
+            assert(lua_gettop(L) == 1, "Package recipe do not have proper stack");
+            assert(lua_type(L, 1) == LUA_TTABLE, "Package recipe has corrupted stack");
+            break;
+        }
+    }
+
     bool opCast(T : bool)() const
     {
         return d !is null;
@@ -116,6 +140,16 @@ struct Recipe
     @property RecipeType type() const
     {
         return d.type;
+    }
+
+    @property bool isLight() const
+    {
+        return d.type == RecipeType.deps;
+    }
+
+    @property bool isPackage() const
+    {
+        return d.type == RecipeType.pack;
     }
 
     @property string name() const @safe
@@ -160,17 +194,32 @@ struct Recipe
 
         auto L = d.L;
 
-        // the dependencies func takes a profile as argument
-        // and return dependency table
-        lua_getglobal(L, "dependencies");
-        assert(lua_type(L, -1) == LUA_TFUNCTION);
+        // If this is a light recipe, the dependency function only take a profile argument.
+        // Otherwise it take 'self' in addition as first argument
+        // It will return a dependency table.
+
+        final switch (d.type)
+        {
+        case RecipeType.deps:
+            lua_getglobal(L, "dependencies");
+            break;
+        case RecipeType.pack:
+            lua_getfield(L, 1, "dependencies");
+            lua_pushvalue(L, 1); // push self on top
+            break;
+        }
+
+        // cannot use isLight or isPackage here because it triggers invariant check
+        const nargs = d.type == RecipeType.deps ? 1 : 2;
+        const funcPos = d.type == RecipeType.deps ? 1 : 2;
+
+        assert(lua_type(L, funcPos) == LUA_TFUNCTION);
 
         luaPushProfile(L, profile);
 
-        // 1 argument, 1 result
-        if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+        if (lua_pcall(L, nargs, /* nresults = */ 1, 0) != LUA_OK)
         {
-            throw new Exception("cannot get dependencies: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot get dependencies: " ~ luaPop!string(L));
         }
 
         scope (success)
@@ -185,13 +234,14 @@ struct Recipe
     }
 
     @property string revision()
+    in(isPackage, "Light recipes do not have revision")
     {
         if (d.revision)
             return d.revision;
 
         auto L = d.L;
 
-        lua_getglobal(L, "revision");
+        lua_getfield(L, 1, "revision");
 
         if (d.filename && lua_type(L, -1) == LUA_TNIL)
         {
@@ -199,12 +249,14 @@ struct Recipe
             return sha1RevisionFromFile(d.filename);
         }
 
-        enforce(lua_type(L, -1) == LUA_TFUNCTION, "Package recipe is missing a recipe function");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION,
+                "Wrong revision field: expected a function or nil");
 
-        // no argument, 1 result
-        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        lua_pushvalue(L, 1); // push self
+
+        if (lua_pcall(L, /* nargs = */ 1, /* nresults = */ 1, 0) != LUA_OK)
         {
-            throw new Exception("Cannot get recipe revision: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot get recipe revision: " ~ luaPop!string(L));
         }
 
         d.revision = luaTo!string(L, -1);
@@ -220,19 +272,21 @@ struct Recipe
     /// Execute the 'source' function if the recipe has one and return its result.
     /// Otherwise return the 'source' string variable (default to "." if undefined)
     string source()
+    in(isPackage, "Light recipes do not have source")
     {
         if (d.inTreeSrc)
             return d.inTreeSrc;
 
         auto L = d.L;
 
-        lua_getglobal(L, "source");
+        lua_getfield(L, 1, "source");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a source function");
 
-        // no argument, 1 result
-        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        lua_pushvalue(L, 1); // push self
+
+        if (lua_pcall(L, /* nargs = */ 1, /* nresults = */ 1, 0) != LUA_OK)
         {
-            throw new Exception("Cannot get source: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot get source: " ~ luaPop!string(L));
         }
 
         return L.luaPop!string();
@@ -299,20 +353,21 @@ struct Recipe
 
     /// Execute the `build` function of this recipe
     bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
+    in(isPackage, "Light recipes do not build")
     {
         auto L = d.L;
 
-        lua_getglobal(L, "build");
+        lua_getfield(L, 1, "build");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
+        lua_pushvalue(L, 1); // push self
         pushBuildDirs(L, dirs);
         pushConfig(L, profile);
         pushDepInfos(L, depInfos);
 
-        // 3 argument, 1 result
-        if (lua_pcall(L, 3, 1, 0) != LUA_OK)
+        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 1, 0) != LUA_OK)
         {
-            throw new Exception("Cannot build recipe: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot build recipe: " ~ luaPop!string(L));
         }
 
         scope (exit)
@@ -339,29 +394,32 @@ struct Recipe
 
     /// Execute the `pack` function of this recipe
     void pack(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
+    in(isPackage, "Light recipes do not package")
     in(d.packFunc, "Recipe has no 'pack' function")
     {
         auto L = d.L;
 
-        lua_getglobal(L, "pack");
+        lua_getfield(L, 1, "pack");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a pack function");
 
+        lua_pushvalue(L, 1); // push self
         pushPackDirs(L, dirs);
         pushConfig(L, profile);
         pushDepInfos(L, depInfos);
 
-        // 3 params, 0 result
-        if (lua_pcall(L, 3, 0, 0) != LUA_OK)
+        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 0, 0) != LUA_OK)
         {
-            throw new Exception("Cannot create package: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot create package: " ~ luaPop!string(L));
         }
     }
 
     /// Execute the `patch_install` function of this recipe
     void patchInstall(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
+    in(isPackage, "Light recipes do not patch")
     {
         auto L = d.L;
 
-        lua_getglobal(L, "patch_install");
+        lua_getfield(L, 1, "patch_install");
 
         switch (lua_type(L, -1))
         {
@@ -372,17 +430,17 @@ struct Recipe
             return;
         default:
             const typ = luaL_typename(L, -1).fromStringz.idup;
-            throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
+            throw new Exception("invalid patch_install symbol: expected a function or nil, got " ~ typ);
         }
 
+        lua_pushvalue(L, 1); // push self
         pushPackDirs(L, dirs);
         pushConfig(L, profile);
         pushDepInfos(L, depInfos);
 
-        // 3 params, 0 result
-        if (lua_pcall(L, 3, 0, 0) != LUA_OK)
+        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 0, 0) != LUA_OK)
         {
-            throw new Exception("Cannot patch installation: " ~ luaTo!string(L, -1));
+            throw new Exception("Cannot patch installation: " ~ luaPop!string(L));
         }
     }
 
@@ -394,12 +452,18 @@ struct Recipe
 
     static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs, string revision) @trusted
     {
+        import bindbc.lua : lua_createtable;
+
         auto d = new RecipePayload();
         d.name = name;
         d.ver = ver;
         d.dependencies = deps;
         d.langs = langs;
         d.revision = revision;
+
+        // push empty recipe table to pass invariants
+        lua_createtable(d.L, 0, 0);
+
         return Recipe(d);
     }
 }
@@ -433,11 +497,11 @@ package class RecipePayload
         L = luaL_newstate();
         luaL_openlibs(L);
 
-        // setting the payload to ["recipe"] key in the registry
+        // setting the payload to ["payload"] key in the registry
         lua_pushlightuserdata(L, cast(void*) this);
-        lua_setfield(L, LUA_REGISTRYINDEX, "recipe");
+        lua_setfield(L, LUA_REGISTRYINDEX, "payload");
 
-        luaPreloadDopLib(L);
+        luaLoadDopLib(L);
 
         rc = 1;
     }
@@ -465,91 +529,141 @@ package class RecipePayload
         auto d = new RecipePayload();
         auto L = d.L;
 
+        assert(lua_gettop(L) == 0);
+
         if (luaL_dofile(L, filename.toStringz))
         {
-            throw new Exception("cannot parse package recipe file: " ~ fromStringz(lua_tostring(L,
-                    -1)).idup);
+            throw new Exception("cannot parse package recipe file: " ~ luaPop!string(L));
         }
 
-        d.name = luaGetGlobal!string(L, "name", null);
-        const verStr = luaGetGlobal!string(L, "version", null);
-        d.ver = verStr ? Semver(verStr) : Semver.init;
-        d.description = luaGetGlobal!string(L, "description", null);
-        d.license = luaGetGlobal!string(L, "license", null);
-        d.copyright = luaGetGlobal!string(L, "copyright", null);
-        d.langs = L.luaWithGlobal!("langs", () => luaReadStringArray(L, -1).strToLangs());
-
-        L.luaWithGlobal!("dependencies", {
-            switch (lua_type(L, -1))
-            {
-            case LUA_TFUNCTION:
-                d.depFunc = true;
-                break;
-            case LUA_TTABLE:
-                d.dependencies = readDependencies(L);
-                break;
-            case LUA_TNIL:
-                break;
-            default:
-                throw new Exception("invalid dependencies specification");
-            }
-        });
-
-        L.luaWithGlobal!("source", {
-            switch (lua_type(L, -1))
-            {
-            case LUA_TSTRING:
-                d.inTreeSrc = luaTo!string(L, -1);
-                enforce(!isAbsolute(d.inTreeSrc),
-                    "constant source must be relative to package file");
-                break;
-            case LUA_TFUNCTION:
-                break;
-            case LUA_TNIL:
-                d.inTreeSrc = ".";
-                break;
-            default:
-                throw new Exception("Invalid 'source' symbol: expected a function, a string or nil");
-            }
-        });
-
-        bool buildFunc;
-        L.luaWithGlobal!("build", {
-            switch (lua_type(L, -1))
-            {
-            case LUA_TFUNCTION:
-                buildFunc = true;
-                break;
-            case LUA_TNIL:
-                break;
-            default:
-                throw new Exception("Invalid 'build' symbol: expected a function or nil");
-            }
-
-        });
-
-        L.luaWithGlobal!("pack", {
-            switch (lua_type(L, -1))
-            {
-            case LUA_TFUNCTION:
-                d.packFunc = true;
-                break;
-            case LUA_TNIL:
-                break;
-            default:
-                const typ = luaL_typename(L, -1).fromStringz.idup;
-                throw new Exception("invalid package symbol: expected a function or nil, got " ~ typ);
-            }
-        });
         d.filename = filename;
 
-        if (revision)
+        if (lua_gettop(L) == 0)
         {
-            d.revision = revision;
+            L.luaWithGlobal!("dependencies", {
+                switch (lua_type(L, -1))
+                {
+                case LUA_TFUNCTION:
+                    d.depFunc = true;
+                    break;
+                case LUA_TTABLE:
+                    d.dependencies = readDependencies(L);
+                    break;
+                case LUA_TNIL:
+                    throw new Exception("light Recipe without dependency specification");
+                default:
+                    throw new Exception("invalid dependencies specification");
+                }
+            });
+
+            d.langs = L.luaWithGlobal!("langs", () => luaReadStringArray(L, -1).strToLangs());
+            d.type = RecipeType.deps;
         }
-        else
+        else if (lua_gettop(L) == 1)
         {
-            L.luaWithGlobal!("revision", {
+            enforce(lua_type(L, 1) == LUA_TTABLE, filename ~ " did not return a recipe table");
+
+            d.name = enforce(luaGetTable!string(L, 1, "name", null),
+                    "The name field is mandatory in the recipe");
+            const verStr = enforce(luaGetTable!string(L, 1, "version", null),
+                    "The version field is mandatory in the recipe");
+            d.ver = verStr ? Semver(verStr) : Semver.init;
+            d.description = luaGetTable!string(L, 1, "description", null);
+            d.license = luaGetTable!string(L, 1, "license", null);
+            d.copyright = luaGetTable!string(L, 1, "copyright", null);
+
+
+            {
+                lua_getfield(L, 1, "langs");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                d.langs = luaReadStringArray(L, -1).strToLangs();
+            }
+            {
+                lua_getfield(L, 1, "dependencies");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                switch (lua_type(L, -1))
+                {
+                case LUA_TFUNCTION:
+                    d.depFunc = true;
+                    break;
+                case LUA_TTABLE:
+                    d.dependencies = readDependencies(L);
+                    break;
+                case LUA_TNIL:
+                    break; // no dependency
+                default:
+                    throw new Exception("invalid dependencies specification");
+                }
+            }
+            {
+                lua_getfield(L, 1, "source");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                switch (lua_type(L, -1))
+                {
+                case LUA_TSTRING:
+                    d.inTreeSrc = luaTo!string(L, -1);
+                    enforce(!isAbsolute(d.inTreeSrc),
+                            "constant source must be relative to package file");
+                    break;
+                case LUA_TFUNCTION:
+                    break;
+                case LUA_TNIL:
+                    d.inTreeSrc = ".";
+                    break;
+                default:
+                    throw new Exception(
+                            "Invalid 'source' key: expected a function, a string or nil");
+                }
+            }
+            {
+                lua_getfield(L, 1, "build");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                switch (lua_type(L, -1))
+                {
+                case LUA_TFUNCTION:
+                    break;
+                case LUA_TNIL:
+                    throw new Exception("Recipe misses the mandatory build function");
+                default:
+                    throw new Exception("Invalid 'build' field: expected a function");
+                }
+            }
+            {
+                lua_getfield(L, 1, "pack");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                switch (lua_type(L, -1))
+                {
+                case LUA_TFUNCTION:
+                    d.packFunc = true;
+                    break;
+                case LUA_TNIL:
+                    break;
+                default:
+                    const typ = luaL_typename(L, -1).fromStringz.idup;
+                    throw new Exception(
+                            "invalid pack symbol: expected a function or nil, got " ~ typ);
+                }
+            }
+            if (revision)
+            {
+                d.revision = revision;
+            }
+            else
+            {
+                lua_getfield(L, 1, "revision");
+                scope (exit)
+                    lua_pop(L, 1);
+
                 switch (lua_type(L, -1))
                 {
                 case LUA_TFUNCTION:
@@ -561,24 +675,18 @@ package class RecipePayload
                 default:
                     throw new Exception("Invalid revision specification");
                 }
-            });
-        }
+            }
 
-        assert(lua_gettop(L) == 0, "Lua stack not clean");
+            assert(lua_gettop(L) == 1, "Lua stack not clean");
 
-        if (d.name && verStr && buildFunc && d.langs.length)
-        {
-            d.type = RecipeType.pack;
+            // adding the recipe table to the registry
+            lua_pushvalue(L, 1);
+            lua_setfield(L, LUA_REGISTRYINDEX, "recipe");
+
+            assert(lua_gettop(L) == 1, "Lua stack not clean 2");
         }
-        else if (d.dependencies.length || d.depFunc)
-        {
-            d.type = RecipeType.deps;
-        }
-        else
-        {
-            throw new Exception(
-                    "Invalid recipe: " ~ filename
-                    ~ " is neither a package recipe nor a dependency recipe");
+        else {
+            throw new Exception("Recipe returned multiple results");
         }
 
         return d;
@@ -603,7 +711,8 @@ string sha1RevisionFromFile(string filename)
     return sha1RevisionFromContent(cast(const(char)[]) read(filename));
 }
 
-/// Read a dependency table from top of the stack
+/// Read a dependency table from top of the stack.
+/// The table is left on the stack after return
 Dependency[] readDependencies(lua_State* L)
 {
     const typ = lua_type(L, -1);
