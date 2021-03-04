@@ -22,27 +22,28 @@ $ dop [global options] [command] [command options]
 ## Recipe file
 
 Each package is decribed by a recipe file, which is a Lua script named `dopamine.lua` located at the package root.
-The recipe file must assign global symbols such as `name`, or `version`.
 There can be 2 sorts of recipe:
 - A dependencies recipe.
     - This kind of recipe is used to install dependencies locally.
     - It is not meant to package a piece of software.
-    - Expresses dependencies through the `dependencies` field.
+    - Expresses dependencies through the `dependencies` global variable.
 - A package recipe.
     - Is a complete recipe that provide data and functions to build and package a piece of software.
     - It can express dependencies.
-    - Some fields are mandatory for the package to be published:
+    - Recipe is defined by returning a table with various fields
+    - Some fields are mandatory in the recipe table for the package to be published:
         - `name`
         - `version` (Semver compliant)
         - `license`
         - `build` function
         - TBD
+    - When a recipe function is executed, it receives the recipe table as first argument
 
 When a recipe function is executed, the current directory is always the package root directory.
 
 ### dop Lua library
 In order to help packaging, a `dop` Lua library is provided by the client.
-It must be imported explicitely like every other Lua library:
+It is implicitely imported and available in every recipe
 ```lua
 local dop = require('dop')
 ```
@@ -220,7 +221,7 @@ _Requirements_:
 
 - The `build` function of the Lua recipe must effectively compile the package using the build system provided by the package source code.
 - The build must happen in a directory within the package that is unique for the build configuration. `dirs.build` is provided as a possible build directory, but other directory can be used if deemed necessary.
-- The `build` function accepts arguments:
+- The `build` function accepts three arguments in addition to `self` (the recipe table):
   1. `dirs`: a table containing paths:
      - `dirs.src` to the source directory
      - `dirs.config` is a working directory unique for the (profile + options) configuration
@@ -259,13 +260,13 @@ _Prerequisites_:
 - The dependencies must be installed.
 - The source code must be available
 - The package must be built.
-- The recipe must have a `pack` function, or have installed during the `build` command
+- The recipe must have a `package` function, or have installed during the `build` command
 
 _Requirements_:
-- If the recipe uses the install functionality of the build system, it may or may not declare a `pack` function.
-- If the recipe does not use the install functionality of the build system, it must declare a `pack` function.
-- If `pack` function does not exist and `$INST` and `$STAGE` are different directories, the content of `$INST` is copied to `$STAGE`.
-- The `pack` function takes three arguments:
+- If the recipe uses the install functionality of the build system, it may or may not declare a `package` function.
+- If the recipe does not use the install functionality of the build system, it must declare a `package` function.
+- If `package` function does not exist and `$INST` and `$STAGE` are different directories, the content of `$INST` is copied to `$STAGE`.
+- The `package` function takes three arguments in addition to `self` (the recipe table):
   1. `dirs`: a table containing paths:
      - `dirs.src` to the source directory
      - `dirs.config` is a working directory unique for the (profile + options) configuration
@@ -274,15 +275,15 @@ _Requirements_:
      - `dirs.dest` is where to create the package
   2. `config`: the same as for the `build` function
   3. `depinfos`: the same as for the `build` function
-- If the `dirs.install` and `dirs.dest` directories are identical and install functionality was used, the `pack` function may only patch files in that directory.
-- If the `dirs.install` and `dirs.dest` directories are different, the `pack` function must effectively copy the necessary files to the `dirs.dest` directory, either from `dirs.install` or directly from where the build occurred.
-- If the recipe declares a `patch_install` function, it is executed. The `patch_install` function has the same signature as the `pack` function.
+- If the `dirs.install` and `dirs.dest` directories are identical and install functionality was used, the `package` function may only patch files in that directory.
+- If the `dirs.install` and `dirs.dest` directories are different, the `package` function must effectively copy the necessary files to the `dirs.dest` directory, either from `dirs.install` or directly from where the build occurred.
+- If the recipe declares a `patch_install` function, it is executed. The `patch_install` function has the same signature as the `package` function.
 
 _Command options_:
 
 - `dop package`
-  - Execute the `pack` function of the recipe with the default destination.
-  - If `pack` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
+  - Execute the `package` function of the recipe with the default destination.
+  - If `package` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
 - `dop package [dest]`
   - Same as previous but package to `[dest]`.
 

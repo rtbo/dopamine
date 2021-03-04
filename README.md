@@ -44,7 +44,7 @@ Package manager for compiled languages.
   - The package scripts provide entry points for the client in a form of lua functions that perform special tasks:
     - `source`: download the package source code
     - `build`: build the package source code
-    - `pack`: create the package
+    - `package`: create the package
 - Client `dop` is written in D
 - Web frontend is a VueJs / Vuetify application
  - login only with provider:

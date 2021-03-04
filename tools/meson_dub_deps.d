@@ -4,10 +4,57 @@ import std.exception;
 import std.format;
 import std.getopt;
 import std.process;
+import std.meta;
 
 string dub = "dub";
-string diniVer = "2.0.0";
 string dc;
+
+// package, option, default version
+alias deps = AliasSeq!(
+    "dini", "dini", "2.0.0",
+    "exceptionhandling", "eh", "1.0.0",
+);
+
+string getoptCode()
+{
+    string code;
+    code ~= `auto helpInfo = getopt(args, "dub", "Dub executable", &dub, "dc", "The D compiler", &dc, `;
+    static foreach(i; 0 .. deps.length / 3)
+    {
+        code ~= format(`"%s", "override for %s version", &depVers[%s], `, deps[i*3+1], deps[i*3], i);
+    }
+    code ~= ");";
+    return code;
+}
+
+int main(string[] args)
+{
+    string[] depVers;
+    static foreach(i; 0 .. deps.length / 3)
+    {
+        depVers ~= deps[i*3 + 2];
+    }
+
+    mixin(getoptCode());
+
+    if (helpInfo.helpWanted)
+    {
+        defaultGetoptPrinter("Prepare DUB dependencies.", helpInfo.options);
+        return 0;
+    }
+
+    if (!dc)
+    {
+        dc = environment.get("DC", null);
+    }
+
+    static foreach(i; 0 .. deps.length / 3)
+    {
+        ensureDubPkg(deps[i*3], depVers[i]);
+    }
+
+    return 0;
+}
 
 void ensureDubPkg(string name, string ver)
 {
@@ -23,23 +70,4 @@ void ensureDubPkg(string name, string ver)
     }
     auto build = spawnProcess(buildcmd);
     enforce(wait(build) == 0, "dub failed to build " ~ spec);
-}
-
-int main(string[] args)
-{
-    auto helpInfo = getopt(args, "dub", &dub, "dini", &diniVer, "dc", &dc);
-    if (helpInfo.helpWanted)
-    {
-        defaultGetoptPrinter("Prepare DUB dependencies.", helpInfo.options);
-        return 0;
-    }
-
-    if (!dc)
-    {
-        dc = environment.get("DC", null);
-    }
-
-    ensureDubPkg("dini", diniVer);
-
-    return 0;
 }

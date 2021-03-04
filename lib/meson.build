@@ -72,6 +72,11 @@ dop_test_src = dop_src + files([
     'test/lua/ut.d',
 ])
 
+eh_dep = dependency('exceptionhandling',
+    version: '~>1.0.0',
+    method: 'dub',
+)
+
 # all_mods defined in test
 # subdir('test')
 # all_mods is hardcoded instead of generating waiting for meson#8435
@@ -81,7 +86,7 @@ dop_test_src += files('test/all_mods.d')
 dop_test = executable('doptest', dop_test_src,
     install: false,
     include_directories: [ dop_inc, include_directories('.') ],
-    dependencies: dop_deps,
+    dependencies: dop_deps + [ eh_dep ],
     d_import_dirs: dop_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,

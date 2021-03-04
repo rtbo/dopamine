@@ -34,7 +34,7 @@ function dop.from_dir(dir, func)
     end
 end
 
--- Return an object containing a file function to install files and a dir function to install dirs recursively.
+-- Return an object containing a file function to install files and a dir function to install dirs.
 function dop.installer(src_dir, dest_dir)
     local inst = {
         file = function(src, dest)

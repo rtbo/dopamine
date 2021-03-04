@@ -32,10 +32,11 @@ void luaPreloadDopLib(lua_State* L)
 }
 
 /// Load the dop module and assign it to the global `dop` variable
-/// This is the eager version of [luaPreloadDopLib]
+/// Compared to [luaPreloadDopLib], with [luaLoadDopLib] there is no need to `require`
+/// the `dop` library from the script, it is already there when the script runs.
 void luaLoadDopLib(lua_State* L)
 {
-    // must start by preloading dop_native because it is imported by 'dop'
+    // must start by preloading 'dop_native' because it is required by 'dop'
     lua_getglobal(L, "package");
     lua_getfield(L, -1, "preload");
 
