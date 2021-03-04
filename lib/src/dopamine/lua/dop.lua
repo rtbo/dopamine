@@ -161,6 +161,10 @@ function Meson:new(profile)
     return o
 end
 
+local function is_system_wide(prefix)
+    return prefix:sub(1, 4) == '/usr' or prefix == '/'
+end
+
 function Meson:setup(params)
     assert(params, 'Meson:setup must be passed a parameter table')
     self.build_dir = assert(params.build_dir,
@@ -169,11 +173,14 @@ function Meson:setup(params)
                               'install_dir is a mandatory parameter')
 
     self.options['--prefix'] = params.install_dir
+
     -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
     -- e.g. [prefix]/lib/x86_64-linux-gnu
-    -- we don't want this with dopamine because we are not installing
-    -- in the system directories. see meson #5925
-    self.options['--libdir'] = dop.path(params.install_dir, 'lib')
+    -- we don't want this with dopamine if we are not installing
+    -- to system wide location. see meson #5925
+    if dop.os == 'Linux' and is_system_wide(params.install_dir) then
+        self.options['--libdir'] = dop.path(params.install_dir, 'lib')
+    end
 
     if params.options then
         for k, v in pairs(params.options) do
