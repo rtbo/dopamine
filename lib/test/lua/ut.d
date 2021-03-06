@@ -48,36 +48,44 @@ unittest
     });
 }
 
-@("lua.run_cmd")
-unittest
+// desactivating on windows because `dir` is a shell internal and cannot be run
+// with run_cmd
+version (Windows)
 {
-    import std.path : dirName;
-    import std.string : replace;
-
-    const thisDir = dirName(__FILE_FULL_PATH__).replace('\\', '/');
-
-    version (Windows)
+}
+else
+{
+    @("lua.run_cmd")
+    unittest
     {
-        const lsCmd = "dir";
+        import std.path : dirName;
+        import std.string : replace;
+
+        const thisDir = dirName(__FILE_FULL_PATH__).replace('\\', '/');
+
+        version (Windows)
+        {
+            const lsCmd = "dir";
+        }
+        else
+        {
+            const lsCmd = "ls";
+        }
+
+        const lua = format(`
+            local ls_res = dop.from_dir('%s', function()
+                return dop.run_cmd({
+                    '%s', '.',
+                    catch_output=true,
+                })
+            end)
+
+            assert(string.find(ls_res, 'lib.d'))
+            assert(string.find(ls_res, 'ut.d'))
+            assert(string.find(ls_res, 'dir_name.lua'))
+            assert(string.find(ls_res, 'pkgconfig.lua'))
+        `, thisDir, lsCmd);
+
+        testLuaStr(lua);
     }
-    else
-    {
-        const lsCmd = "ls";
-    }
-
-    const lua = format(`
-        local ls_res = dop.from_dir('%s', function()
-            return dop.run_cmd({
-                '%s', '.',
-                catch_output=true,
-            })
-        end)
-
-        assert(string.find(ls_res, 'lib.d'))
-        assert(string.find(ls_res, 'ut.d'))
-        assert(string.find(ls_res, 'dir_name.lua'))
-        assert(string.find(ls_res, 'pkgconfig.lua'))
-    `, thisDir, lsCmd);
-
-    testLuaStr(lua);
 }
