@@ -5,6 +5,19 @@ for k, v in pairs(require('dop_native')) do
     dop[k] = v
 end
 
+function dop.assert(pred, msg, level)
+    if pred then return pred end
+    if not msg then
+        msg = 'Error: assertion failed'
+    elseif type(msg) == 'number' then
+        level = msg - 1
+        msg = 'Error: assertion failed'
+    else
+        level = level and level-1 or -2
+    end
+    error(msg, level)
+end
+
 local function create_class(name)
     local cls = {}
     cls.__index = cls
