@@ -96,9 +96,11 @@ int luaDopNativeModule(lua_State* L) nothrow
     const boolconsts = ["posix" : posix];
     const funcs = [
         "trim" : &luaTrim, "path" : &luaPath, "dir_name" : &luaDirName,
-        "cwd" : &luaCwd, "chdir" : &luaChangeDir, "mkdir" : &luaMkdir,
-        "install_file" : &luaInstallFile, "install_dir" : &luaInstallDir,
-        "run_cmd" : &luaRunCmd, "profile_environment" : &luaProfileEnvironment,
+        "base_name" : &luaBaseName,
+        "cwd" : &luaCwd, "chdir" : &luaChangeDir, "is_file": &luaIsFile, 
+        "is_dir": &luaIsDir, "mkdir" : &luaMkdir, "install_file" : &luaInstallFile,
+        "install_dir" : &luaInstallDir, "run_cmd" : &luaRunCmd, 
+        "profile_environment" : &luaProfileEnvironment,
         "download" : &luaDownload, "checksum" : &luaChecksum,
         "create_archive" : &luaCreateArchive,
         "extract_archive" : &luaExtractArchive,
@@ -293,6 +295,17 @@ int luaDirName(lua_State* L) nothrow
     });
 }
 
+int luaBaseName(lua_State *L) nothrow
+{
+    import std.path : baseName;
+
+    const name = checkString(L, 1);
+    return L.catchAll!({
+        luaPush(L, name.baseName);
+        return 1;
+    });
+}
+
 int luaCwd(lua_State* L) nothrow
 {
     import std.file : getcwd;
@@ -310,6 +323,30 @@ int luaChangeDir(lua_State* L) nothrow
     const dir = checkString(L, 1);
     L.catchAll!({ chdir(dir); });
     return 0;
+}
+
+int luaIsFile(lua_State *L) nothrow
+{
+    import std.file : exists, isFile;
+
+    const f = checkString(L, 1);
+    const res = L.catchAll!({
+        return f.exists && f.isFile;
+    });
+    lua_pushboolean(L, res ? 1 : 0);
+    return 1;
+}
+
+int luaIsDir(lua_State *L) nothrow
+{
+    import std.file : exists, isDir;
+
+    const d = checkString(L, 1);
+    const res = L.catchAll!({
+        return d.exists && d.isDir;
+    });
+    lua_pushboolean(L, res ? 1 : 0);
+    return 1;
 }
 
 int luaMkdir(lua_State* L) nothrow
