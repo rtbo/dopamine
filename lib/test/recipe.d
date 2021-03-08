@@ -139,37 +139,44 @@ unittest
     assert(isFile(buildPath(bd.install, "include", "d", "pkgc-1.0.0", "pkgc.d")));
 }
 
-@("app.package")
-unittest
+// deactivating this test on Windows because of a bug in Meson
+version(Windows)
+{}
+else
 {
-    import dopamine.log : LogLevel;
-    import dopamine.util : runCommand;
-    import std.process : environment;
+    @("app.package")
+    unittest
+    {
+        import dopamine.log : LogLevel;
+        import dopamine.util : runCommand;
+        import std.process : environment;
 
-    cleanGen();
+        cleanGen();
 
-    auto recipe = testRecipe("app");
-    const bd = testBuildDirs("app");
-    const deps = testPath("gen", "app", "deps");
-    const pc = testPath("gen", "app", "deps", "lib", "pkgconfig");
+        auto recipe = testRecipe("app");
+        const bd = testBuildDirs("app");
+        const deps = testPath("gen", "app", "deps");
+        const pc = testPath("gen", "app", "deps", "lib", "pkgconfig");
 
-    auto profile = ensureDefaultProfile();
+        auto profile = ensureDefaultProfile();
 
-    auto cache = new DepCacheMock();
-    auto dag = prepareDepDAG(recipe, profile, cache);
-    resolveDepDAG(dag, cache);
+        auto cache = new DepCacheMock();
+        auto dag = prepareDepDAG(recipe, profile, cache);
+        resolveDepDAG(dag, cache);
 
-    buildDependencies(dag, recipe, profile, cache, deps);
+        buildDependencies(dag, recipe, profile, cache, deps);
 
-    string[string] env;
-    env["PKG_CONFIG_PATH"] = pc ~ pathSeparator ~ environment.get("PKG_CONFIG_PATH", "");
-    profile.collectEnvironment(env);
+        string[string] env;
+        env["PKG_CONFIG_PATH"] = pc ~ pathSeparator ~ environment.get("PKG_CONFIG_PATH", "");
+        profile.collectEnvironment(env);
 
-    runCommand([
-            "meson", "setup", bd.build, "--prefix=" ~ bd.install,
-            "--buildtype=" ~ profile.buildType.toConfig
-            ], bd.src, LogLevel.verbose, env);
+        runCommand([
+                "meson", "setup", bd.build, "--prefix=" ~ bd.install,
+                "--buildtype=" ~ profile.buildType.toConfig
+                ], bd.src, LogLevel.verbose, env);
 
-    runCommand(["meson", "compile"], bd.build);
-    runCommand(["meson", "install"], bd.build);
+        runCommand(["meson", "compile"], bd.build);
+        runCommand(["meson", "install"], bd.build);
+    }
 }
+
