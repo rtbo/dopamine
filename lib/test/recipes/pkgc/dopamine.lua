@@ -20,8 +20,8 @@ return {
     package = function(self, dirs, config, depinfos)
         local install = dop.installer('.', dirs.dest)
 
-        install.file('libpkgc.a', 'lib/libpkgc.a');
-        install.file('pkgc.d', 'include/d/pkgc-' .. self.version .. '/pkgc.d')
+        install.file(dop.assert(dop.find_libfile('.', 'pkgc', 'static')), 'lib');
+        install.file('pkgc.d', 'include/d/pkgc-' .. self.version)
 
         local pc = dop.PkgConfig:new{
             prefix = dirs.dest,

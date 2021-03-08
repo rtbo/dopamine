@@ -50,7 +50,11 @@ end
 -- Return an object containing a file function to install files and a dir function to install dirs.
 function dop.installer(src_dir, dest_dir)
     local inst = {
-        file = function(src, dest)
+        file = function(src, dest, options)
+            if not options or not options.rename == true then
+                local name = dop.base_name(src)
+                dest = dop.path(dest, name)
+            end
             dop.install_file(dop.path(src_dir, src), dop.path(dest_dir, dest))
         end,
         dir = function(src, dest)
