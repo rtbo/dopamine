@@ -126,7 +126,16 @@ unittest
         recipe.pack(bd.toPack(), profile, depInfos);
     });
 
-    assert(isFile(buildPath(bd.install, "lib", "libpkgc.a")));
+    version(Windows)
+    {
+        const libfile = buildPath(bd.install, "lib", "pkgc.lib");
+    }
+    else
+    {
+        const libfile = buildPath(bd.install, "lib", "libpkgc.a");
+    }
+
+    assert(isFile(libfile));
     assert(isFile(buildPath(bd.install, "include", "d", "pkgc-1.0.0", "pkgc.d")));
 }
 
