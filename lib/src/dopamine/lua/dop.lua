@@ -60,6 +60,39 @@ function dop.installer(src_dir, dest_dir)
     return inst
 end
 
+
+local function find_libfile_posix (dir, name, libtype)
+    if not libtype or libtype == 'shared' then
+        local p = dop.path(dir, 'lib' .. name .. '.so')
+        if dop.is_file(p) then return p end
+    elseif not libtype or libtype == 'static' then
+        local p = dop.path(dir, 'lib' .. name .. '.a')
+        if dop.is_file(p) then return p end
+    end
+end
+
+local function find_libfile_win (dir, name, libtype)
+    if not libtype or libtype == 'shared' then
+        local p = dop.path(dir, name .. '.dll')
+        if dop.is_file(p) then return p end
+    elseif not libtype or libtype == 'static' then
+        local p = dop.path(dir, name .. '.lib')
+        if dop.is_file(p) then return p end
+        p = dop.path(dir, 'lib' .. name .. '.a')
+        if dop.is_file(p) then return p end
+    end
+end
+
+-- Function that find a library file in the specified directory
+function dop.find_libfile(dir, name, libtype)
+    if dop.posix then
+        return find_libfile_posix(dir, name, libtype)
+    else
+        return find_libfile_win(dir, name, libtype) 
+    end
+end
+
+
 local Git = create_class('Git')
 
 -- Return a function that checks if the git repo is clean and return the commit revision
