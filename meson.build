@@ -1,17 +1,7 @@
-project('dopamine', 'd',
+project('dopamine', ['c', 'd'],
+    default_options: ['c_std=c99'],
     version: '0.1.0-alpha.1',
 )
-
-lua_bindings = get_option('lua_bindings')
-lua_version = get_option('lua_version')
-
-lua_d_versions = ['LUA_'+lua_version ]
-lua_deps = []
-
-if (lua_bindings == 'static')
-    lua_deps += [ dependency('lua' + lua_version) ]
-    lua_d_versions += [ 'BindBC_Static' ]
-endif
 
 dini_dep = dependency('dini',
     version: '~>2.0.0',
@@ -20,5 +10,8 @@ dini_dep = dependency('dini',
 
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 
+lua_d_versions = ['LUA_53', 'BindBC_Static']
+
+subdir('lua')
 subdir('lib')
 subdir('client')
