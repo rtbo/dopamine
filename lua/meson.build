@@ -42,13 +42,12 @@ lua_lib_src = [
     'linit.c',
 ]
 
-lua_cppargs = []
+lua_cppargs = ['-DLUA_COMPAT_5_3']
 
 if host_machine.system() != 'windows'
     lua_cppargs += [
         '-DLUA_USE_DLOPEN',
         '-DLUA_USE_POSIX',
-        '-DLUA_COMPAT_5_3',
     ]
 endif
 
@@ -56,3 +55,6 @@ lua_lib = static_library('luadop', lua_core_src, lua_auxlib_src, lua_lib_src,
     cpp_args: lua_cppargs,
 )
 
+lua_dep = declare_dependency(
+    link_with: lua_lib,
+)

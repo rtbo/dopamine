@@ -37,14 +37,13 @@ dop_src = files([
 ])
 
 dop_inc = include_directories('src')
-dop_deps = [ dini_dep ]
+dop_deps = [ dini_dep, lua_dep ]
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_src,
     install: true,
     include_directories: dop_inc,
     dependencies: dop_deps,
-    link_with: lua_lib,
     d_import_dirs: dop_imp,
     d_module_versions: lua_d_versions,
 )
@@ -52,7 +51,7 @@ dop_lib = library('dopamine', dop_src,
 dop_dep = declare_dependency(
     include_directories: dop_inc,
     dependencies: dop_deps,
-    link_with: [dop_lib, lua_lib],
+    link_with: [dop_lib],
 )
 
 dop_test_src = dop_src + files([
