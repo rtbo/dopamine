@@ -48,5 +48,5 @@ jobs:
           meson compile -C build
 
       - name: Run dopamine tests
-        run: doptest -t 1 -v
-        working-directory: build/lib
+        run: lib/doptest -t 1 -v
+        working-directory: build
