@@ -8,14 +8,6 @@ dop_src = files([
     'src/bindbc/loader/system.d',
     'src/bindbc/lua/config.d',
     'src/bindbc/lua/package.d',
-    'src/bindbc/lua/v51/binddynamic.d',
-    'src/bindbc/lua/v51/bindstatic.d',
-    'src/bindbc/lua/v51/package.d',
-    'src/bindbc/lua/v51/types.d',
-    'src/bindbc/lua/v52/binddynamic.d',
-    'src/bindbc/lua/v52/bindstatic.d',
-    'src/bindbc/lua/v52/package.d',
-    'src/bindbc/lua/v52/types.d',
     'src/bindbc/lua/v53/binddynamic.d',
     'src/bindbc/lua/v53/bindstatic.d',
     'src/bindbc/lua/v53/package.d',
@@ -46,14 +38,13 @@ dop_src = files([
 ])
 
 dop_inc = include_directories('src')
-dop_deps = [ dini_dep ] + lua_deps
+dop_deps = [ dini_dep, lua_dep ]
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_src,
     install: true,
     include_directories: dop_inc,
     dependencies: dop_deps,
-    # link_whole: dop_conf_lib,
     d_import_dirs: dop_imp,
     d_module_versions: lua_d_versions,
 )
@@ -61,7 +52,7 @@ dop_lib = library('dopamine', dop_src,
 dop_dep = declare_dependency(
     include_directories: dop_inc,
     dependencies: dop_deps,
-    link_with: dop_lib,
+    link_with: [dop_lib],
 )
 
 dop_test_src = dop_src + files([
