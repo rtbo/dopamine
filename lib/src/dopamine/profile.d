@@ -1,6 +1,7 @@
 module dopamine.profile;
 
 import dopamine.util;
+import dopamine.msvc;
 
 import std.algorithm;
 import std.array;
@@ -249,6 +250,10 @@ struct Compiler
     private string _name;
     private string _ver;
     private string _path;
+    version (Windows)
+    {
+        private VsVcInstall _vsvc;
+    }
 
     this(Lang lang, string name, string ver, string path)
     {
@@ -256,6 +261,15 @@ struct Compiler
         _name = name;
         _ver = ver;
         _path = path;
+    }
+
+    version (Windows) this(Lang lang, VsVcInstall vsvc)
+    {
+        _lang = lang;
+        _name = "MSVC";
+        _ver = vsvc.ver.toString();
+        _path = vsvc.installPath;
+        _vsvc = vsvc;
     }
 
     @property Lang lang() const
@@ -268,6 +282,16 @@ struct Compiler
         return _name;
     }
 
+    @property string displayName() const
+    {
+        version (Windows)
+        {
+            if (_vsvc)
+                return _vsvc.displayName;
+        }
+        return _name ~ "-" ~ _ver;
+    }
+
     @property string ver() const
     {
         return _ver;
@@ -278,13 +302,29 @@ struct Compiler
         return _path;
     }
 
+    version (Windows)
+    {
+        @property VsVcInstall vsvc() const
+        {
+            return _vsvc;
+        }
+    }
+
     bool opCast(T : bool)() const
     {
         return _name.length && _ver.length && _path.length;
     }
 
-    private void collectEnvironment(ref string[string] env) const
+    private void collectEnvironment(ref string[string] env, Arch arch) const @trusted
     {
+        version (Windows)
+        {
+            if (_vsvc)
+            {
+                _vsvc.collectEnvironment(env, arch, arch);
+                return;
+            }
+        }
         final switch (_lang)
         {
         case Lang.d:
@@ -307,6 +347,7 @@ struct Compiler
         app.put(format("%sname:    %s\n", ind, name));
         app.put(format("%sversion: %s\n", ind, ver));
         app.put(format("%spath:    %s\n", ind, path));
+        app.put(format("%sdisplay: %s\n", ind, displayName));
     }
 
     private void feedDigest(ref DopDigest digest) const
@@ -324,6 +365,11 @@ struct Compiler
         version (Windows)
         {
             app.put(format("path=%s\n", _path.replace("\\", "\\\\")));
+            if (_vsvc)
+            {
+                app.put(format("msvc_ver=%s\n", _vsvc.productLineVersion));
+                app.put(format("msvc_disp=%s\n", _vsvc.displayName));
+            }
         }
         else
         {
@@ -434,7 +480,7 @@ final class Profile
     }
 
     Profile subset(const(Lang)[] langs) const
-    in(langs.length, "Cannot create a Profile subset without language")
+    in (langs.length, "Cannot create a Profile subset without language")
     {
         Compiler[] comps;
         foreach (l; langs)
@@ -450,7 +496,7 @@ final class Profile
     {
         foreach (c; _compilers)
         {
-            c.collectEnvironment(env);
+            c.collectEnvironment(env, _hostInfo.arch);
         }
     }
 
@@ -581,6 +627,23 @@ final class Profile
             const ver = enforceKey(s, "ver");
             const path = enforceKey(s, "path");
 
+            version (Windows)
+            {
+                if (cname == "MSVC")
+                {
+                    import dopamine.semver : Semver;
+
+                    VsVcInstall install;
+                    install.ver = Semver(ver);
+                    install.installPath = path;
+                    install.productLineVersion = enforceKey(s, "msvc_ver");
+                    install.displayName = enforceKey(s, "msvc_disp");
+                    compilers ~= Compiler(lang, install);
+                    langs ~= lang;
+                    continue;
+                }
+            }
+
             compilers ~= Compiler(lang, cname, ver, path);
             langs ~= lang;
         }
@@ -607,9 +670,9 @@ final class Profile
 }
 
 private static string nameSuffix(const(Lang)[] langs)
-in(langs.length)
-in(isStrictlyMonotonic(langs))
-in(langs.uniq().equal(langs))
+in (langs.length)
+in (isStrictlyMonotonic(langs))
+in (langs.uniq().equal(langs))
 {
     return "-" ~ langs.map!(l => l.toConfig()).join("-");
 }
@@ -684,8 +747,6 @@ import dopamine.util;
 import std.process;
 import std.regex;
 
-// import std.stdio;
-
 HostInfo currentHostInfo()
 {
     version (X86_64)
@@ -751,9 +812,8 @@ shared static this() @trusted
     }
     else version (Windows)
     {
-        // TODO MSVC
-        order[Lang.c] = [&detectGcc, &detectClang];
-        order[Lang.cpp] = [&detectGpp, &detectClangpp];
+        order[Lang.c] = [&detectMsvcC, &detectGcc, &detectClang];
+        order[Lang.cpp] = [&detectMsvcCpp, &detectGpp, &detectClangpp];
     }
 
     import std.exception : assumeUnique;
@@ -766,8 +826,32 @@ string indentStr(int indent)
     return replicate("  ", indent);
 }
 
+version (Windows)
+{
+    Compiler detectMsvcC()
+    {
+        return detectMsvc(Lang.c);
+    }
+
+    Compiler detectMsvcCpp()
+    {
+        return detectMsvc(Lang.cpp);
+    }
+
+    Compiler detectMsvc(Lang lang) @trusted
+    {
+        import dopamine.msvc : VsWhereResult, runVsWhere;
+
+        const result = runVsWhere();
+        if (!result || !result.installs.length)
+            return Compiler.init;
+
+        return Compiler(lang, result.installs[0]);
+    }
+}
+
 Compiler detectCompiler(string[] command, string re, string name, Lang lang)
-in(command.length >= 1)
+in (command.length >= 1)
 {
     command[0] = findProgram(command[0]);
     if (!command[0])

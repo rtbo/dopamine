@@ -9,6 +9,7 @@ import dopamine.dependency;
 import dopamine.deplock;
 import dopamine.log;
 import dopamine.login;
+import dopamine.msvc;
 import dopamine.lua.profile;
 import dopamine.paths;
 import dopamine.profile;
@@ -24,6 +25,7 @@ alias allModules = AliasSeq!(
     dopamine.deplock,
     dopamine.log,
     dopamine.login,
+    dopamine.msvc,
     dopamine.lua.lib,
     dopamine.lua.profile,
     dopamine.paths,

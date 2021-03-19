@@ -92,7 +92,7 @@ function dop.find_libfile(dir, name, libtype)
     if dop.posix then
         return find_libfile_posix(dir, name, libtype)
     else
-        return find_libfile_win(dir, name, libtype) 
+        return find_libfile_win(dir, name, libtype)
     end
 end
 
@@ -252,17 +252,25 @@ function Meson:setup(params)
         table.insert(cmd, '-D' .. k .. '=' .. v)
     end
 
-    cmd['env'] = dop.profile_environment(self.profile)
+    local env = dop.profile_environment(self.profile)
+    cmd.env = env
+    self.env = env
 
     dop.run_cmd(cmd)
 end
 
 function Meson:compile()
-    dop.run_cmd({'meson', 'compile'})
+    dop.run_cmd {
+        'meson', 'compile',
+        env = self.env,
+    }
 end
 
 function Meson:install()
-    dop.run_cmd({'meson', 'install'})
+    dop.run_cmd {
+        'meson', 'install',
+        env = self.env,
+    }
 end
 
 local PkgConfig = create_class('PkgConfig')

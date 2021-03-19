@@ -5,7 +5,21 @@ extern "C"
 {
 #endif
 
-int funca();
+#ifdef _WIN32
+#   ifdef IS_DLL
+#       ifdef PKGA_LIB
+#           define API __declspec(dllexport)
+#       else
+#           define API __declspec(dllimport)
+#       endif
+#   else
+#       define API
+#   endif
+#else
+#   define API
+#endif
+
+API int funca();
 
 #ifdef __cplusplus
 }

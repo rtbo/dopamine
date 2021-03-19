@@ -36,6 +36,7 @@ dop_src = files([
     'src/dopamine/deplock.d',
     'src/dopamine/log.d',
     'src/dopamine/login.d',
+    'src/dopamine/msvc.d',
     'src/dopamine/paths.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',

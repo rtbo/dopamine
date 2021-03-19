@@ -1,7 +1,9 @@
 module dopamine.lua.profile;
 
 import dopamine.lua.util;
+import dopamine.msvc;
 import dopamine.profile;
+import dopamine.semver;
 import bindbc.lua;
 
 package(dopamine):
@@ -37,6 +39,17 @@ void luaPushProfile(lua_State* L, const(Profile) profile)
         luaSetTable(L, compInd, "name", comp.name);
         luaSetTable(L, compInd, "version", comp.ver);
         luaSetTable(L, compInd, "path", comp.path);
+        version(Windows)
+        {
+            if (comp.vsvc)
+            {
+                import dopamine.semver : Semver;
+
+                luaSetTable(L, compInd, "msvc", true);
+                luaSetTable(L, compInd, "msvc_ver", comp.vsvc.productLineVersion);
+                luaSetTable(L, compInd, "msvc_disp", comp.vsvc.displayName);
+            }
+        }
 
         lua_settable(L, compsInd);
     }
@@ -78,6 +91,23 @@ const(Profile) luaReadProfile(lua_State* L, int ind)
         const name = luaGetTable!string(L, -1, "name");
         const ver = luaGetTable!string(L, -1, "version");
         const path = luaGetTable!string(L, -1, "path");
+
+        version(Windows)
+        {
+            const msvc = luaGetTable!bool(L, -1, "msvc", false);
+            if (msvc)
+            {
+                VsVcInstall install;
+                install.installPath = path;
+                install.ver = Semver(ver);
+                install.productLineVersion = luaGetTable!string(L, -1, "msvc_ver");
+                install.displayName = luaGetTable!string(L, -1, "msvc_disp");
+
+                compilers ~= Compiler(lang, install);
+                lua_pop(L, 1);
+                continue;
+            }
+        }
 
         compilers ~= Compiler(lang, name, ver, path);
 

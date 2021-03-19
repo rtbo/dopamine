@@ -1,3 +1,4 @@
+#include "pkga.h"
 
 int funca(int x)
 {
