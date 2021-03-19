@@ -18,9 +18,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Add msbuild to PATH
+      - name: Enable MS Developer Command Prompt
         if: ${{ matrix.os == 'windows-latest' }}
-        uses: microsoft/setup-msbuild@v1
+        uses: ilammy/msvc-dev-cmd@v1.7.0
 
       - name: D Compiler Installation
         uses: dlang-community/setup-dlang@v1.0.6
@@ -38,7 +38,6 @@ jobs:
         run: |
           python -m pip install meson==${{ matrix.meson }}
           python -m pip install ninja
-        shell: bash
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
@@ -47,9 +46,7 @@ jobs:
         run: |
           meson setup build -Ddefault_library=static
           meson compile -C build
-        shell: bash
 
       - name: Run dopamine tests
-        run: lib/doptest -t 1 -v
-        working-directory: build
-        shell: bash
+        run: doptest -t 1 -v
+        working-directory: build/lib
