@@ -11,6 +11,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         dc: [dmd-latest, ldc-latest]
         meson: ['0.57.1']
+        exclude:
+          # excluding LDC on Windows due to meson#8494
+          - os: windows-latest
+            dc: ldc-latest
+            meson: '0.57.1'
 
     runs-on: ${{ matrix.os }}
 
