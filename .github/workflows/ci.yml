@@ -18,6 +18,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Add msbuild to PATH
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: microsoft/setup-msbuild@v1
+
       - name: D Compiler Installation
         uses: dlang-community/setup-dlang@v1.0.6
         with:
