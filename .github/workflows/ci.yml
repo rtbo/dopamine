@@ -23,10 +23,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Enable MS Developer Command Prompt
-        if: ${{ matrix.os == 'windows-latest' }}
-        uses: ilammy/msvc-dev-cmd@v1.7.0
-
       - name: D Compiler Installation
         uses: dlang-community/setup-dlang@v1.0.6
         with:
@@ -46,6 +42,10 @@ jobs:
 
       - name: Install Dub dependencies
         run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
+
+      - name: Enable MS Developer Command Prompt
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: ilammy/msvc-dev-cmd@v1.7.0
 
       - name: Build dopamine
         run: |
