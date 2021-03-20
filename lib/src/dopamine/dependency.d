@@ -298,7 +298,6 @@ unittest
     assert(!VersionSpec("1.2.3").matchVersion("1.2.3-beta"));
 }
 
-
 private:
 
 // [major, (minor), (patch)]

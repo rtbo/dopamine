@@ -10,7 +10,7 @@ import std.typecons;
 
 /// Serialize a resolved DAG to lock-file content
 string dagToLockFile(DepDAG dag, bool emitAllVersions = true) @safe
-in(emitAllVersions || dagIsResolved(dag))
+in (emitAllVersions || dagIsResolved(dag))
 {
     import std.algorithm : map;
     import std.array : appender, join, replicate;
@@ -352,7 +352,7 @@ DepDAG dagFromLockFile(string filename) @trusted
     import std.exception : assumeUnique;
     import std.file : read;
 
-    string content = cast(string)assumeUnique(read(filename));
+    string content = cast(string) assumeUnique(read(filename));
     return dagFromLockFileContent(content, filename);
 }
 

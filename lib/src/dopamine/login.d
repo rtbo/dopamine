@@ -15,7 +15,7 @@ struct LoginKey
     string keyName;
     string key;
 
-    bool opCast(T: bool)() const
+    bool opCast(T : bool)() const
     {
         return userId.length && keyName.length && key.length;
     }
@@ -27,15 +27,15 @@ struct LoginKey
 }
 
 LoginKey readLoginKey() @trusted
-in(isLoggedIn)
+in (isLoggedIn)
 {
-    const json = parseJSON(cast(char[])read(userLoginFile()));
+    const json = parseJSON(cast(char[]) read(userLoginFile()));
     return LoginKey(json["userId"].str, json["keyName"].str, json["key"].str);
 }
 
 void writeLoginKey(LoginKey lk)
 {
-    JSONValue jv = ["userId": lk.userId, "keyName" : lk.keyName, "key" : lk.key];
+    JSONValue jv = ["userId": lk.userId, "keyName": lk.keyName, "key": lk.key];
     const str = jv.toPrettyString();
     write(userLoginFile(), cast(const(void)[]) str);
 }

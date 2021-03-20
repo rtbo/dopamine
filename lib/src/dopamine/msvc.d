@@ -1,6 +1,10 @@
 module dopamine.msvc;
 
-version (Windows)  : import dopamine.log;
+// dfmt off
+version (Windows):
+// dfmt on
+
+import dopamine.log;
 import dopamine.profile;
 import dopamine.semver;
 import dopamine.util;
@@ -128,11 +132,13 @@ VsWhereResult runVsWhere()
     if (!vswhere)
         return VsWhereResult(false);
 
+    // dfmt off
     const res = execute([
-            vswhere, "-all", "-products", "*", "-requires",
-            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-utf8",
-            "-format", "json"
+            vswhere, "-all", "-products", "*",
+            "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-utf8", "-format", "json"
             ]);
+    // dfmt on
 
     if (res.status != 0)
         throw new Exception(format("vswhere.exe failed with exit code %s%s",
@@ -184,8 +190,4 @@ private string programFiles()
     {
         return environment.get("ProgramFiles", "C:\\Program Files");
     }
-}
-
-private void writeEnvScript(string path, const scope ref VsVcInstall install)
-{
 }

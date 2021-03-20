@@ -39,7 +39,7 @@ void luaPushProfile(lua_State* L, const(Profile) profile)
         luaSetTable(L, compInd, "name", comp.name);
         luaSetTable(L, compInd, "version", comp.ver);
         luaSetTable(L, compInd, "path", comp.path);
-        version(Windows)
+        version (Windows)
         {
             if (comp.vsvc)
             {
@@ -92,7 +92,7 @@ const(Profile) luaReadProfile(lua_State* L, int ind)
         const ver = luaGetTable!string(L, -1, "version");
         const path = luaGetTable!string(L, -1, "path");
 
-        version(Windows)
+        version (Windows)
         {
             const msvc = luaGetTable!bool(L, -1, "msvc", false);
             if (msvc)

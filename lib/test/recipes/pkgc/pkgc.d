@@ -1,6 +1,6 @@
 module pkgc;
 
-extern(C) int funca(int x);
+extern (C) int funca(int x);
 
 int funcc(int x)
 {

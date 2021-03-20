@@ -35,7 +35,8 @@ struct API
 
     bool readLogin()
     {
-        if (!isLoggedIn) return false;
+        if (!isLoggedIn)
+            return false;
         transport.login = readLoginKey();
         return true;
     }
@@ -47,7 +48,7 @@ struct API
 
     Response!Package getPackageByName(string name)
     {
-        const uri = resource("/packages", ["name":name]);
+        const uri = resource("/packages", ["name": name]);
         return transport.jsonGet(uri).mapResp!(jv => packageFromJson(jv));
     }
 

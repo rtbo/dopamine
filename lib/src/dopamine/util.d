@@ -17,9 +17,9 @@ import std.traits;
 ///     ext = optional extension to append to the path (must contain '.')
 /// Returns: a path (i.e. location/prefix-{uniquestring}.ext)
 string tempPath(string location = null, string prefix = null, string ext = null)
-in(!location || (exists(location) && isDir(location)))
-in(!ext || ext.startsWith('.'))
-out(res; (!location || res.startsWith(location)) && !exists(res))
+in (!location || (exists(location) && isDir(location)))
+in (!ext || ext.startsWith('.'))
+out (res; (!location || res.startsWith(location)) && !exists(res))
 {
     import std.array : array;
     import std.path : buildPath;
@@ -152,7 +152,7 @@ struct FlagFile
     }
 
     string read() @trusted
-    in(exists)
+    in (exists)
     {
         import std.exception : assumeUnique;
         import std.file : read;
@@ -197,7 +197,7 @@ struct FlagFile
 /// Install a single file, that is copy it to dest unless dest exists and is not older.
 /// Posix only: If preserveLinks is true and src is a symlink, dest is created as a symlink.
 void installFile(const(char)[] src, const(char)[] dest, bool preserveLinks = true)
-in(src.exists && src.isFile, src ~ " does not exist or is not a file")
+in (src.exists && src.isFile, src ~ " does not exist or is not a file")
 {
     import std.path : dirName;
     import std.typecons : Yes;

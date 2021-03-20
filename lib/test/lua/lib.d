@@ -122,8 +122,8 @@ auto catchAll(alias fun)(lua_State* L) nothrow
 int luaTestModule(lua_State* L) nothrow
 {
     const funcs = [
-        "path" : &luaTestPath, "assert_eq" : &luaTestAssertEq,
-        "assert_neq" : &luaTestAssertNEq
+        "path": &luaTestPath, "assert_eq": &luaTestAssertEq,
+        "assert_neq": &luaTestAssertNEq
     ];
 
     lua_createtable(L, 0, cast(int)(funcs.length));

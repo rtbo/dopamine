@@ -136,7 +136,7 @@ final class DependencyCache : CacheRepo
     /// Returns: the list of versions available of the package
     /// Throws: ServerDownException, NoSuchPackageException
     Semver[] packAvailVersions(string packname) @trusted
-    out(res; res.length > 0)
+    out (res; res.length > 0)
     {
         import std.algorithm : map;
         import std.array : array;

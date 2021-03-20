@@ -5,7 +5,6 @@ import test.util : testPath;
 import std.exception : enforce;
 import std.process : execute;
 
-
 shared static this()
 {
     import dopamine.log : minLogLevel, LogLevel;

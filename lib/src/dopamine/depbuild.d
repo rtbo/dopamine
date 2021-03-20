@@ -15,7 +15,7 @@ import std.format;
 
 DepInfo[string] dagCollectDepInfos(DepDAG dag, Recipe recipe,
         const(Profile) profile, CacheRepo depcache, string stageDest = null)
-in(dagIsResolved(dag))
+in (dagIsResolved(dag))
 {
     if (dag.allLangs.length == 0)
     {
@@ -41,7 +41,7 @@ in(dagIsResolved(dag))
 
 DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
         const(Profile) profile, CacheRepo depcache, string stageDest = null)
-in(dagIsResolved(dag))
+in (dagIsResolved(dag))
 {
     import std.path : absolutePath;
 

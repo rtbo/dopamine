@@ -1,3 +1,4 @@
+// dfmt off
 /*
 	This is a slightly modified version of silly that allows integration out of DUB
 */

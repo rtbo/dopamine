@@ -47,7 +47,7 @@ interface CacheRepo
     /// Returns: the list of versions available of the package
     /// Throws: ServerDownException, NoSuchPackageException
     Semver[] packAvailVersions(string packname) @safe
-    out(res; res.length > 0);
+    out (res; res.length > 0);
 
     /// Check whether a package version is in local cache or not
     /// Params:
@@ -424,10 +424,10 @@ void checkDepDAGCompat(DepDAG dag) @trusted
 
 /// Resolves a DAG such as each package has a resolved version
 void resolveDepDAG(DepDAG dag, CacheRepo cacheRepo)
-out(; dagIsResolved(dag))
+out (; dagIsResolved(dag))
 {
     void resolveDeps(DepPack pack)
-    in(pack.resolvedNode)
+    in (pack.resolvedNode)
     {
         foreach (e; pack.resolvedNode.downEdges)
         {
@@ -512,9 +512,9 @@ DepNode[string] dagCollectDependencies(DepNode node) @safe
 /// Each node is associated with its language + the cumulated
 /// languages of its dependencies
 void dagFetchLanguages(DepDAG dag, Recipe rootRecipe, CacheRepo cacheRepo) @system
-in(dagIsResolved(dag))
-in(dag.root.name == rootRecipe.name)
-in(dag.root.resolvedNode.ver == rootRecipe.ver)
+in (dagIsResolved(dag))
+in (dag.root.name == rootRecipe.name)
+in (dag.root.resolvedNode.ver == rootRecipe.ver)
 {
     import std.algorithm : sort, uniq;
     import std.array : array;
@@ -862,7 +862,7 @@ import std.algorithm : isStrictlyMonotonic;
 /// Compatible versions MUST be sorted
 const(Semver) chooseVersion(Heuristics heuristics, CacheRepo cacheRepo,
         string packname, const(Semver)[] compatibleVersions) @safe
-in(compatibleVersions.length > 0 && isStrictlyMonotonic(compatibleVersions))
+in (compatibleVersions.length > 0 && isStrictlyMonotonic(compatibleVersions))
 {
     // shortcut if no choice
     if (compatibleVersions.length == 1)

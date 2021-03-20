@@ -130,26 +130,23 @@ struct Semver
         _metadata = metadata.join('.');
     }
 
-    invariant()
+    invariant ()
     {
         import std.algorithm : all, canFind;
 
         assert(_major >= 0, "major must be positive");
         assert(_minor >= 0, "minor must be positive");
         assert(_patch >= 0, "patch must be positive");
-        assert(allValidChars(_prerelease, true),
-                "prerelease contain invalid characters");
-        assert(!_prerelease.canFind(".."),
-                "prerelease contain empty subsection");
-        assert(allValidChars(_metadata, true),
-                "metadata contain invalid characters");
-        assert(!_metadata.canFind(".."),
-                "metadata contain empty subsection");
+        assert(allValidChars(_prerelease, true), "prerelease contain invalid characters");
+        assert(!_prerelease.canFind(".."), "prerelease contain empty subsection");
+        assert(allValidChars(_metadata, true), "metadata contain invalid characters");
+        assert(!_metadata.canFind(".."), "metadata contain empty subsection");
     }
 
     static bool isValid(string ver) @safe
     {
-        try {
+        try
+        {
             const _ = Semver(ver);
             return true;
         }

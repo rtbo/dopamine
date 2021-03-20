@@ -1,3 +1,4 @@
+// dfmt off
 // for optional dependency
 // for VT on Windows P s = 1 8 → Report the size of the text area in characters as CSI 8 ; height ; width t
 // could be used to have the TE volunteer the size
@@ -7813,5 +7814,3 @@ private version(Windows) {
 	hyperlink sequence: \033[?220hnum;text\033[?220l~
 
 */
-
-

@@ -29,12 +29,12 @@ interface ArchiveBackend
     /// Add all the content of [dir] (excluding [dir] itself)
     /// to the [outpath] archive.
     void create(string dir, string outpath)
-    in(exists(dir) && isDir(dir) && isSupportedArchive(outpath));
+    in (exists(dir) && isDir(dir) && isSupportedArchive(outpath));
 
     /// Extract all the content of [archive] into [outdir]
     /// outdir is created if does not exist.
     void extract(string archive, string outdir)
-    in(exists(archive) && isSupportedArchive(archive));
+    in (exists(archive) && isSupportedArchive(archive));
 
     static ArchiveBackend get()
     {

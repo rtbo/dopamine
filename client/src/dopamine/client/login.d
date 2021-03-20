@@ -13,14 +13,16 @@ int loginMain(string[] args)
     const key = args[1];
     const loginKey = decodeLoginKey(key);
 
-    if (isLoggedIn()) {
+    if (isLoggedIn())
+    {
         const current = readLoginKey();
         logInfo("%s: Replacing former login key: %s", warning("Warning"), info(current.keyName));
     }
 
     writeLoginKey(loginKey);
 
-    logInfo("%s: %s - Registered new key: %s", info("Login"), success("OK"), info(loginKey.keyName));
+    logInfo("%s: %s - Registered new key: %s", info("Login"), success("OK"),
+            info(loginKey.keyName));
 
     return 0;
 }

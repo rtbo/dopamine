@@ -50,7 +50,7 @@ struct FlagState
     bool valid;
     string dir;
 
-    this(bool valid, string dir=null)
+    this(bool valid, string dir = null)
     {
         this.valid = valid;
         this.dir = dir;

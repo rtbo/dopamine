@@ -140,7 +140,7 @@ T luaGetTable(T)(lua_State* L, int tableInd, string key, T defaultVal) nothrow
     return luaPop!T(L, defaultVal);
 }
 
-void luaSetTable(T)(lua_State* L, int tableInd, string key, T value) nothrow
+void luaSetTable(T)(lua_State* L, int tableInd, string key, T value) nothrow 
         if (isLuaScalar!T)
 {
     tableInd = positiveStackIndex(L, tableInd);
@@ -155,7 +155,7 @@ T luaGetGlobal(T)(lua_State* L, string varName) if (isLuaScalar!T)
     return luaPop!T(L);
 }
 
-T luaGetGlobal(T)(lua_State* L, string varName, T defaultVal) nothrow
+T luaGetGlobal(T)(lua_State* L, string varName, T defaultVal) nothrow 
         if (isLuaScalar!T)
 {
     lua_getglobal(L, toStringz(varName));

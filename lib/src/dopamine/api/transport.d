@@ -103,7 +103,7 @@ struct ApiTransport
     /// If the last argument is a `string[string]` associative array, it is used to format a GET query
     /// e.g. path?param1=value1&param2=value2
     string resource(Args...)(string path, Args args)
-    in(path.length == 0 || path[0] == '/')
+    in (path.length == 0 || path[0] == '/')
     {
         import std.algorithm : map;
         import std.array : join;

@@ -126,7 +126,7 @@ unittest
         recipe.pack(bd.toPack(), profile, depInfos);
     });
 
-    version(Windows)
+    version (Windows)
     {
         const libfile = buildPath(bd.install, "lib", "pkgc.lib");
     }
@@ -140,8 +140,9 @@ unittest
 }
 
 // deactivating this test on Windows because of a bug in Meson
-version(Windows)
-{}
+version (Windows)
+{
+}
 else
 {
     @("app.package")
@@ -179,4 +180,3 @@ else
         runCommand(["meson", "install"], bd.build);
     }
 }
-

@@ -97,7 +97,7 @@ struct Recipe
     private RecipePayload d;
 
     private this(RecipePayload d)
-    in(d !is null && d.rc == 1)
+    in (d !is null && d.rc == 1)
     {
         this.d = d;
     }
@@ -234,7 +234,7 @@ struct Recipe
     }
 
     @property string revision()
-    in(isPackage, "Light recipes do not have revision")
+    in (isPackage, "Light recipes do not have revision")
     {
         if (d.revision)
             return d.revision;
@@ -272,7 +272,7 @@ struct Recipe
     /// Execute the 'source' function if the recipe has one and return its result.
     /// Otherwise return the 'source' string variable (default to "." if undefined)
     string source()
-    in(isPackage, "Light recipes do not have source")
+    in (isPackage, "Light recipes do not have source")
     {
         if (d.inTreeSrc)
             return d.inTreeSrc;
@@ -353,7 +353,7 @@ struct Recipe
 
     /// Execute the `build` function of this recipe
     bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
-    in(isPackage, "Light recipes do not build")
+    in (isPackage, "Light recipes do not build")
     {
         auto L = d.L;
 
@@ -394,8 +394,8 @@ struct Recipe
 
     /// Execute the `package` function of this recipe
     void pack(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
-    in(isPackage, "Light recipes do not package")
-    in(d.packFunc, "Recipe has no 'package' function")
+    in (isPackage, "Light recipes do not package")
+    in (d.packFunc, "Recipe has no 'package' function")
     {
         auto L = d.L;
 
@@ -415,7 +415,7 @@ struct Recipe
 
     /// Execute the `patch_install` function of this recipe
     void patchInstall(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
-    in(isPackage, "Light recipes do not patch")
+    in (isPackage, "Light recipes do not patch")
     {
         auto L = d.L;
 
@@ -430,7 +430,8 @@ struct Recipe
             return;
         default:
             const typ = luaL_typename(L, -1).fromStringz.idup;
-            throw new Exception("invalid patch_install symbol: expected a function or nil, got " ~ typ);
+            throw new Exception(
+                    "invalid patch_install symbol: expected a function or nil, got " ~ typ);
         }
 
         lua_pushvalue(L, 1); // push self
@@ -522,7 +523,7 @@ package class RecipePayload
     }
 
     private static RecipePayload parse(string filename, string revision)
-    in(filename !is null)
+    in (filename !is null)
     {
         import std.path : isAbsolute;
 
@@ -571,7 +572,6 @@ package class RecipePayload
             d.description = luaGetTable!string(L, 1, "description", null);
             d.license = luaGetTable!string(L, 1, "license", null);
             d.copyright = luaGetTable!string(L, 1, "copyright", null);
-
 
             {
                 lua_getfield(L, 1, "langs");
@@ -685,7 +685,8 @@ package class RecipePayload
 
             assert(lua_gettop(L) == 1, "Lua stack not clean 2");
         }
-        else {
+        else
+        {
             throw new Exception("Recipe returned multiple results");
         }
 

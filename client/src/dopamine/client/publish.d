@@ -35,9 +35,9 @@ int publishMain(string[] args)
     auto profile = enforceProfileReady(dir, recipe, profileName);
     const profileDirs = dir.profileDirs(profile);
 
-    enforce(checkBuildReady(dir, profileDirs),
-            new FormatLogException("%s: Build is not done or not up-to-date for current profile."
-                ~ " You need at least one successful build for publishing.", error("Error")));
+    enforce(checkBuildReady(dir, profileDirs), new FormatLogException(
+            "%s: Build is not done or not up-to-date for current profile."
+            ~ " You need at least one successful build for publishing.", error("Error")));
 
     API api;
     enforce(api.readLogin(), new FormatLogException(
@@ -85,7 +85,8 @@ int publishMain(string[] args)
     enforce(resp, new FormatLogException(`%s: Unexpected server response: %s - %s`,
             error("Error"), error(resp.code.to!string), resp.error));
 
-    logInfo("%s: %s - %s/%s", info("Publish"), success("OK"), info(format("%s-%s", recipe.name, recipe.ver)), revision);
+    logInfo("%s: %s - %s/%s", info("Publish"), success("OK"),
+            info(format("%s-%s", recipe.name, recipe.ver)), revision);
 
     return 0;
 }

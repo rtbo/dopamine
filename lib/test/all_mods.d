@@ -18,6 +18,7 @@ import dopamine.util;
 import test.lua.ut;
 import test.recipe;
 
+// dfmt off
 alias allModules = AliasSeq!(
     dopamine.api.transport,
     dopamine.depdag,
@@ -35,3 +36,4 @@ alias allModules = AliasSeq!(
     test.lua.ut,
     test.recipe,
 );
+// dfmt on

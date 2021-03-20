@@ -9,19 +9,22 @@ import std.meta;
 string dub = "dub";
 string dc;
 
+// dfmt off
 // package, option, default version
 alias deps = AliasSeq!(
     "dini", "dini", "2.0.0",
     "exceptionhandling", "eh", "1.0.0",
 );
+// dfmt on
 
 string getoptCode()
 {
     string code;
     code ~= `auto helpInfo = getopt(args, "dub", "Dub executable", &dub, "dc", "The D compiler", &dc, `;
-    static foreach(i; 0 .. deps.length / 3)
+    static foreach (i; 0 .. deps.length / 3)
     {
-        code ~= format(`"%s", "override for %s version", &depVers[%s], `, deps[i*3+1], deps[i*3], i);
+        code ~= format(`"%s", "override for %s version", &depVers[%s], `,
+                deps[i * 3 + 1], deps[i * 3], i);
     }
     code ~= ");";
     return code;
@@ -30,9 +33,9 @@ string getoptCode()
 int main(string[] args)
 {
     string[] depVers;
-    static foreach(i; 0 .. deps.length / 3)
+    static foreach (i; 0 .. deps.length / 3)
     {
-        depVers ~= deps[i*3 + 2];
+        depVers ~= deps[i * 3 + 2];
     }
 
     mixin(getoptCode());
@@ -48,9 +51,9 @@ int main(string[] args)
         dc = environment.get("DC", null);
     }
 
-    static foreach(i; 0 .. deps.length / 3)
+    static foreach (i; 0 .. deps.length / 3)
     {
-        ensureDubPkg(deps[i*3], depVers[i]);
+        ensureDubPkg(deps[i * 3], depVers[i]);
     }
 
     return 0;

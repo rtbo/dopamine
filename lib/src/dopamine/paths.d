@@ -158,7 +158,7 @@ struct PackageDir
     /// Get the path to the packed archive
     /// Must be called from the package dir
     string archiveFile(const(Profile) profile, const(Recipe) recipe) const
-    in(profile && recipe)
+    in (profile && recipe)
     {
         import dopamine.archive : ArchiveBackend;
 
