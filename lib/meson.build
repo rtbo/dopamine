@@ -70,10 +70,8 @@ eh_dep = dependency('exceptionhandling',
 )
 
 # all_mods defined in test
-# subdir('test')
-# all_mods is hardcoded instead of generating waiting for meson#8435
-# dop_test_src += all_mods
-dop_test_src += files('test/all_mods.d')
+subdir('test')
+dop_test_src += all_mods
 
 dop_test = executable('doptest', dop_test_src,
     install: false,
