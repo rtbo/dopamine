@@ -5,6 +5,8 @@ import std.range : ElementType, isInputRange;
 import std.traits : isSomeString;
 import std.typecons : Tuple;
 
+@safe:
+
 /// Main structure for INI that contains sections.
 /// Sections that can be iterated through the `sections` member.
 /// Sections can also be indexed by name using the `[]` operator.
@@ -17,7 +19,8 @@ struct Ini
     {
         foreach (s; sections)
         {
-            if (name == s.name) return s;
+            if (name == s.name)
+                return s;
         }
         return Section(name, []);
     }
@@ -29,7 +32,8 @@ struct Ini
 
         foreach (s; sections)
         {
-            if (name == s.name) return s;
+            if (name == s.name)
+                return s;
         }
         throw new RangeError();
     }
@@ -53,7 +57,8 @@ struct Section
     {
         foreach (p; props)
         {
-            if (name == p.name) return p.value;
+            if (name == p.name)
+                return p.value;
         }
         return defValue;
     }
@@ -65,7 +70,8 @@ struct Section
 
         foreach (p; props)
         {
-            if (name == p.name) return p.value;
+            if (name == p.name)
+                return p.value;
         }
         throw new RangeError();
     }
@@ -82,7 +88,8 @@ struct Prop
     string value;
 }
 
-Ini parseIni(R)(R lines) if (isInputRange!R && isSomeString!(ElementType!R))
+@trusted Ini parseIni(R)(R lines)
+        if (isInputRange!R && isSomeString!(ElementType!R))
 {
     import std.exception : enforce;
     import std.string : strip, stripRight, stripLeft;
@@ -99,7 +106,7 @@ Ini parseIni(R)(R lines) if (isInputRange!R && isSomeString!(ElementType!R))
     if (lines.empty)
         return Ini.init;
 
-    auto sn = sectionName(lines.front);
+    string sn = sectionName(lines.front).idup;
     enforce(sn, "Expected a section, found \"" ~ lines.front.strip() ~ "\"");
     lines.popFront();
 
@@ -120,18 +127,18 @@ Ini parseIni(R)(R lines) if (isInputRange!R && isSomeString!(ElementType!R))
     return Ini(sections);
 }
 
-private bool isComment(in string line)
+private bool isComment(S)(S line) if (isSomeString!S)
 {
     import std.string : startsWith;
 
     return line.startsWith(';') || line.startsWith('#');
 }
 
-private string sectionName(in string line)
+private S sectionName(S)(S line) if (isSomeString!S)
 {
     import std.string : strip, startsWith, endsWith;
 
-    const l = line.strip();
+    auto l = line.strip();
 
     if (l.startsWith('[') && l.endsWith(']'))
     {
@@ -141,7 +148,7 @@ private string sectionName(in string line)
     return null;
 }
 
-private Tuple!(Prop[], string) parseProps(R)(ref R lines)
+@trusted private Tuple!(Prop[], string) parseProps(R)(ref R lines)
 {
     import std.algorithm : findSplit;
     import std.exception : enforce;
@@ -159,7 +166,7 @@ private Tuple!(Prop[], string) parseProps(R)(ref R lines)
 
         const sn = sectionName(l);
         if (sn)
-            return tuple(props, sn);
+            return tuple(props, sn.idup);
 
         const nv = l.findSplit("=");
         enforce(nv[1] == "=", `Expected a INI property, but didn't found "="`);
@@ -170,7 +177,7 @@ private Tuple!(Prop[], string) parseProps(R)(ref R lines)
         const value = nv[2].stripLeft();
         enforce(value.length > 0, "INI property value cannot be empty");
 
-        props ~= Prop(name, value);
+        props ~= Prop(name.idup, value.idup);
     }
 
     return tuple(props, string.init);
@@ -186,10 +193,9 @@ unittest
     assert(ini.sections.length == 0);
 }
 
-version(unittest)
+version (unittest)
 {
-    const string simpleIni =
-`[some section]
+    const string simpleIni = `[some section]
 aprop = a value
 another prop= another value
 
@@ -206,13 +212,12 @@ unittest
     assert(ini.sections.length == 2);
     assert(ini.sections[0].name == "some section");
     assert(ini.sections[0].props == [
-        Prop("aprop", "a value"),
-        Prop("another prop", "another value"),
-    ]);
+            Prop("aprop", "a value"), Prop("another prop", "another value"),
+            ]);
     assert(ini.sections[1].name == "a second section");
     assert(ini.sections[1].props == [
-        Prop("yet another prop", "another value"),
-    ]);
+            Prop("yet another prop", "another value"),
+            ]);
 }
 
 @("Resilient to comments")
@@ -220,8 +225,7 @@ unittest
 {
     import std.string : lineSplitter;
 
-    const iniStr =
-`;[a comment]
+    const iniStr = `;[a comment]
 [some section]
 # explanation of this section
 aprop = a value
@@ -235,13 +239,12 @@ yet another prop =another value
     assert(ini.sections.length == 2);
     assert(ini.sections[0].name == "some section");
     assert(ini.sections[0].props == [
-        Prop("aprop", "a value"),
-        Prop("another prop", "another value"),
-    ]);
+            Prop("aprop", "a value"), Prop("another prop", "another value"),
+            ]);
     assert(ini.sections[1].name == "a second section");
     assert(ini.sections[1].props == [
-        Prop("yet another prop", "another value"),
-    ]);
+            Prop("yet another prop", "another value"),
+            ]);
 }
 
 @("Resilient to whitespaces")
@@ -249,8 +252,7 @@ unittest
 {
     import std.string : lineSplitter;
 
-    const iniStr =
-`
+    const iniStr = `
    [some section]
   aprop = a value
                    another prop= another value
@@ -266,13 +268,12 @@ unittest
     assert(ini.sections.length == 2);
     assert(ini.sections[0].name == "some section");
     assert(ini.sections[0].props == [
-        Prop("aprop", "a value"),
-        Prop("another prop", "another value"),
-    ]);
+            Prop("aprop", "a value"), Prop("another prop", "another value"),
+            ]);
     assert(ini.sections[1].name == "a second section");
     assert(ini.sections[1].props == [
-        Prop("yet another prop", "another value"),
-    ]);
+            Prop("yet another prop", "another value"),
+            ]);
 }
 
 @("Index section and props by name")
@@ -285,15 +286,12 @@ unittest
     const sect1 = ini["some section"];
     assert(sect1.name == "some section");
     assert(sect1.props == [
-        Prop("aprop", "a value"),
-        Prop("another prop", "another value"),
-    ]);
+            Prop("aprop", "a value"), Prop("another prop", "another value"),
+            ]);
 
     const sect2 = ini["a second section"];
     assert(sect2.name == "a second section");
-    assert(sect2.props == [
-        Prop("yet another prop", "another value"),
-    ]);
+    assert(sect2.props == [Prop("yet another prop", "another value"),]);
 
     assert(ini["some section"]["aprop"] == "a value");
     assert(ini["a second section"]["yet another prop"] == "another value");
@@ -301,7 +299,7 @@ unittest
 }
 
 @("Behaves if incorrect section or prop")
-unittest
+@trusted unittest
 {
     import core.exception : RangeError;
     import std.exception : assertThrown;
