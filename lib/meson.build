@@ -39,7 +39,7 @@ dop_src = files([
 ])
 
 dop_inc = include_directories('src')
-dop_deps = [ dini_dep, lua_dep ]
+dop_deps = [ lua_dep ]
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_src,
