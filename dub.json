@@ -3,7 +3,6 @@
   "authors": ["Rémi Thebault"],
   "description": "This file is intended to make linting work in IDEs but not for actual building. Use meson for that.",
   "dependencies": {
-      "dini": "~>2.0.0",
       "exceptionhandling": "~>1.0.0"
   },
   "versions": ["LUA_53", "BindBC_Static"],

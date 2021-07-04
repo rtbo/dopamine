@@ -1,5 +1,6 @@
 module dopamine.profile;
 
+import dopamine.ini;
 import dopamine.util;
 import dopamine.msvc;
 
@@ -480,7 +481,7 @@ final class Profile
     }
 
     Profile subset(const(Lang)[] langs) const
-    in (langs.length, "Cannot create a Profile subset without language")
+    in(langs.length, "Cannot create a Profile subset without language")
     {
         Compiler[] comps;
         foreach (l; langs)
@@ -546,13 +547,13 @@ final class Profile
     static Profile loadFromFile(string filename) @trusted
     {
         import std.exception : assumeUnique;
-        import std.file : read;
         import std.path : baseName, stripExtension;
+        import std.stdio : File;
 
-        const ini = cast(string) assumeUnique(read(filename));
         const nameFromFile = baseName(stripExtension(filename));
 
-        return Profile.fromIni(ini, nameFromFile);
+        auto f = File(filename, "r");
+        return parseIniProfile(parseIni(f.byLine()), nameFromFile);
     }
 
     private string toIni(bool withName) const
@@ -584,23 +585,26 @@ final class Profile
 
     static Profile fromIni(string iniString, string defaultName) @trusted
     {
-        import dini : Ini, IniSection;
+        import std.string : lineSplitter;
 
-        auto ini = Ini.ParseString(iniString);
+        return parseIniProfile(parseIni(lineSplitter(iniString)), defaultName);
+    }
 
+    private static Profile parseIniProfile(Ini ini, string defaultName)
+    {
         auto enforceSection(string name)
         {
-            enforce(ini.hasSection(name),
-                    format("Ill-formed profile file: [%s] section is required", name));
-            return ini.getSection(name);
+            const sect = ini.get(name);
+            enforce(sect, format("Ill-formed profile file: [%s] section is required", name));
+            return sect;
         }
 
-        string enforceKey(ref IniSection section, string key)
+        string enforceKey(in Section section, in string key)
         {
-            enforce(section.hasKey(key),
-                    format("Ill-formed profile file: \"%s\" field is required in the [%s] section",
-                        key, section.name));
-            return section.getKey(key);
+            const val = section.get(key);
+            enforce(val, format("Ill-formed profile file: \"%s\" field is required in the [%s] section",
+                    key, section.name));
+            return val;
         }
 
         auto mainSec = enforceSection("main");
@@ -653,13 +657,14 @@ final class Profile
         {
             defaultName = defaultName[0 .. $ - suffix.length];
         }
-        const basename = mainSec.hasKey("basename") ? mainSec.getKey("basename") : defaultName;
+        const basename = mainSec.get("basename", defaultName);
 
         auto p = new Profile(basename, hostInfo, buildType, compilers);
 
-        if (ini.hasSection("digest"))
+        const digestSect = ini.get("digest");
+        if (digestSect)
         {
-            const hash = enforceKey(ini["digest"], "hash");
+            const hash = enforceKey(digestSect, "hash");
             enforce(p.digestHash() == hash,
                     "Digest hash do not match with the one of the profile file");
         }
@@ -670,9 +675,9 @@ final class Profile
 }
 
 private static string nameSuffix(const(Lang)[] langs)
-in (langs.length)
-in (isStrictlyMonotonic(langs))
-in (langs.uniq().equal(langs))
+in(langs.length)
+in(isStrictlyMonotonic(langs))
+in(langs.uniq().equal(langs))
 {
     return "-" ~ langs.map!(l => l.toConfig()).join("-");
 }
@@ -851,7 +856,7 @@ version (Windows)
 }
 
 Compiler detectCompiler(string[] command, string re, string name, Lang lang)
-in (command.length >= 1)
+in(command.length >= 1)
 {
     command[0] = findProgram(command[0]);
     if (!command[0])

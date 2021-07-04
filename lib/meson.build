@@ -26,6 +26,7 @@ dop_src = files([
     'src/dopamine/depdag.d',
     'src/dopamine/dependency.d',
     'src/dopamine/deplock.d',
+    'src/dopamine/ini.d',
     'src/dopamine/log.d',
     'src/dopamine/login.d',
     'src/dopamine/msvc.d',
@@ -38,7 +39,7 @@ dop_src = files([
 ])
 
 dop_inc = include_directories('src')
-dop_deps = [ dini_dep, lua_dep ]
+dop_deps = [ lua_dep ]
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_src,
