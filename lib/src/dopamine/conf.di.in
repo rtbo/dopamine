@@ -1,3 +1,0 @@
-module dopamine.conf;
-
-enum dopamineVersion = "@VERSION@";
