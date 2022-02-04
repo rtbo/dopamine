@@ -15,8 +15,10 @@ dop_src = files([
 
     'src/dopamine/ini.d',
     'src/dopamine/log.d',
-    'src/dopamine/util.d',
+    'src/dopamine/msvc.d',
+    'src/dopamine/profile.d',
     'src/dopamine/semver.d',
+    'src/dopamine/util.d',
 ])
 
 dop_inc = include_directories('src')

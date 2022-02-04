@@ -67,7 +67,7 @@ int showHelp(GetoptResult helpInfo, in Command[] commands)
 
     logInfo("");
     logInfo("%s", info("Commands:"));
-    const maxName = commands.map!(cmd => cmd.name.length).maxElement;
+    const maxName = commands.length ? commands.map!(cmd => cmd.name.length).maxElement : 0;
     foreach (cmd; commands)
     {
         logInfo("    %*s  %s", maxName, cmd.name, cmd.desc);
