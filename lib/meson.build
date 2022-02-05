@@ -13,22 +13,32 @@ dop_src = files([
     'src/bindbc/lua/v53/package.d',
     'src/bindbc/lua/v53/types.d',
 
+    'src/dopamine/lua/lib.d',
+    'src/dopamine/lua/package.d',
+    'src/dopamine/lua/profile.d',
+    'src/dopamine/lua/util.d',
+
+    'src/dopamine/archive.d',
+    'src/dopamine/dependency.d',
     'src/dopamine/ini.d',
     'src/dopamine/log.d',
     'src/dopamine/msvc.d',
     'src/dopamine/profile.d',
+    'src/dopamine/recipe.d',
     'src/dopamine/semver.d',
     'src/dopamine/util.d',
 ])
 
 dop_inc = include_directories('src')
 dop_deps = [ lua_dep ]
+dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_src,
     install: true,
     include_directories: dop_inc,
     dependencies: dop_deps,
     d_module_versions: lua_d_versions,
+    d_import_dirs: dop_imp,
 )
 
 dop_dep = declare_dependency(

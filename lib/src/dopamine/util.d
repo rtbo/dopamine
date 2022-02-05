@@ -1,5 +1,7 @@
 module dopamine.util;
 
+import dopamine.log;
+
 import std.digest;
 import std.file;
 import std.string;
@@ -39,6 +41,14 @@ bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
         break;
     }
     return false;
+}
+
+size_t indexOrLast(string s, char c) pure
+{
+    import std.string : indexOf;
+
+    const ind = s.indexOf(c);
+    return ind >= 0 ? ind : s.length;
 }
 
 /// Generate a unique name for temporary path (either dir or file)
@@ -87,6 +97,48 @@ unittest
     assert(hasDuplicates([1, 2, 3, 4, 1]));
 }
 
+struct SizeOfStr
+{
+    size_t bytes;
+    double size;
+    string unit;
+
+    this(size_t bytes) pure @nogc
+    {
+        enum KiB = 1024;
+        enum MiB = KiB * 1024;
+        enum GiB = MiB * 1024;
+
+        if (bytes >= GiB)
+        {
+            size = bytes / cast(double) GiB;
+            unit = "GiB";
+        }
+        if (bytes >= MiB)
+        {
+            size = bytes / cast(double) MiB;
+            unit = "MiB";
+        }
+        if (bytes >= KiB)
+        {
+            size = bytes / cast(double) KiB;
+            unit = "KiB";
+        }
+        else
+        {
+            size = cast(double) bytes;
+            unit = "B";
+        }
+    }
+
+    string toString() const pure
+    {
+        import std.format : format;
+
+        return format("%.1f %s", size, unit);
+    }
+}
+
 void feedDigestData(D)(ref D digest, in string s) if (isDigest!D)
 {
     digest.put(cast(const(ubyte)[]) s);
@@ -112,6 +164,19 @@ void feedDigestData(D, V)(ref D digest, in V val)
 
     digest.put(nativeToLittleEndian(cast(uint) val));
     digest.put(0);
+}
+
+/// Get all entries directly contained by dir
+string[] allEntries(string dir) @trusted
+{
+    import std.algorithm : map;
+    import std.array : array;
+    import std.file : dirEntries, SpanMode;
+    import std.path : asAbsolutePath, asRelativePath;
+
+    dir = asAbsolutePath(dir).array;
+    return dirEntries(dir, SpanMode.shallow, false).map!(d => d.name.asRelativePath(dir)
+            .array).array;
 }
 
 /// Find a program executable name in the system PATH and return its full path
@@ -179,10 +244,226 @@ string[] searchPatternInEnvPath(in string envPath, in string pattern, in char se
     return res;
 }
 
-size_t indexOrLast(string s, char c) pure
+/// Install a single file, that is copy it to dest unless dest exists and is not older.
+/// Posix only: If preserveLinks is true and src is a symlink, dest is created as a symlink.
+void installFile(const(char)[] src, const(char)[] dest, bool preserveLinks = true)
+in (src.exists && src.isFile, src ~ " does not exist or is not a file")
 {
-    import std.string : indexOf;
+    import std.path : dirName;
+    import std.typecons : Yes;
 
-    const ind = s.indexOf(c);
-    return ind >= 0 ? ind : s.length;
+    version (Posix)
+    {
+        const removeLink = dest.exists && dest.isSymlink;
+
+        if (removeLink)
+            remove(dest);
+
+        if (preserveLinks && isSymlink(src))
+        {
+            const link = readLink(src);
+            mkdirRecurse(dest.dirName);
+            symlink(link, dest);
+
+            logVerbose("%s %s -> %s", removeLink ? "Recreating symlink" : "Creating symlink  ",
+                info(dest), color(Color.cyan, link));
+            return;
+        }
+    }
+
+    if (dest.exists && dest.timeLastModified >= src.timeLastModified)
+    {
+        logVerbose("Up-to-date         %s", info(dest));
+        return;
+    }
+
+    logVerbose("Installing         %s", info(dest));
+
+    mkdirRecurse(dest.dirName);
+    copy(src, dest, Yes.preserveAttributes);
+}
+
+/// Recursively install from [src] to [dest].
+/// If [src] is a file, do a single file install.
+/// If [src] is a directory, do a recursive install.
+/// If [preserveLinks] is true, links in [src] are reproduced in [dest]
+/// If [preserveLinks] is false, a copy of the linked files in [src] are created in [dest]
+/// [preserveLinks] has no effect on Windows (acts as preserveLinks==false)
+void installRecurse(const(char)[] src, const(char)[] dest, bool preserveLinks = true) @system
+{
+    import std.exception : enforce;
+    import std.path : buildNormalizedPath, buildPath, dirName;
+    import std.string : startsWith;
+
+    src = buildNormalizedPath(src);
+    dest = buildNormalizedPath(dest);
+
+    if (isDir(src))
+    {
+        mkdirRecurse(dest);
+
+        auto entries = dirEntries(src.idup, SpanMode.breadth);
+        foreach (entry; entries)
+        {
+            const dst = buildPath(dest, entry.name[src.length + 1 .. $]);
+            // + 1 for the directory separator
+
+            version (Posix)
+            {
+                if (preserveLinks && isSymlink(entry.name))
+                {
+                    const link = readLink(entry.name);
+                    const fullPath = buildPath(dirName(entry.name), link).buildNormalizedPath();
+                    enforce(fullPath.startsWith(src),
+                        new FormatLogException("%s: %s links to %s which is outside of %s",
+                            error("Error"), entry.name, fullPath, src));
+                }
+            }
+
+            if (isFile(entry.name))
+                installFile(entry.name, dst, preserveLinks);
+            else
+                mkdirRecurse(dst);
+        }
+    }
+    else
+        installFile(src, dest, preserveLinks);
+}
+
+@("installRecurse")
+@system unittest
+{
+    import std.path : buildPath;
+
+    const src = tempPath();
+    mkdirRecurse(src);
+    const dest = tempPath();
+
+    scope (exit)
+    {
+        rmdirRecurse(src);
+        rmdirRecurse(dest);
+    }
+
+    // building tree:
+    //  - file1.txt
+    //  - file2.txt
+    //  - file3.txt
+    //  - subdir/file4.txt
+    //  - link1.txt -> file1.txt
+    //  - link2.txt -> link1.txt
+    //  - link3.txt -> subdir/file4.txt
+    //  - subdir/link4.txt -> file4.txt
+    //  - subdir/link5.txt -> link4.txt
+    // (symlinks only created and tested on Posix)
+    mkdir(buildPath(src, "subdir"));
+    write(buildPath(src, "file1.txt"), "file1");
+    write(buildPath(src, "file2.txt"), "file2");
+    write(buildPath(src, "file3.txt"), "file3");
+    write(buildPath(src, "subdir", "file4.txt"), "file4");
+
+    version (Posix)
+    {
+        symlink("file1.txt", buildPath(src, "link1.txt"));
+        symlink("link1.txt", buildPath(src, "link2.txt"));
+        symlink("subdir/file4.txt", buildPath(src, "link3.txt"));
+        symlink("file4.txt", buildPath(src, "subdir", "link4.txt"));
+        symlink("link4.txt", buildPath(src, "subdir", "link5.txt"));
+    }
+
+    installRecurse(src, dest);
+
+    assert(read(buildPath(dest, "file1.txt")) == "file1");
+    assert(read(buildPath(dest, "file2.txt")) == "file2");
+    assert(read(buildPath(dest, "file3.txt")) == "file3");
+    assert(read(buildPath(dest, "subdir", "file4.txt")) == "file4");
+
+    version (Posix)
+    {
+        assert(read(buildPath(dest, "link1.txt")) == "file1");
+        assert(read(buildPath(dest, "link2.txt")) == "file1");
+        assert(read(buildPath(dest, "link3.txt")) == "file4");
+        assert(read(buildPath(dest, "subdir", "link4.txt")) == "file4");
+        assert(read(buildPath(dest, "subdir", "link5.txt")) == "file4");
+
+        assert(readLink(buildPath(dest, "link1.txt")) == "file1.txt");
+        assert(readLink(buildPath(dest, "link2.txt")) == "link1.txt");
+        assert(readLink(buildPath(dest, "link3.txt")) == "subdir/file4.txt");
+        assert(readLink(buildPath(dest, "subdir", "link4.txt")) == "file4.txt");
+        assert(readLink(buildPath(dest, "subdir", "link5.txt")) == "link4.txt");
+    }
+}
+
+void runCommand(in string[] cmd, string workDir = null,
+    LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
+{
+    import std.algorithm : canFind;
+    import std.conv : to;
+    import std.exception : assumeUnique, enforce;
+    import std.process : Config, escapeShellCommand, Pid, spawnProcess, wait;
+    import std.stdio : stdin, stdout, stderr, File;
+
+    version (Windows)
+        enum nullFile = "NUL";
+    else version (Posix)
+        enum nullFile = "/dev/null";
+    else
+        static assert(0);
+
+    auto childStdout = stdout;
+    auto childStderr = stderr;
+    auto config = Config.retainStdout | Config.retainStderr;
+    string outLog;
+    string errLog;
+
+    // TODO buffer stdout and stderr to populate e.g. CommandFailedException
+
+    if (minLogLevel > logLevel)
+    {
+        outLog = tempPath(null, "stdout", ".txt");
+        errLog = tempPath(null, "stderr", ".txt");
+        childStdout = File(outLog, "w");
+        childStderr = File(errLog, "w");
+    }
+
+    if (workDir)
+    {
+        log(logLevel, "Running from %s", info(workDir));
+    }
+
+    const tplt = cmd[0].canFind(' ') ? `"%s" %s` : "%s %s";
+
+    log(logLevel, tplt, info(cmd[0]), cmd[1 .. $].commandRep);
+    auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
+    const status = pid.wait();
+
+    if (status != 0)
+    {
+        import std.file : read;
+        import std.format : format;
+
+        string outMsg;
+        string errMsg;
+        if (outLog)
+        {
+            const content = cast(const(char)[]) read(outLog);
+            outMsg = assumeUnique("\n----- command stdout -----\n" ~ content);
+        }
+        if (errLog)
+        {
+            const content = cast(const(char)[]) read(errLog);
+            errMsg = assumeUnique("\n----- command stderr -----\n" ~ content);
+        }
+
+        throw new FormatLogException("%s: %s failed with code %s\n%s%s%s",
+            error("Error"), info(cmd[0]), status, cmd.commandRep, outMsg, errMsg);
+    }
+}
+
+@property string commandRep(in string[] cmd)
+{
+    import std.algorithm : canFind, map;
+    import std.array : join;
+
+    return cmd.map!(c => c.canFind(' ') ? '"' ~ c ~ '"' : c).join(" ");
 }
