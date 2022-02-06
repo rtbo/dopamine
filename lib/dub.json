@@ -1,0 +1,17 @@
+{
+  "name": "dopamine",
+  "versions": ["LUA_53"],
+  "stringImportPaths": ["src/dopamine/lua"],
+  "configurations": [
+    {
+      "name": "library",
+      "targetType": "library",
+      "sourcePaths": ["src"]
+    },
+    {
+      "name": "tests",
+      "targetType": "executable",
+      "sourcePaths": ["src", "test"]
+    }
+  ]
+}
