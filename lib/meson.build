@@ -13,6 +13,10 @@ dop_src = files([
     'src/bindbc/lua/v53/package.d',
     'src/bindbc/lua/v53/types.d',
 
+    'src/dopamine/api/defs.d',
+    'src/dopamine/api/package.d',
+    'src/dopamine/api/transport.d',
+
     'src/dopamine/lua/lib.d',
     'src/dopamine/lua/package.d',
     'src/dopamine/lua/profile.d',
