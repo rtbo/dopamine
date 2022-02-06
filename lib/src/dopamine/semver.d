@@ -31,22 +31,23 @@ struct Semver
         int _patch;
         string _prerelease;
         string _metadata;
+        bool _not_init; // hidden flag to differentiate Semver("0.0.0") from Semver.init
     }
 
     /// major version
-    @property int major() const pure nothrow @nogc
+    @property uint major() const pure nothrow @nogc
     {
         return _major;
     }
 
     /// minor version
-    @property int minor() const pure nothrow @nogc
+    @property uint minor() const pure nothrow @nogc
     {
         return _minor;
     }
 
     /// patch version
-    @property int patch() const pure nothrow @nogc
+    @property uint patch() const pure nothrow @nogc
     {
         return _patch;
     }
@@ -74,11 +75,13 @@ struct Semver
         import std.exception : assumeUnique, enforce;
         import std.string : split;
 
+        _not_init = true;
+
         const hyp = indexOrLast(semver, '-');
         const plus = indexOrLast(semver, '+');
 
         enforce(hyp == semver.length || hyp <= plus,
-                new InvalidSemverException(semver, "metadata MUST come last"));
+            new InvalidSemverException(semver, "metadata MUST come last"));
 
         const main = semver[0 .. min(hyp, plus)].split('.');
 
@@ -122,6 +125,14 @@ struct Semver
     this(int major, int minor, int patch, string[] prerelease = null, string[] metadata = null) pure
     {
         import std.array : join;
+        import std.exception : enforce;
+
+        _not_init = true;
+
+        enforce(
+            major >= 0 && minor >= 0 && patch >= 0,
+            new InvalidSemverException(null, "Major, minor and patch numbers must all be positive")
+        );
 
         _major = major;
         _minor = minor;
@@ -263,6 +274,11 @@ struct Semver
     {
         return opCmp(Semver(rhs));
     }
+
+    bool opCast(T : bool)() const
+    {
+        return _not_init;
+    }
 }
 
 ///
@@ -299,12 +315,14 @@ unittest
 
     assertThrown!InvalidSemverException(Semver("1"));
     assertThrown!InvalidSemverException(Semver("1.2"));
+    assertThrown!InvalidSemverException(Semver("1.2.-3"));
     assertThrown!InvalidSemverException(Semver("1.2.3.4"));
     assertThrown!InvalidSemverException(Semver("1.2a.3"));
     assertThrown!InvalidSemverException(Semver("1.a2.3"));
     assertThrown!InvalidSemverException(Semver("1.2.3+meta-prerel"));
     assertThrown!InvalidSemverException(Semver("1.2.3-prerel[]"));
     assertThrown!InvalidSemverException(Semver("1.2.3r+meta(bla)"));
+    assertThrown!InvalidSemverException(Semver(-1, 2, 3));
 }
 
 ///
@@ -353,6 +371,15 @@ unittest
     assert(Semver("1.0.0-beta.2") < Semver("1.0.0-beta.11"));
     assert(Semver("1.0.0-beta.11") < Semver("1.0.0-rc.1"));
     assert(Semver("1.0.0-rc.1") < Semver("1.0.0"));
+}
+
+///
+@("Correct Semver cast to bool")
+unittest
+{
+    assert(Semver("1.0.0"));
+    assert(Semver("0.0.0"));
+    assert(!Semver.init);
 }
 
 private:
