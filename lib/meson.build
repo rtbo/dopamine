@@ -19,10 +19,12 @@ dop_src = files([
     'src/dopamine/lua/util.d',
 
     'src/dopamine/archive.d',
-    'src/dopamine/dependency.d',
+    'src/dopamine/depspec.d',
     'src/dopamine/ini.d',
     'src/dopamine/log.d',
     'src/dopamine/msvc.d',
+    'src/dopamine/pack.d',
+    'src/dopamine/paths.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',
     'src/dopamine/semver.d',

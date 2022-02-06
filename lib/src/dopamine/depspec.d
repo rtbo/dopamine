@@ -1,4 +1,4 @@
-module dopamine.dependency;
+module dopamine.depspec;
 
 import dopamine.semver;
 
@@ -6,7 +6,7 @@ import std.exception;
 import std.string;
 
 /// Dependency specification
-struct Dependency
+struct DependencySpec
 {
     /// name of the package
     string name;
