@@ -23,6 +23,7 @@ dop_src = files([
     'src/dopamine/lua/util.d',
 
     'src/dopamine/archive.d',
+    'src/dopamine/dependency.d',
     'src/dopamine/depspec.d',
     'src/dopamine/ini.d',
     'src/dopamine/log.d',
