@@ -6,34 +6,33 @@ import dopamine.lua.lib;
 import dopamine.lua.util;
 
 import bindbc.lua;
+
+import std.path : dirName, buildNormalizedPath;
 import std.string;
 
-__gshared string testDirBase;
-__gshared lua_State* utL; // state only for unit tests, not for recipe tests
+const string testDirBase = buildNormalizedPath(__FILE_FULL_PATH__.dirName.dirName);
 
 shared static this()
 {
-    import std.path : dirName, buildNormalizedPath;
     import dopamine.lua : initLua;
 
     initLua();
-
-    testDirBase = buildNormalizedPath(__FILE_FULL_PATH__.dirName.dirName);
-
-    utL = luaL_newstate();
-
-    luaL_openlibs(utL);
-    luaLoadDopLib(utL);
-
-    luaTestModule(utL);
-    lua_setglobal(utL, "test");
-
-    assert(lua_gettop(utL) == 0);
 }
 
-shared static ~this()
+lua_State* makeTestL()
 {
-    lua_close(utL);
+
+    auto L = luaL_newstate();
+
+    luaL_openlibs(L);
+    luaLoadDopLib(L);
+
+    luaTestModule(L);
+    lua_setglobal(L, "test");
+
+    assert(lua_gettop(L) == 0);
+
+    return L;
 }
 
 int luaTestPath(lua_State* L) nothrow

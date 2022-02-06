@@ -84,6 +84,4 @@ dop_test = executable('doptest', dop_test_src,
     d_unittest: true,
 )
 
-test('dop tests', dop_test,
-    args: ['--threads', '1']
-)
+test('dop tests', dop_test)
