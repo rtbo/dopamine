@@ -119,7 +119,7 @@ auto catchAll(alias fun)(lua_State* L) nothrow
     assert(false);
 }
 
-int luaTestModule(lua_State* L) nothrow
+void luaTestModule(lua_State* L) nothrow
 {
     const funcs = [
         "path": &luaTestPath, "assert_eq": &luaTestAssertEq,
@@ -137,6 +137,4 @@ int luaTestModule(lua_State* L) nothrow
             lua_settable(L, libInd);
         }
     });
-
-    return 1;
 }
