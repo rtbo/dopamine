@@ -22,6 +22,7 @@ dop_src = files([
     'src/dopamine/depspec.d',
     'src/dopamine/ini.d',
     'src/dopamine/log.d',
+    'src/dopamine/login.d',
     'src/dopamine/msvc.d',
     'src/dopamine/pack.d',
     'src/dopamine/paths.d',
