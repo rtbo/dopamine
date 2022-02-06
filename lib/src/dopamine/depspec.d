@@ -5,15 +5,6 @@ import dopamine.semver;
 import std.exception;
 import std.string;
 
-/// Dependency specification
-struct DependencySpec
-{
-    /// name of the package
-    string name;
-    /// version specification
-    VersionSpec spec;
-}
-
 /// Exception thrown when parsing invalid Version Specification
 class InvalidVersionSpecException : Exception
 {

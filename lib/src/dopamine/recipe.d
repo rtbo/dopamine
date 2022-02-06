@@ -15,6 +15,12 @@ import std.string;
 import std.stdio;
 import std.variant;
 
+/// A recipe dependency specification
+struct DepSpec {
+    string name;
+    VersionSpec spec;
+}
+
 enum BuildOptionType
 {
     boolean,
@@ -187,7 +193,7 @@ struct Recipe
         return d.depFunc || d.dependencies.length != 0;
     }
 
-    @property const(DependencySpec)[] dependencies(const(Profile) profile) @system
+    @property const(DepSpec)[] dependencies(const(Profile) profile) @system
     {
         if (!d.depFunc)
             return d.dependencies;
@@ -451,7 +457,7 @@ struct Recipe
         return Recipe(d);
     }
 
-    static Recipe mock(string name, Semver ver, DependencySpec[] deps, Lang[] langs, string revision) @trusted
+    static Recipe mock(string name, Semver ver, DepSpec[] deps, Lang[] langs, string revision) @trusted
     {
         import bindbc.lua : lua_createtable;
 
@@ -479,7 +485,7 @@ package class RecipePayload
     string copyright;
     Lang[] langs;
 
-    DependencySpec[] dependencies;
+    DepSpec[] dependencies;
     bool depFunc;
 
     string inTreeSrc;
@@ -714,7 +720,7 @@ string sha1RevisionFromFile(string filename) @safe
 
 /// Read a dependency table from top of the stack.
 /// The table is left on the stack after return
-DependencySpec[] readDependencies(lua_State* L) @trusted
+DepSpec[] readDependencies(lua_State* L) @trusted
 {
     const typ = lua_type(L, -1);
     if (typ == LUA_TNIL)
@@ -722,7 +728,7 @@ DependencySpec[] readDependencies(lua_State* L) @trusted
 
     enforce(typ == LUA_TTABLE, "invalid dependencies return type");
 
-    DependencySpec[] res;
+    DepSpec[] res;
 
     // first key
     lua_pushnil(L);
@@ -732,7 +738,7 @@ DependencySpec[] readDependencies(lua_State* L) @trusted
         scope (failure)
             lua_pop(L, 1);
 
-        DependencySpec dep;
+        DepSpec dep;
         dep.name = enforce(luaTo!string(L, -2, null),
                 // probably a number key (dependencies specified as array)
                 // relying on lua_tostring for having a correct string inference
