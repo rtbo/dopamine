@@ -1,9 +1,9 @@
 module dopamine.recipe;
 
+import dopamine.dep.spec;
 import dopamine.lua.lib;
 import dopamine.lua.profile;
 import dopamine.lua.util;
-import dopamine.depspec;
 import dopamine.profile;
 import dopamine.semver;
 

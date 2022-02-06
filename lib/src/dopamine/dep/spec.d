@@ -1,4 +1,4 @@
-module dopamine.depspec;
+module dopamine.dep.spec;
 
 import dopamine.semver;
 

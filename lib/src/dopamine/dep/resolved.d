@@ -1,6 +1,6 @@
-module dopamine.dependency;
+module dopamine.dep.resolved;
 
-import dopamine.depspec;
+import dopamine.dep.spec;
 import dopamine.semver;
 import dopamine.recipe;
 
