@@ -192,6 +192,7 @@ struct Heuristics
 @("Heuristics.chooseVersion")
 unittest
 {
+    // dfmt off
     // semantics of versions do not really matter here, only the order
     const compatibleVersions1 = [
         AvailVersion(Semver("1.0.0"), DepLocation.system),
@@ -242,14 +243,12 @@ unittest
             AvailVersion(Semver("2.0.0"), DepLocation.cache));
 
     assert(heuristicsHighest.chooseVersion(compatibleVersions1) ==
-            AvailVersion(
-                Semver("3.0.0"), DepLocation.cache));
+            AvailVersion(Semver("3.0.0"), DepLocation.cache));
     assert(heuristicsHighest.chooseVersion(compatibleVersions2) ==
-            AvailVersion(
-                Semver("3.0.0"), DepLocation.network));
+            AvailVersion(Semver("3.0.0"), DepLocation.network));
     assert(heuristicsHighest.chooseVersion(compatibleVersions3) ==
-            AvailVersion(
-                Semver("3.0.0"), DepLocation.network));
+            AvailVersion(Semver("3.0.0"), DepLocation.network));
+    // dfmt on
 }
 
 /// A Directed Acyclic Graph for depedency resolution.
@@ -258,7 +257,7 @@ unittest
 /// and the provided algorithms.
 struct DepDAG
 {
-    import std.typecons : Flag, No;
+    import std.typecons : Flag, No, Yes;
 
     private DagPack _root;
     private Heuristics _heuristics;
@@ -463,7 +462,6 @@ struct DepDAG
     @property bool resolved() @safe
     {
         import std.algorithm : all;
-        import std.typecons : Yes;
 
         return traverseTopDown(Yes.root).all!((DagPack p) {
             return p.resolvedNode !is null;
@@ -591,8 +589,7 @@ struct DepDAG
                 return;
 
             const rec = pack is root ?
-                    rootRecipe :
-                    service.packRecipe(pack.name, pack.resolvedNode.aver);
+        rootRecipe : service.packRecipe(pack.name, pack.resolvedNode.aver);
 
             // resolvedNode may have been previously traversed,
             // we add the previously found languages
@@ -607,6 +604,143 @@ struct DepDAG
 
         foreach (l; collectLeaves())
             traverse(l, []);
+    }
+
+    /// Issue a GraphViz' Dot representation of the graph
+    string toDot() @safe
+    {
+        import std.algorithm : find;
+        import std.array : appender, replicate;
+        import std.format : format;
+        import std.string : join;
+
+        auto w = appender!string;
+        int indent = 0;
+
+        void line(Args...)(string lfmt, Args args) @safe
+        {
+            static if (Args.length == 0)
+            {
+                w.put(replicate("  ", indent) ~ lfmt ~ "\n");
+            }
+            else
+            {
+                w.put(replicate("  ", indent) ~ format(lfmt, args) ~ "\n");
+            }
+        }
+
+        void block(string header, void delegate() @safe dg) @safe
+        {
+            line(header ~ " {");
+            indent += 1;
+            dg();
+            indent -= 1;
+            line("}");
+        }
+
+        string[string] packGNames;
+        uint packNum = 1;
+        string[string] nodeGNames;
+        uint nodeNum = 1;
+
+        string nodeId(string packname, const(AvailVersion) aver) @safe
+        {
+            return format("%s-%s-%s", packname, aver.ver, aver.location);
+        }
+
+        string nodeGName(string packname, const(AvailVersion) aver) @safe
+        {
+            const id = nodeId(packname, aver);
+            const res = nodeGNames[id];
+            assert(res, "unprocessed version: " ~ id);
+            return res;
+        }
+
+        block("digraph G", {
+            line("");
+            line("graph [compound=true ranksep=1];");
+            line("");
+
+            // write clusters / pack
+
+            foreach (pack; traverseTopDown(Yes.root))
+            {
+                const name = format("cluster_%s", packNum++);
+                packGNames[pack.name] = name;
+
+                const(AvailVersion)[] allVersions = pack.allVersions;
+                const(AvailVersion)[] consideredVersions = pack.consideredVersions;
+
+                block("subgraph " ~ name, {
+
+                    line("label = \"%s\";", pack.name);
+                    line("node [shape=box];");
+
+                    foreach (v; allVersions)
+                    {
+                        const nid = nodeId(pack.name, v);
+                        const ngn = format("ver_%s", nodeNum++);
+                        nodeGNames[nid] = ngn;
+
+                        const considered = consideredVersions.find(v).length > 0;
+                        string style = "dashed";
+                        string color = "";
+                        if (pack.resolvedNode && pack.resolvedNode.aver == v)
+                        {
+                            style = `"filled,solid"`;
+                            color = ", color=teal";
+                        }
+                        else if (considered)
+                        {
+                            style = `"filled,solid"`;
+                        }
+
+                        line(
+                        `%s [label="%s (%s)", style=%s%s];`,
+                        ngn, v.ver, v.location, style, color
+                        );
+                    }
+                });
+                line("");
+
+            }
+
+            // write all edges
+
+            foreach (pack; traverseTopDown(Yes.root))
+            {
+                foreach (n; pack.nodes)
+                {
+                    const ngn = nodeGName(pack.name, n.aver);
+                    foreach (e; n.downEdges)
+                    {
+                        // if down pack has a resolved version, we point to it directly
+                        // otherwise we point to subgraph (the pack).
+
+                        // To point to a subgraph, we still must point to a particular node
+                        // in the subgraph and specify lhead
+                        // we pick the last highest version in an arbitrary way
+                        // it makes the arrows point towards it, but stop at the subgraph border
+
+                        auto downNode = e.down.resolvedNode
+                            ? e.down.resolvedNode.aver : e.down.consideredVersions[$ - 1];
+                        const downNgn = nodeGName(e.down.name, downNode);
+
+                        string head = "";
+                        if (!e.onResolvedPath)
+                        {
+                            const downPgn = packGNames[e.down.name];
+                            assert(ngn, "unprocessed package: " ~ ngn);
+                            head = "lhead=" ~ downPgn ~ " ";
+                        }
+                        // space around label to provide some margin
+                        line(`%s -> %s [%slabel=" %s  "];`, ngn, downNgn, head, e.spec);
+                    }
+                }
+            }
+        });
+
+        return w.data;
     }
 }
 
