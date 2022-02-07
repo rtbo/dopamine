@@ -898,14 +898,14 @@ Compiler detectDmd()
 
 Compiler detectGcc()
 {
-    enum versionRe = `^gcc.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
+    enum versionRe = `^gcc.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
 
     return detectCompiler(["gcc", "--version"], versionRe, "GCC", Lang.c);
 }
 
 Compiler detectGpp()
 {
-    enum versionRe = `^g\+\+.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
+    enum versionRe = `^g\+\+.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)$`;
 
     return detectCompiler(["g++", "--version"], versionRe, "G++", Lang.cpp);
 }
@@ -940,6 +940,16 @@ unittest
     if (findProgram("gcc"))
     {
         const cl = detectGcc();
+        assert(cl.path.length);
+    }
+}
+
+@("detectGpp")
+unittest
+{
+    if (findProgram("g++"))
+    {
+        const cl = detectGpp();
         assert(cl.path.length);
     }
 }
