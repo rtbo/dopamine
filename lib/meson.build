@@ -66,6 +66,8 @@ dop_test_src = dop_src + files([
     'test/lua/ut.d',
 ])
 
+dop_test_imp = [dop_imp, include_directories('test/data')]
+
 eh_dep = dependency('exceptionhandling',
     version: '~>1.0.0',
     method: 'dub',
@@ -79,7 +81,7 @@ dop_test = executable('doptest', dop_test_src,
     install: false,
     include_directories: [ dop_inc, include_directories('.') ],
     dependencies: dop_deps + [ eh_dep ],
-    d_import_dirs: dop_imp,
+    d_import_dirs: dop_test_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,
 )

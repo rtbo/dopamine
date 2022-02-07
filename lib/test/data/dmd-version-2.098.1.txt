@@ -1,0 +1,3 @@
+DMD64 D Compiler v2.098.1
+
+Copyright (C) 1999-2021 by The D Language Foundation, All Rights Reserved written by Walter Bright

@@ -481,7 +481,7 @@ final class Profile
     }
 
     Profile subset(const(Lang)[] langs) const
-    in(langs.length, "Cannot create a Profile subset without language")
+    in (langs.length, "Cannot create a Profile subset without language")
     {
         Compiler[] comps;
         foreach (l; langs)
@@ -666,18 +666,31 @@ final class Profile
         {
             const hash = enforceKey(digestSect, "hash");
             enforce(p.digestHash() == hash,
-                    "Digest hash do not match with the one of the profile file");
+                "Digest hash do not match with the one of the profile file");
         }
 
         return p;
     }
+}
 
+version (unittest) Profile mockProfileLinux()
+{
+    return new Profile(
+        "mock",
+        HostInfo(Arch.x86_64, OS.linux),
+        BuildType.debug_,
+        [
+            Compiler(Lang.d, "DMD", "2.098.1", "/usr/bin/dmd"),
+            Compiler(Lang.cpp, "G++", "11.1.0", "/usr/bin/g++"),
+            Compiler(Lang.c, "GCC", "11.1.0", "/usr/bin/gcc"),
+        ]
+    );
 }
 
 private static string nameSuffix(const(Lang)[] langs)
-in(langs.length)
-in(isStrictlyMonotonic(langs))
-in(langs.uniq().equal(langs))
+in (langs.length)
+in (isStrictlyMonotonic(langs))
+in (langs.uniq().equal(langs))
 {
     return "-" ~ langs.map!(l => l.toConfig()).join("-");
 }
@@ -748,9 +761,6 @@ Profile detectDefaultProfile(Lang[] langs)
 private:
 
 import dopamine.util;
-
-import std.process;
-import std.regex;
 
 HostInfo currentHostInfo()
 {
@@ -855,9 +865,22 @@ version (Windows)
     }
 }
 
-Compiler detectCompiler(string[] command, string re, string name, Lang lang)
-in(command.length >= 1)
+string extractCompilerVersion(string versionOutput, string re)
 {
+    import std.exception : enforce;
+    import std.regex : matchFirst, regex;
+
+    auto verMatch = matchFirst(versionOutput, regex(re, "m"));
+    enforce(verMatch.length >= 2, format("Compiler version not found. Command output:\n%s",
+            versionOutput));
+    return verMatch[1];
+}
+
+Compiler detectCompiler(string[] command, string re, string name, Lang lang)
+in (command.length >= 1)
+{
+    import std.process : execute, Config;
+
     command[0] = findProgram(command[0]);
     if (!command[0])
         return Compiler.init;
@@ -866,110 +889,79 @@ in(command.length >= 1)
     if (result.status != 0)
         return Compiler.init;
 
-    auto verMatch = matchFirst(result.output, regex(re, "m"));
-    if (verMatch.length < 2)
-    {
-        throw new Exception(format("Could not determine %s version. Command output:\n%s",
-                name, result.output));
-    }
-    const ver = verMatch[1];
+    const ver = extractCompilerVersion(result.output, re);
+
     const path = command[0];
 
     return Compiler(lang, name, ver, path);
 }
 
+enum ldcVersionRe = `^LDC.*\((\d+\.\d+\.\d+[A-Za-z0-9.+-]*)\):$`;
+enum dmdVersionRe = `^DMD.*v(\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
+enum gccVersionRe = `^gcc.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
+enum gppVersionRe = `^g\+\+.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
+enum clangVersionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
+
 Compiler detectLdc()
 {
-    enum versionRe = `^LDC.*\((\d+\.\d+\.\d+[A-Za-z0-9.+-]*)\):$`;
-
-    auto comp = detectCompiler(["ldc", "--version"], versionRe, "LDC", Lang.d);
+    auto comp = detectCompiler(["ldc", "--version"], ldcVersionRe, "LDC", Lang.d);
     if (!comp)
-        comp = detectCompiler(["ldc2", "--version"], versionRe, "LDC", Lang.d);
+        comp = detectCompiler(["ldc2", "--version"], ldcVersionRe, "LDC", Lang.d);
 
     return comp;
 }
 
 Compiler detectDmd()
 {
-    enum versionRe = `^DMD.*v(\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
-
-    return detectCompiler(["dmd", "--version"], versionRe, "DMD", Lang.d);
+    return detectCompiler(["dmd", "--version"], dmdVersionRe, "DMD", Lang.d);
 }
 
 Compiler detectGcc()
 {
-    enum versionRe = `^gcc.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
-
-    return detectCompiler(["gcc", "--version"], versionRe, "GCC", Lang.c);
+    return detectCompiler(["gcc", "--version"], gccVersionRe, "GCC", Lang.c);
 }
 
 Compiler detectGpp()
 {
-    enum versionRe = `^g\+\+.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)$`;
-
-    return detectCompiler(["g++", "--version"], versionRe, "G++", Lang.cpp);
+    return detectCompiler(["g++", "--version"], gppVersionRe, "G++", Lang.cpp);
 }
 
 Compiler detectClang()
 {
-    enum versionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
-
-    return detectCompiler(["clang", "--version"], versionRe, "CLANG", Lang.c);
+    return detectCompiler(["clang", "--version"], clangVersionRe, "CLANG", Lang.c);
 }
 
 Compiler detectClangpp()
 {
-    enum versionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
-
-    return detectCompiler(["clang++", "--version"], versionRe, "CLANG++", Lang.cpp);
+    return detectCompiler(["clang++", "--version"], clangVersionRe, "CLANG++", Lang.cpp);
 }
 
-@("detectClang")
+@("extract Clang version")
 unittest
 {
-    if (findProgram("clang"))
-    {
-        const cl = detectClang();
-        assert(cl.path.length);
-    }
+    auto output = import("clang-version-13.0.0.txt");
+    assert(extractCompilerVersion(output, clangVersionRe) == "13.0.0");
 }
 
-@("detectGcc")
+@("extract gcc/g++ version")
 unittest
 {
-    if (findProgram("gcc"))
-    {
-        const cl = detectGcc();
-        assert(cl.path.length);
-    }
+    auto output = import("gcc-version-11.1.0.txt");
+    assert(extractCompilerVersion(output, gccVersionRe) == "11.1.0");
+    output = import("g++-version-11.1.0.txt");
+    assert(extractCompilerVersion(output, gppVersionRe) == "11.1.0");
 }
 
-@("detectGpp")
+@("extract DMD version")
 unittest
 {
-    if (findProgram("g++"))
-    {
-        const cl = detectGpp();
-        assert(cl.path.length);
-    }
+    auto output = import("dmd-version-2.098.1.txt");
+    assert(extractCompilerVersion(output, dmdVersionRe) == "2.098.1");
 }
 
-@("detectDmd")
+@("extract LDC version")
 unittest
 {
-    if (findProgram("dmd"))
-    {
-        const cl = detectDmd();
-        assert(cl.path.length);
-    }
-}
-
-@("detectLdc")
-unittest
-{
-    if (findProgram("ldc"))
-    {
-        const cl = detectLdc();
-        assert(cl.path.length);
-    }
+    auto output = import("ldc-version-1.28.1.txt");
+    assert(extractCompilerVersion(output, ldcVersionRe) == "1.28.1");
 }
