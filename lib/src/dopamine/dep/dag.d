@@ -11,6 +11,8 @@
 /// The directions up and down used in this module refer to the following
 /// - The DAG root is at the top. This is the package for which dependencies are resolved
 /// - The DAG leaves are at the bottom. These are the dependencies that do not have dependencies themselves.
+///
+/// The strategy of resolution is dictated by the [Heuristics] struct.
 module dopamine.dep.dag;
 
 import dopamine.dep.service;
@@ -139,7 +141,8 @@ struct Heuristics
         case Mode.preferLocal:
             systemScore = highScore;
             cacheScore = highScore + 1; // cache is prefered over system
-            verBumpScore = lowScore + 1; // avoid tie if we have system one version above the last cache
+            // the following +1 avoids tie if we have system one version above the last cache
+            verBumpScore = lowScore + 1;
             break;
 
         case Mode.pickHighest:
@@ -257,6 +260,7 @@ struct DepDAG
     import std.typecons : Flag, No;
 
     private DagPack _root;
+    private Heuristics _heuristics;
 
     /// Prepare a Dependency DAG for the given parameters.
     /// The recipe is the one of the root package.
@@ -308,7 +312,7 @@ struct DepDAG
 
         void doPackVersion(Recipe rec, DagPack pack, AvailVersion aver)
         {
-            auto node = pack.getOrCreateNode(aver.ver);
+            auto node = pack.getOrCreateNode(aver);
             if (visited.canFind(node))
             {
                 return;
@@ -388,7 +392,7 @@ struct DepDAG
                     if (rem)
                     {
                         diff = true;
-                        pack.removeNode(n.ver);
+                        pack.removeNode(n.aver);
                         foreach (e; n.downEdges)
                         {
                             e.down.upEdges = e.down.upEdges.remove!(ue => ue == e);
@@ -406,15 +410,63 @@ struct DepDAG
         }
     }
 
-    @property inout(DagPack) root() inout @safe
+    /// Final phase of to attribute a resolved version to each package
+    void resolve()
     {
-        return _root;
+        void resolveDeps(DagPack pack)
+        in (pack.resolvedNode)
+        {
+            foreach (e; pack.resolvedNode.downEdges)
+            {
+                if (e.down.resolvedNode)
+                    continue;
+
+                const resolved = _heuristics.chooseVersion(e.down.consideredVersions);
+
+                foreach (n; e.down.nodes)
+                {
+                    if (n.aver == resolved)
+                    {
+                        e.down.resolvedNode = n;
+                        break;
+                    }
+                }
+                resolveDeps(e.down);
+            }
+        }
+
+        root.resolvedNode = root.nodes[0];
+        resolveDeps(root);
     }
 
     /// Check whether this DAG was prepared
     bool opCast(T : bool)() const @safe
     {
         return _root !is null;
+    }
+
+    /// The root node of the graph
+    @property inout(DagPack) root() inout @safe
+    {
+        return _root;
+    }
+
+    /// The heuristics used to resolve this graph
+    @property inout(Heuristics) heuristics() inout @safe
+    {
+        return _heuristics;
+    }
+
+    /// Check whether the graph is resolved.
+    // FIXME makes this const by allowing const traversals
+    @property bool resolved() @safe
+    {
+        import std.algorithm : all;
+        import std.typecons : Yes;
+
+        return traverseTopDown(Yes.root).all!((DagPack p) {
+            return p.resolvedNode !is null;
+        });
     }
 
     /// Get the languages involved in the DAG
@@ -482,14 +534,14 @@ struct DepDAG
     }
 
     /// Collect all leaves from a graph, that is nodes without leaving edges
-    DagPack[] collectLeaves() @safe
+    inout(DagPack)[] collectLeaves() inout @safe
     {
         import std.algorithm : canFind;
 
-        DagPack[] traversed;
-        DagPack[] leaves;
+        inout(DagPack)[] traversed;
+        inout(DagPack)[] leaves;
 
-        void collectLeaves(DagPack pack) @trusted
+        void collectLeaves(inout(DagPack) pack) @trusted
         {
             if (traversed.canFind(pack))
                 return;
@@ -542,36 +594,44 @@ class DagPack
 
     /// Get node that match with [ver]
     /// Create one if doesn't exist
-    package DagNode getOrCreateNode(const(Semver) ver) @safe
+    package DagNode getOrCreateNode(const(AvailVersion) aver) @safe
     {
         foreach (n; nodes)
         {
-            if (n.ver == ver)
+            if (n.aver == aver)
                 return n;
         }
-        auto node = new DagNode(this, ver);
+        auto node = new DagNode(this, aver);
         nodes ~= node;
         return node;
     }
 
     /// Get existing node that match with [ver], or null
-    package DagNode getNode(const(Semver) ver) @safe
+    package DagNode getNode(const(AvailVersion) aver) @safe
     {
         foreach (n; nodes)
         {
-            if (n.ver == ver)
+            if (n.aver == aver)
                 return n;
         }
         return null;
     }
 
+    const(AvailVersion)[] consideredVersions() const @safe
+    {
+        import std.algorithm : map;
+        import std.array : array;
+
+        return nodes.map!(n => n.aver).array;
+    }
+
     /// Remove node matching with ver.
     /// Do not perform any cleanup in up/down edges
-    private void removeNode(Semver ver) @safe
+    private void removeNode(const(AvailVersion) aver) @safe
     {
         import std.algorithm : remove;
 
-        nodes = nodes.remove!(n => n.ver == ver);
+        nodes = nodes.remove!(n => n.aver == aver);
     }
 }
 
@@ -579,14 +639,29 @@ class DagPack
 /// and a set of sub-dependencies.
 class DagNode
 {
+    this(DagPack pack, AvailVersion aver) @safe
+    {
+        this.pack = pack;
+        this.aver = aver;
+    }
+
     /// The package owner of this version node
     DagPack pack;
 
+    /// The package version and location of this node
+    AvailVersion aver;
+
     /// The package version
-    Semver ver;
+    @property Semver ver() const @safe
+    {
+        return aver.ver;
+    }
 
     /// The package location
-    DepLocation location;
+    @property DepLocation location() const @safe
+    {
+        return aver.location;
+    }
 
     /// The package revision
     string revision;
@@ -600,12 +675,6 @@ class DagNode
 
     /// User data
     Object userData;
-
-    this(DagPack pack, Semver ver) @safe
-    {
-        this.pack = pack;
-        this.ver = ver;
-    }
 
     bool isResolved() const @trusted
     {
@@ -642,9 +711,9 @@ class DagEdge
 
 private:
 
-DagPack[] getMoreDown(DagPack pack)
+inout(DagPack)[] getMoreDown(inout(DagPack) pack)
 {
-    DagPack[] downs;
+    inout(DagPack)[] downs;
     foreach (n; pack.nodes)
     {
         foreach (e; n.downEdges)
@@ -655,6 +724,7 @@ DagPack[] getMoreDown(DagPack pack)
     return downs;
 }
 
+// compilation fail if inout - to be investigated
 DagPack[] getMoreUp(DagPack pack)
 {
     import std.algorithm : map;
@@ -663,8 +733,8 @@ DagPack[] getMoreUp(DagPack pack)
     return pack.upEdges.map!(e => e.up.pack).array;
 }
 
-alias DepthFirstTopDownRange = DepthFirstRange!getMoreDown;
-alias DepthFirstBottomUpRange = DepthFirstRange!getMoreUp;
+alias DepthFirstTopDownRange = DepthFirstRange!(getMoreDown);
+alias DepthFirstBottomUpRange = DepthFirstRange!(getMoreUp);
 
 struct DepthFirstRange(alias getMore)
 {
