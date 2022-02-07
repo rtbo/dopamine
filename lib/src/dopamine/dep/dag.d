@@ -336,7 +336,7 @@ struct DepDAG
                 DagEdge.create(node, dp, dep.spec);
 
                 const dv = heuristics.chooseVersion(dp.allVersions);
-                doPackVersion(service.packRecipe(dep.name, dv.ver), dp, dv);
+                doPackVersion(service.packRecipe(dep.name, dv), dp, dv);
             }
         }
 
@@ -821,5 +821,167 @@ struct DepthFirstRange(alias getMore)
     @property DepthFirstRange!(getMore) save() @safe
     {
         return DepthFirstRange!(getMore)(stack.dup, visited.dup);
+    }
+}
+
+// dfmt off
+version (unittest):
+
+struct TestPackVersion
+{
+    string ver;
+    DepSpec[] deps;
+    DepLocation loc;
+
+    @property AvailVersion aver() const
+    {
+        return AvailVersion(Semver(ver), loc);
+    }
+}
+
+struct TestPackage
+{
+    string name;
+    TestPackVersion[] nodes;
+    Lang[] langs;
+
+    Recipe recipe(string ver)
+    {
+        foreach (n; nodes)
+        {
+            if (n.ver == ver)
+            {
+                return Recipe.mock(name, Semver(ver), n.deps, langs, "1");
+            }
+        }
+        assert(false, "wrong version");
+    }
+}
+
+TestPackage[] buildTestPackBase()
+{
+    auto a = TestPackage(
+        "a",
+        [
+            TestPackVersion("1.0.0", [], DepLocation.cache),
+            TestPackVersion("1.1.0", [], DepLocation.cache),
+            TestPackVersion("1.1.0", [], DepLocation.system),
+            TestPackVersion("1.1.1", [], DepLocation.network),
+            TestPackVersion("2.0.0", [], DepLocation.network),
+        ],
+        [Lang.c]
+    );
+
+    auto b = TestPackage(
+        "b",
+        [
+            TestPackVersion(
+                "0.0.1",
+                [
+                    DepSpec("a", VersionSpec(">=1.0.0 <2.0.0"))
+                ],
+                DepLocation.cache
+            ),
+            TestPackVersion(
+                "0.0.2",
+                [
+                    DepSpec("a", VersionSpec(">=1.1.0"))
+                ],
+                DepLocation.network
+            ),
+        ],
+        [Lang.d]
+    );
+
+    auto c = TestPackage(
+        "c",
+        [
+            TestPackVersion(
+                "1.0.0",
+                [],
+                DepLocation.cache
+            ),
+            TestPackVersion(
+                "2.0.0",
+                [
+                    DepSpec("a", VersionSpec(">=1.1.0"))
+                ],
+                DepLocation.network),
+        ],
+        [Lang.cpp]
+    );
+    auto d = TestPackage(
+        "d", [
+            TestPackVersion(
+                "1.0.0",
+                [
+                    DepSpec("c", VersionSpec("1.0.0"))
+                ],
+                DepLocation.cache
+            ),
+            TestPackVersion(
+                "1.1.0",
+                [
+                    DepSpec("c", VersionSpec("2.0.0"))
+                ],
+                DepLocation.network
+            ),
+        ],
+        [Lang.d]
+    );
+    return [a, b, c, d];
+}
+
+TestPackage packE = TestPackage(
+    "e",
+    [
+        TestPackVersion(
+            "1.0.0",
+            [
+                DepSpec("b", VersionSpec(">=0.0.1")),
+                DepSpec("d", VersionSpec(">=1.1.0")),
+            ],
+            DepLocation.network
+        )
+    ],
+    [Lang.d]
+);
+
+
+/// A mock Dependency Service
+final class TestDepService : DepService
+{
+    TestPackage[string] packs;
+
+    this(TestPackage[] packs)
+    {
+        foreach (p; packs)
+        {
+            this.packs[p.name] = p;
+        }
+    }
+
+    static DepService withBase()
+    {
+        return new TestDepService(buildTestPackBase());
+    }
+
+    override AvailVersion[] packAvailVersions(string packname) @trusted
+    {
+        import std.algorithm : map;
+        import std.array : array;
+
+        return packs[packname].nodes.map!(pv => pv.aver).array;
+    }
+
+    override Recipe packRecipe(string packname, const(AvailVersion) aver, string rev)
+    {
+        import std.algorithm : find;
+        import std.range : front;
+
+        TestPackage p = packs[packname];
+        TestPackVersion pv = p.nodes.find!(pv => pv.aver == aver).front;
+        const revision = rev ? rev : "1";
+        return Recipe.mock(packname, aver.ver, pv.deps, p.langs, revision);
     }
 }

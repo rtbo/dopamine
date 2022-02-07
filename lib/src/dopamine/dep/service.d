@@ -102,5 +102,5 @@ interface DepService
     AvailVersion[] packAvailVersions(string packname) @safe;
 
     /// Get the recipe of a package in the specified version (and optional revision)
-    Recipe packRecipe(string packname, const(Semver) ver, string rev = null);
+    Recipe packRecipe(string packname, const(AvailVersion) aver, string rev = null);
 }
