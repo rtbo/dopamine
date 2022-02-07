@@ -15,6 +15,8 @@ module dopamine.dep.dag;
 
 import dopamine.dep.service;
 import dopamine.dep.spec;
+import dopamine.profile;
+import dopamine.recipe;
 import dopamine.semver;
 
 /// Heuristics to help choosing a package version in a set of compatible versions.
@@ -238,4 +240,204 @@ unittest
             AvailVersion(Semver("3.0.0"), DepLocation.network));
     assert(heuristicsHighest.chooseVersion(compatibleVersions3) ==
             AvailVersion(Semver("3.0.0"), DepLocation.network));
+}
+
+struct DepDAG
+{
+    DagPack root;
+
+    // static DepDAG prepare(Recipe recipe, Profile profile, DepService service,
+    //     Heuristics heuristics = Heuristics.init) @system
+    // {
+    //     import std.algorithm : canFind, filter, sort, uniq;
+    //     import std.array : array;
+
+    //     DagPack[string] packs;
+
+    //     DagPack prepareDagPack(DepSpec dep)
+    //     {
+    //         auto avs = service.packAvailVersions(dep.name)
+    //             .filter!(av => dep.spec.matchVersion(av.ver))
+    //             .filter!(av => heuristics.allow(dep.name, av))
+    //             .array;
+
+    //         DagPack pack;
+    //         if (auto p = dep.name in packs)
+    //             pack = *p;
+
+    //         if (pack)
+    //         {
+    //             avs ~= pack.allVersions;
+    //         }
+    //         else
+    //         {
+    //             pack = new DagPack(dep.name);
+    //             packs[dep.name] = pack;
+    //         }
+
+    //         pack.allVersions = sort(avs).uniq().array;
+    //         return pack;
+    //     }
+
+    //     DepDAG dag;
+    //     dag.root = new DagPack(recipe.name);
+    //     dag.root.allVersions = [AvailVersion(recipe.ver, DepLocation.cache)];
+
+    //     DagNode[] visited;
+
+    //     void doPackVersion(DagPack pack, AvailVersion aver)
+    //     {
+    //         auto node = pack.getOrCreateNode(aver.ver);
+    //         if (visited.canFind(node))
+    //         {
+    //             return;
+    //         }
+
+    //         visited ~= node;
+
+    //         const(DepSpec)[] deps;
+    //         if (aver.location != DepLocation.system)
+    //         {
+    //             if (pack is dag.root)
+    //             {
+    //                 deps = recipe.dependencies(profile);
+    //             }
+    //             else
+    //             {
+    //                 auto rec = service.packRecipe(pack.name, aver.ver);
+    //                 node.revision = rec.revision;
+    //                 deps = rec.dependencies(profile);
+    //             }
+    //         }
+
+    //         foreach (dep; deps)
+    //         {
+    //             auto dp = prepareDagPack(dep);
+    //             DagEdge.create(node, dp, dep.spec);
+
+    //             const dv = heuristics.chooseVersion(dp.allVersions);
+    //             doPackVersion(dp, dv);
+    //         }
+    //     }
+
+    //     return dag;
+    // }
+
+}
+
+/// Dependency DAG package : represent a package and gathers DAG nodes, each of which is a version of this package
+class DagPack
+{
+    /// Name of the package
+    string name;
+
+    /// The available versions of the package that are compatible with the current state of the DAG.
+    AvailVersion[] allVersions;
+
+    /// The version nodes of the package that are considered for the resolution.
+    /// This is a subset of allVersions
+    DagNode[] nodes;
+
+    /// The resolved version node
+    DagNode resolvedNode;
+
+    /// Edges towards packages that depends on this
+    DagEdge[] upEdges;
+
+    private this(string name) @safe
+    {
+        this.name = name;
+    }
+
+    /// Get node that match with [ver]
+    /// Create one if doesn't exist
+    package DagNode getOrCreateNode(const(Semver) ver) @safe
+    {
+        foreach (n; nodes)
+        {
+            if (n.ver == ver)
+                return n;
+        }
+        auto node = new DagNode(this, ver);
+        nodes ~= node;
+        return node;
+    }
+
+    /// Get existing node that match with [ver], or null
+    package DagNode getNode(const(Semver) ver) @safe
+    {
+        foreach (n; nodes)
+        {
+            if (n.ver == ver)
+                return n;
+        }
+        return null;
+    }
+}
+
+/// Dependency DAG node: represent a package with a specific version
+/// and a set of sub-dependencies.
+class DagNode
+{
+    /// The package owner of this version node
+    DagPack pack;
+
+    /// The package version
+    Semver ver;
+
+    /// The package location
+    DepLocation location;
+
+    /// The package revision
+    string revision;
+
+    /// The edges going to dependencies of this package
+    DagEdge[] downEdges;
+
+    /// The languages of this node and all dependencies
+    /// This is generally fetched after resolution
+    Lang[] langs;
+
+    /// User data
+    Object userData;
+
+    this(DagPack pack, Semver ver) @safe
+    {
+        this.pack = pack;
+        this.ver = ver;
+    }
+
+    bool isResolved() const @trusted
+    {
+        return pack.resolvedNode is this;
+    }
+}
+
+/// Dependency DAG edge : represent a dependency and its associated version requirement
+/// [up] has a dependency towards [down] with [spec]
+class DagEdge
+{
+    DagNode up;
+    DagPack down;
+    VersionSpec spec;
+
+    /// Create a dependency edge between a package version and another package
+    static DagEdge create(DagNode up, DagPack down, VersionSpec spec) @safe
+    {
+        auto edge = new DagEdge;
+
+        edge.up = up;
+        edge.down = down;
+        edge.spec = spec;
+
+        up.downEdges ~= edge;
+        down.upEdges ~= edge;
+
+        return edge;
+    }
+
+    bool onResolvedPath() const @safe
+    {
+        return up.isResolved && down.resolvedNode !is null;
+    }
 }
