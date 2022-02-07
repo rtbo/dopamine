@@ -1,6 +1,7 @@
 /// Dependency Directed Acyclic Graph
 ///
 /// This a kind of hybrid graph with the following abstractions:
+/// - [DepDAG]: main structure representing the complete graph and providing algorithms.
 /// - [DagPack]: correspond to a package and gathers several versions
 /// - [DagNode]: correspond to a package version, that express dependencies towards other packages
 /// - [DagEdge]: correspond to a dependency specification.
@@ -565,6 +566,47 @@ struct DepDAG
         collectLeaves(root);
 
         return leaves;
+    }
+
+    /// Fetch languages for each resolved node.
+    /// This is used to compute the right profile to build the dependency tree.
+    /// Each node is associated with its language + the cumulated
+    /// languages of its dependencies.
+    void fetchLanguages(Recipe rootRecipe, DepService service) @system
+    in (resolved)
+    in (root.name == rootRecipe.name)
+    in (root.resolvedNode.ver == rootRecipe.ver)
+    {
+        import std.algorithm : sort, uniq;
+        import std.array : array;
+
+        // Bottom-up traversal with collection of all languages along the way
+        // It is possible to traverse several times the same package in case
+        // of diamond dependency configuration. In this case, we have to cumulate the languages
+        // from all passes
+
+        void traverse(DagPack pack, Lang[] fromDeps)
+        {
+            if (!pack.resolvedNode)
+                return;
+
+            const rec = pack is root ?
+                    rootRecipe :
+                    service.packRecipe(pack.name, pack.resolvedNode.aver);
+
+            // resolvedNode may have been previously traversed,
+            // we add the previously found languages
+            auto all = fromDeps ~ rec.langs ~ pack.resolvedNode.langs;
+            sort(all);
+            auto langs = uniq(all).array;
+            pack.resolvedNode.langs = langs;
+
+            foreach (e; pack.upEdges)
+                traverse(e.up.pack, langs);
+        }
+
+        foreach (l; collectLeaves())
+            traverse(l, []);
     }
 }
 
