@@ -59,6 +59,27 @@ struct AvailVersion
 {
     Semver ver;
     DepLocation location;
+
+    int opCmp(ref const AvailVersion rhs) const
+    {
+        if (ver < rhs.ver)
+        {
+            return -1;
+        }
+        if (ver > rhs.ver)
+        {
+            return 1;
+        }
+        if (cast(int) location < cast(int) rhs.location)
+        {
+            return -1;
+        }
+        if (cast(int) location > cast(int) rhs.location)
+        {
+            return 1;
+        }
+        return 0;
+    }
 }
 
 /// Abstract interface to a dependency service.
@@ -81,5 +102,5 @@ interface DepService
     AvailVersion[] packAvailVersions(string packname) @safe;
 
     /// Get the recipe of a package in the specified version (and optional revision)
-    Recipe packRecipe(string packname, const(Semver)ver, string rev=null);
+    Recipe packRecipe(string packname, const(Semver) ver, string rev = null);
 }
