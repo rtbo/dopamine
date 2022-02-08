@@ -1172,8 +1172,6 @@ unittest
     dag.checkCompat();
     dag.resolve();
 
-    dag.toDotPng("pick-highest.png");
-
     AvailVersion[string] resolvedVersions;
     dag.traverseTopDownResolved(Yes.root).each!(n => resolvedVersions[n.pack.name] = n.aver);
 
