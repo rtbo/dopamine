@@ -939,36 +939,36 @@ Compiler detectClangpp()
 @("extract Clang version")
 unittest
 {
-    auto output = import("clang-version-13.0.0.txt");
+    auto output = import("version-clang-13.0.0.txt");
     assert(extractCompilerVersion(output, clangVersionRe) == "13.0.0");
 }
 
 @("extract gcc/g++ version")
 unittest
 {
-    auto output = import("gcc-version-11.1.0.txt");
+    auto output = import("version-gcc-11.1.0.txt");
     assert(extractCompilerVersion(output, gccVersionRe) == "11.1.0");
 
-    output = import("g++-version-11.1.0.txt");
+    output = import("version-g++-11.1.0.txt");
     assert(extractCompilerVersion(output, gppVersionRe) == "11.1.0");
 
-    output = import("gcc-version-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
+    output = import("version-gcc-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
     assert(extractCompilerVersion(output, gccVersionRe) == "8.1.0");
 
-    output = import("g++-version-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
+    output = import("version-g++-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
     assert(extractCompilerVersion(output, gppVersionRe) == "8.1.0");
 }
 
 @("extract DMD version")
 unittest
 {
-    auto output = import("dmd-version-2.098.1.txt");
+    auto output = import("version-dmd-2.098.1.txt");
     assert(extractCompilerVersion(output, dmdVersionRe) == "2.098.1");
 }
 
 @("extract LDC version")
 unittest
 {
-    auto output = import("ldc-version-1.28.1.txt");
+    auto output = import("version-ldc-1.28.1.txt");
     assert(extractCompilerVersion(output, ldcVersionRe) == "1.28.1");
 }
