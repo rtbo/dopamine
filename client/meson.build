@@ -1,5 +1,6 @@
 dop_client_src = [
     'src/dopamine/client/app.d',
+    'src/dopamine/client/login.d',
 ]
 
 dop_client_inc = include_directories('src')
