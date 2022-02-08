@@ -86,4 +86,4 @@ dop_test = executable('doptest', dop_test_src,
     d_unittest: true,
 )
 
-test('dop tests', dop_test)
+test('Dopamine unit tests', dop_test)
