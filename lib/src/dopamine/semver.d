@@ -167,7 +167,7 @@ struct Semver
         }
     }
 
-    string toString() const pure
+    string toString() const pure @safe
     {
         import std.format : format;
         import std.string : join;
@@ -186,7 +186,7 @@ struct Semver
         return res;
     }
 
-    bool opEquals(const Semver rhs) const pure nothrow
+    bool opEquals(const Semver rhs) const pure nothrow @safe
     {
         // metadata is out of the equation
         return _major == rhs._major && _minor == rhs._minor
@@ -198,7 +198,7 @@ struct Semver
         return opEquals(Semver(rhs));
     }
 
-    size_t toHash() const pure nothrow
+    size_t toHash() const pure nothrow @safe
     {
         // exclude metadata from hash to be consiste with opEqual
         auto hash = _major.hashOf();
@@ -207,7 +207,7 @@ struct Semver
         return _prerelease.hashOf(hash);
     }
 
-    int opCmp(const Semver rhs) const pure
+    int opCmp(const Semver rhs) const pure @safe
     {
         import std.algorithm : min;
         import std.array : split;
@@ -270,12 +270,12 @@ struct Semver
         return lpr.length < rpr.length ? -1 : 1;
     }
 
-    int opCmp(const string rhs) const pure
+    int opCmp(const string rhs) const pure @safe
     {
         return opCmp(Semver(rhs));
     }
 
-    bool opCast(T : bool)() const
+    bool opCast(T : bool)() const pure nothrow @safe
     {
         return _not_init;
     }
