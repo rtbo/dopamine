@@ -948,8 +948,15 @@ unittest
 {
     auto output = import("gcc-version-11.1.0.txt");
     assert(extractCompilerVersion(output, gccVersionRe) == "11.1.0");
+
     output = import("g++-version-11.1.0.txt");
     assert(extractCompilerVersion(output, gppVersionRe) == "11.1.0");
+
+    output = import("gcc-version-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
+    assert(extractCompilerVersion(output, gccVersionRe) == "8.1.0");
+
+    output = import("g++-version-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
+    assert(extractCompilerVersion(output, gppVersionRe) == "8.1.0");
 }
 
 @("extract DMD version")
