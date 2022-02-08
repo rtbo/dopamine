@@ -1,7 +1,10 @@
 module dopamine.client.app;
 
+import dopamine.client.login;
+
 import dopamine.conf;
 import dopamine.log;
+import dopamine.lua;
 
 import std.getopt;
 import std.stdio;
@@ -17,32 +20,105 @@ struct Command
 
 int main(string[] args)
 {
+    import std.algorithm : canFind, find, map, remove;
+    import std.array : array;
+    import std.file : chdir;
+    import std.format : format;
+
+    initLua();
+
+    const commands = [
+        Command("login", &loginMain, "Register login credientials"),
+    ];
+    const commandNames = commands.map!(c => c.name).array;
+
+    string[] globalArgs = args;
+    string[] leftover;
+    for (size_t i = 1; i < args.length; i++)
+    {
+        if (commandNames.canFind(args[i]))
+        {
+            globalArgs = args[0 .. i];
+            leftover = args[i .. $];
+            break;
+        }
+    }
+
+    string changeDir;
+    bool verbose;
     bool showVer;
 
-    auto helpInfo = getopt(args,
+    auto helpInfo = getopt(globalArgs,
+        "change-dir|C", "Change current directory before running command", &changeDir,
+        "verbose|v", "Enable verbose mode", &verbose,
         "version", "Show dopamine version", &showVer
     );
 
-    if (helpInfo.helpWanted) {
-        return showHelp(helpInfo, []);
+    if (helpInfo.helpWanted)
+    {
+        return showHelp(helpInfo, args.length > 0 ? args[0] : "dop", commands);
     }
 
-    if (showVer) {
+    if (verbose)
+    {
+        minLogLevel = LogLevel.verbose;
+    }
+    if (showVer)
+    {
+        // verbose version info?
         logInfo("%s", info(dopamineVersion));
         return 0;
     }
+    if (changeDir.length)
+    {
+        logInfo("changing current directory to %s", info(changeDir));
+        chdir(changeDir);
+    }
 
-    return 0;
+    args = globalArgs ~ leftover;
+
+    const cmdName = args.length > 1 ? args[1] : null;
+
+    if (!cmdName)
+    {
+        logError("%s: no command specified", error("Error"));
+        return 1;
+    }
+
+    auto cmd = commands.find!(cmd => cmd.name == cmdName);
+    if (cmd.length == 0)
+    {
+        logError("%s: unknown command: %s", error("Error"), info(cmdName));
+        return 1;
+    }
+
+    // prepare command line for the actual driver
+    args[0] = format("dop-%s", cmdName);
+    args = args.remove(1);
+
+    try
+    {
+        return cmd[0].func(args);
+    }
+    catch (FormatLogException ex)
+    {
+        ex.log();
+    }
+    catch (Exception ex)
+    {
+        logError("%s: %s", error("Error"), ex.msg);
+    }
+    return 1;
 }
 
-int showHelp(GetoptResult helpInfo, in Command[] commands)
+int showHelp(GetoptResult helpInfo, string exeName, in Command[] commands)
 {
     import std.algorithm : map, max, maxElement;
 
     logInfo("%s - Dopamine package manager client", info("dop"));
     logInfo("");
     logInfo("%s", info("Usage"));
-    logInfo("    dop [global options] command [command options]");
+    logInfo("    %s [global options] command [command options]", exeName);
     logInfo("");
 
     logInfo("%s", info("Global options"));
@@ -62,7 +138,7 @@ int showHelp(GetoptResult helpInfo, in Command[] commands)
     foreach (opt; helpInfo.options)
     {
         logInfo("    %*s %*s%*s %s", ls, opt.optShort, ll, opt.optLong,
-                hasRequired ? re.length : 1, opt.required ? re : " ", opt.help);
+            hasRequired ? re.length : 1, opt.required ? re : " ", opt.help);
     }
 
     logInfo("");
@@ -72,6 +148,7 @@ int showHelp(GetoptResult helpInfo, in Command[] commands)
     {
         logInfo("    %*s  %s", maxName, cmd.name, cmd.desc);
     }
+    logInfo("");
     logInfo("For individual command help, type %s", info("dop [command] --help"));
 
     return 0;
