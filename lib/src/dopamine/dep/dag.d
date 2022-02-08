@@ -70,10 +70,56 @@ struct Heuristics
     System system;
     string[] systemList;
 
-    /// Check whether using system dependency is allowed for [packname]
-    bool allowSystemFor(string packname) const
+    static @property Heuristics preferSystem()
+    {
+        return Heuristics.init;
+    }
+
+    static @property Heuristics preferCache()
+    {
+        return Heuristics(Mode.preferCache);
+    }
+
+    static @property Heuristics preferLocal()
+    {
+        return Heuristics(Mode.preferLocal);
+    }
+
+    static @property Heuristics pickHighest()
+    {
+        return Heuristics(Mode.pickHighest);
+    }
+
+    Heuristics withSystemAllowed() const
+    {
+        return Heuristics(mode, System.allow);
+    }
+
+    Heuristics withSystemDisallowed() const
+    {
+        return Heuristics(mode, System.disallow);
+    }
+
+    Heuristics withSystemAllowedList(string[] allowedSystemList) const
+    {
+        return Heuristics(mode, System.allowedList, allowedSystemList);
+    }
+
+    Heuristics withSystemDisallowedList(string[] disallowedSystemList) const
+    {
+        return Heuristics(mode, System.disallowedList, disallowedSystemList);
+    }
+
+    /// Check whether the provided [AvailVersion] of [packname] is compatible
+    /// with defined heuristics.
+    bool allow(string packname, AvailVersion aver) const
     {
         import std.algorithm : canFind;
+
+        if (aver.location != DepLocation.system)
+        {
+            return true;
+        }
 
         final switch (system)
         {
@@ -88,21 +134,11 @@ struct Heuristics
         }
     }
 
-    /// Check whether the provided [AvailVersion] of [packname] is compatible
-    /// with defined heuristics.
-    bool allow(string packname, AvailVersion aver) const
-    {
-        if (aver.location != DepLocation.system)
-        {
-            return true;
-        }
-        return allowSystemFor(packname);
-    }
-
     /// Choose a compatible version according defined heuristics.
     /// [compatibleVersions] have already been checked as compatible for the target.
     /// [compatibleVersions] MUST be sorted.
     AvailVersion chooseVersion(const(AvailVersion)[] compatibleVersions) const
+    in (compatibleVersions.length > 0)
     {
         import std.algorithm : map, maxIndex;
         import std.array : array;
@@ -182,7 +218,6 @@ struct Heuristics
 
             sv.score += verCount * verBumpScore;
         }
-        import std.stdio;
 
         const maxI = sver.map!(sv => sv.score).maxIndex;
         return compatibleVersions[maxI];
@@ -271,8 +306,21 @@ struct DepDAG
     /// which can be incompatible (although a first pass of choice is already made).
     /// Incompatibilites can exist mainly in the case of different sub-dependencies
     /// having a common dependency, with different version specs (aka diamond graph layout).
+    ///
+    /// Params:
+    ///   recipe = Recipe from the root package
+    ///   profile = Compilation profile. It is needed here because packages may declare
+    ///             different depedencies for different profiles.
+    ///   service = The dependency service to fetch available versions and recipes.
+    ///   heuristics = The heuristics to select the dependencies.
+    ///   preFilter = Whether or not to apply a first stage of compatibility and heuristics filtering.
+    ///               Passing [No.preFilter] is mostly useful to get a view on the complete graph,
+    ///               but otherwise less efficient and (in theory) without change on final resolution.
+    ///               Default is [Yes.preFilter].
+    ///
+    /// Returns: a [DepDAG] ready for the next phase
     static DepDAG prepare(Recipe recipe, Profile profile, DepService service,
-        Heuristics heuristics = Heuristics.init) @system
+        const Heuristics heuristics = Heuristics.init, Flag!"preFilter" preFilter = Yes.preFilter) @system
     {
         import std.algorithm : canFind, filter, sort, uniq;
         import std.array : array;
@@ -281,10 +329,12 @@ struct DepDAG
 
         DagPack prepareDagPack(DepSpec dep)
         {
-            auto avs = service.packAvailVersions(dep.name)
+            auto allAvs = service.packAvailVersions(dep.name);
+            auto avs = preFilter ?
+                allAvs
                 .filter!(av => dep.spec.matchVersion(av.ver))
                 .filter!(av => heuristics.allow(dep.name, av))
-                .array;
+                .array : allAvs;
 
             DagPack pack;
             if (auto p = dep.name in packs)
@@ -320,14 +370,10 @@ struct DepDAG
 
             visited ~= node;
 
-            const(DepSpec)[] deps;
-            if (aver.location != DepLocation.system)
+            const(DepSpec)[] deps = rec.dependencies(profile);
+            if (pack !is root)
             {
-                deps = rec.dependencies(profile);
-                if (pack !is root)
-                {
-                    node.revision = rec.revision;
-                }
+                node.revision = rec.revision;
             }
 
             foreach (dep; deps)
@@ -335,8 +381,26 @@ struct DepDAG
                 auto dp = prepareDagPack(dep);
                 DagEdge.create(node, dp, dep.spec);
 
-                const dv = heuristics.chooseVersion(dp.allVersions);
-                doPackVersion(service.packRecipe(dep.name, dv), dp, dv);
+                const dvs = preFilter ? [
+                    heuristics.chooseVersion(dp.allVersions)
+                ] : dp.allVersions;
+
+                foreach (dv; dvs)
+                {
+                    // stop recursion for system dependencies
+                    if (dv.location == DepLocation.system)
+                    {
+                        // ensure node is created before stopping
+                        auto dn = dp.getOrCreateNode(dv);
+                        if (!visited.canFind(dn))
+                        {
+                            visited ~= dn;
+                        }
+                        continue;
+                    }
+
+                    doPackVersion(service.packRecipe(dep.name, dv), dp, dv);
+                }
             }
         }
 
@@ -346,12 +410,14 @@ struct DepDAG
     }
 
     /// 2nd phase of filtering to eliminate all incompatible versions in the DAG.
+    /// Unless [preFilter] was disabled during the [prepare] phase, this algorithm will only handle
+    /// some special cases, like diamond layout or such.
     void checkCompat() @trusted
     {
         import std.algorithm : any, canFind, filter, remove;
 
-        // compatibility check in bottom-up direction
-        // returns whether some version was removed during traversal
+        // dumb compatibility check in bottom-up direction
+        // we simply loop until nothing more changes
 
         auto leaves = collectLeaves();
 
@@ -410,7 +476,7 @@ struct DepDAG
         }
     }
 
-    /// Final phase of to attribute a resolved version to each package
+    /// Final phase of resolution to attribute a resolved version to each package
     void resolve()
     {
         void resolveDeps(DagPack pack)
@@ -437,6 +503,46 @@ struct DepDAG
 
         root.resolvedNode = root.nodes[0];
         resolveDeps(root);
+    }
+
+    /// Fetch languages for each resolved node.
+    /// This is used to compute the right profile to build the dependency tree.
+    /// Each node is associated with its language + the cumulated
+    /// languages of its dependencies.
+    void fetchLanguages(Recipe rootRecipe, DepService service) @system
+    in (resolved)
+    in (root.name == rootRecipe.name)
+    in (root.resolvedNode.ver == rootRecipe.ver)
+    {
+        import std.algorithm : sort, uniq;
+        import std.array : array;
+
+        // Bottom-up traversal with collection of all languages along the way
+        // It is possible to traverse several times the same package in case
+        // of diamond dependency configuration. In this case, we have to cumulate the languages
+        // from all passes
+
+        void traverse(DagPack pack, Lang[] fromDeps)
+        {
+            if (!pack.resolvedNode)
+                return;
+
+            const rec = pack is root ?
+        rootRecipe : service.packRecipe(pack.name, pack.resolvedNode.aver);
+
+            // resolvedNode may have been previously traversed,
+            // we add the previously found languages
+            auto all = fromDeps ~ rec.langs ~ pack.resolvedNode.langs;
+            sort(all);
+            auto langs = uniq(all).array;
+            pack.resolvedNode.langs = langs;
+
+            foreach (e; pack.upEdges)
+                traverse(e.up.pack, langs);
+        }
+
+        foreach (l; collectLeaves())
+            traverse(l, []);
     }
 
     /// Check whether this DAG was prepared
@@ -566,47 +672,48 @@ struct DepDAG
         return leaves;
     }
 
-    /// Fetch languages for each resolved node.
-    /// This is used to compute the right profile to build the dependency tree.
-    /// Each node is associated with its language + the cumulated
-    /// languages of its dependencies.
-    void fetchLanguages(Recipe rootRecipe, DepService service) @system
-    in (resolved)
-    in (root.name == rootRecipe.name)
-    in (root.resolvedNode.ver == rootRecipe.ver)
+    /// Collect all resolved nodes to a dictionary
+    DagNode[string] collectResolved() @safe
     {
-        import std.algorithm : sort, uniq;
-        import std.array : array;
+        import std.algorithm : each;
 
-        // Bottom-up traversal with collection of all languages along the way
-        // It is possible to traverse several times the same package in case
-        // of diamond dependency configuration. In this case, we have to cumulate the languages
-        // from all passes
+        DagNode[string] res;
 
-        void traverse(DagPack pack, Lang[] fromDeps)
+        traverseTopDownResolved(Yes.root).each!(n => res[n.pack.name] = n);
+
+        return res;
+    }
+
+    /// Collect all resolved nodes that are dependencies of the given [node]
+    DagNode[string] collectDependencies(DagNode node) @safe
+    {
+        DagNode[string] res;
+
+        void doNode(DagNode n) @safe
         {
-            if (!pack.resolvedNode)
-                return;
-
-            const rec = pack is root ?
-        rootRecipe : service.packRecipe(pack.name, pack.resolvedNode.aver);
-
-            // resolvedNode may have been previously traversed,
-            // we add the previously found languages
-            auto all = fromDeps ~ rec.langs ~ pack.resolvedNode.langs;
-            sort(all);
-            auto langs = uniq(all).array;
-            pack.resolvedNode.langs = langs;
-
-            foreach (e; pack.upEdges)
-                traverse(e.up.pack, langs);
+            res[n.pack.name] = n;
+            foreach (e; n.downEdges)
+            {
+                if (e.down.resolvedNode)
+                {
+                    doNode(e.down.resolvedNode);
+                }
+            }
         }
 
-        foreach (l; collectLeaves())
-            traverse(l, []);
+        foreach (e; node.downEdges)
+        {
+            if (e.down.resolvedNode)
+            {
+                doNode(e.down.resolvedNode);
+            }
+        }
+
+        return res;
     }
 
     /// Issue a GraphViz' Dot representation of the graph
+    // FIXME: make this const by allowing const traversals
     string toDot() @safe
     {
         import std.algorithm : find;
@@ -629,7 +736,7 @@ struct DepDAG
             }
         }
 
-        void block(string header, void delegate() @safe dg) @safe
+        void block(string header, void delegate() dg) @trusted
         {
             line(header ~ " {");
             indent += 1;
@@ -695,9 +802,11 @@ struct DepDAG
                             style = `"filled,solid"`;
                         }
 
+                        const label = pack == root ? v.ver.toString() : format("%s (%s)", v.ver, v
+                        .location);
                         line(
-                        `%s [label="%s (%s)", style=%s%s];`,
-                        ngn, v.ver, v.location, style, color
+                        `%s [label="%s", style=%s%s];`,
+                        ngn, label, style, color
                         );
                     }
                 });
@@ -741,6 +850,30 @@ struct DepDAG
         });
 
         return w.data;
+    }
+
+    /// Issue a GraphViz' Dot representation of the graph to a dot file
+    // FIXME: make this const by allowing const traversals
+    void toDotFile(string filename) @safe
+    {
+        import std.file : write;
+
+        const dot = toDot();
+        write(filename, dot);
+    }
+
+    /// Write Graphviz' dot represtation directly to a png file
+    /// Requires the `dot` command line tool to be in the PATH.
+    void toDotPng(string filename) @safe
+    {
+        import std.process : pipeProcess, Redirect;
+
+        const dot = toDot();
+
+        const cmd = ["dot", "-Tpng", "-o", filename];
+        auto pipes = pipeProcess(cmd, Redirect.stdin);
+
+        pipes.stdin.write(dot);
     }
 }
 
@@ -827,6 +960,11 @@ class DagNode
     /// The package version and location of this node
     AvailVersion aver;
 
+    @property string name() const @safe
+    {
+        return pack.name;
+    }
+
     /// The package version
     @property Semver ver() const @safe
     {
@@ -883,6 +1021,271 @@ class DagEdge
     {
         return up.isResolved && down.resolvedNode !is null;
     }
+}
+
+@("Test general graph utility")
+unittest
+{
+    import std.algorithm : canFind, map;
+    import std.array : array;
+    import std.typecons : No, Yes;
+
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    // preferSystem (default): b is a leave
+    auto leaves = DepDAG.prepare(packE.recipe("1.0.0"), profile, service).collectLeaves();
+    assert(leaves.length == 2);
+    assert(leaves.map!(l => l.name).canFind("a", "b"));
+
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, Heuristics.preferCache);
+
+    // preferCache: only a is a leave
+    leaves = dag.collectLeaves();
+    assert(leaves.length == 1);
+    assert(leaves[0].name == "a");
+
+    string[] names = dag.traverseTopDown(Yes.root).map!(p => p.name).array;
+    assert(names.length == 5);
+    assert(names[0] == "e");
+    assert(names.canFind("a", "b", "c", "d", "e"));
+
+    names = dag.traverseTopDown(No.root).map!(p => p.name).array;
+    assert(names.length == 4);
+    assert(names.canFind("a", "b", "c", "d"));
+
+    names = dag.traverseBottomUp(Yes.root).map!(p => p.name).array;
+    assert(names.length == 5);
+    assert(names[0] == "a");
+    assert(names.canFind("a", "b", "c", "d", "e"));
+
+    names = dag.traverseBottomUp(No.root).map!(p => p.name).array;
+    assert(names.length == 4);
+    assert(names[0] == "a");
+    assert(names.canFind("a", "b", "c", "d"));
+
+    // dag.toDotPng("prepared.png");
+
+    dag.checkCompat();
+    // dag.toDotPng("checked.png");
+    dag.resolve();
+    // dag.toDotPng("resolved.png");
+
+    names = dag.traverseTopDownResolved(Yes.root).map!(n => n.pack.name).array;
+    assert(names.length == 5);
+    assert(names[0] == "e");
+    assert(names.canFind("a", "b", "c", "d", "e"));
+
+    names = dag.traverseBottomUpResolved(Yes.root).map!(n => n.pack.name).array;
+    assert(names.length == 5);
+    assert(names[0] == "a");
+    assert(names.canFind("a", "b", "c", "d", "e"));
+}
+
+@("Test Heuristic.preferSystem")
+unittest
+{
+    import std.algorithm : each;
+    import std.typecons : Yes;
+
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    const heuristics = Heuristics.preferSystem;
+
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    dag.checkCompat();
+    dag.resolve();
+
+    AvailVersion[string] resolvedVersions;
+    dag.traverseTopDownResolved(Yes.root).each!(n => resolvedVersions[n.pack.name] = n.aver);
+
+    assert(resolvedVersions["a"] == AvailVersion(Semver("1.1.0"), DepLocation.system));
+    assert(resolvedVersions["b"] == AvailVersion(Semver("0.0.3"), DepLocation.system));
+    assert(resolvedVersions["c"] == AvailVersion(Semver("2.0.0"), DepLocation.network));
+    assert(resolvedVersions["d"] == AvailVersion(Semver("1.1.0"), DepLocation.network));
+    assert(resolvedVersions["e"].ver == "1.0.0");
+}
+
+@("Test Heuristic.preferCached")
+unittest
+{
+    import std.algorithm : each;
+    import std.typecons : Yes;
+
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    const heuristics = Heuristics.preferCache;
+
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    dag.checkCompat();
+    dag.resolve();
+
+    AvailVersion[string] resolvedVersions;
+    dag.traverseTopDownResolved(Yes.root).each!(n => resolvedVersions[n.pack.name] = n.aver);
+
+    assert(resolvedVersions["a"] == AvailVersion(Semver("1.1.0"), DepLocation.cache));
+    assert(resolvedVersions["b"] == AvailVersion(Semver("0.0.1"), DepLocation.cache));
+    assert(resolvedVersions["c"] == AvailVersion(Semver("2.0.0"), DepLocation.network));
+    assert(resolvedVersions["d"] == AvailVersion(Semver("1.1.0"), DepLocation.network));
+    assert(resolvedVersions["e"].ver == "1.0.0");
+}
+
+@("Test Heuristic.preferLocal")
+unittest
+{
+    import std.algorithm : each;
+    import std.typecons : Yes;
+
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    const heuristics = Heuristics.preferLocal;
+
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    dag.checkCompat();
+    dag.resolve();
+
+    AvailVersion[string] resolvedVersions;
+    dag.traverseTopDownResolved(Yes.root).each!(n => resolvedVersions[n.pack.name] = n.aver);
+
+    assert(resolvedVersions["a"] == AvailVersion(Semver("1.1.0"), DepLocation.cache));
+    assert(resolvedVersions["b"] == AvailVersion(Semver("0.0.3"), DepLocation.system));
+    assert(resolvedVersions["c"] == AvailVersion(Semver("2.0.0"), DepLocation.network));
+    assert(resolvedVersions["d"] == AvailVersion(Semver("1.1.0"), DepLocation.network));
+    assert(resolvedVersions["e"].ver == "1.0.0");
+}
+
+@("Test Heuristic.pickHighest")
+unittest
+{
+    import std.algorithm : each;
+    import std.typecons : Yes;
+
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    const heuristics = Heuristics.pickHighest;
+
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    dag.checkCompat();
+    dag.resolve();
+
+    dag.toDotPng("pick-highest.png");
+
+    AvailVersion[string] resolvedVersions;
+    dag.traverseTopDownResolved(Yes.root).each!(n => resolvedVersions[n.pack.name] = n.aver);
+
+    assert(resolvedVersions["a"] == AvailVersion(Semver("2.0.0"), DepLocation.network));
+    assert(resolvedVersions["b"] == AvailVersion(Semver("0.0.3"), DepLocation.system));
+    assert(resolvedVersions["c"] == AvailVersion(Semver("2.0.0"), DepLocation.network));
+    assert(resolvedVersions["d"] == AvailVersion(Semver("1.1.0"), DepLocation.network));
+    assert(resolvedVersions["e"].ver == "1.0.0");
+}
+
+@("Test that No.preFilter has no impact on resolution")
+unittest
+{
+    import std.algorithm : each, map, sort;
+    import std.array : array;
+    import std.typecons : No, Yes;
+
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    const heuristics = Heuristics.preferSystem;
+
+    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    dag1.checkCompat();
+    dag1.resolve();
+
+    auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics, No.preFilter);
+    dag2.checkCompat();
+    dag2.resolve();
+
+    static struct NodeData
+    {
+        string name;
+        Semver ver;
+        DepLocation loc;
+
+        int opCmp(const ref NodeData rhs) const
+        {
+            if (name < rhs.name)
+                return -1;
+            if (name > rhs.name)
+                return 1;
+            if (ver < rhs.ver)
+                return -1;
+            if (ver > rhs.ver)
+                return 1;
+            if (loc < rhs.loc)
+                return -1;
+            if (loc > rhs.loc)
+                return 1;
+            return 0;
+        }
+    }
+
+    NodeData[] mapNodeData(DagNode[] nodes)
+    {
+        auto data = nodes.map!(n => NodeData(n.name, n.ver, n.location)).array;
+        sort(data);
+        return data;
+    }
+
+    auto resolved1 = mapNodeData(dag1.collectResolved().values);
+    auto resolved2 = mapNodeData(dag2.collectResolved().values);
+
+    assert(resolved1 == resolved2);
+}
+
+@("traverse without deps")
+unittest
+{
+    import std.array : array;
+    import std.typecons : Yes;
+
+    auto pack = TestPackage("a", [
+            TestPackVersion("1.0.1", [], DepLocation.cache)
+        ], [Lang.c]);
+    auto service = new TestDepService([]);
+    auto profile = mockProfileLinux();
+
+    auto dag = DepDAG.prepare(pack.recipe("1.0.1"), profile, service);
+    dag.resolve();
+
+    auto arr = dag.traverseTopDownResolved().array;
+    assert(arr.length == 0);
+    arr = dag.traverseTopDownResolved(Yes.root).array;
+    assert(arr.length == 1);
+    arr = dag.traverseBottomUpResolved().array;
+    assert(arr.length == 0);
+    arr = dag.traverseBottomUpResolved(Yes.root).array;
+    assert(arr.length == 1);
+}
+
+@("Test DepDAG.fetchLanguages")
+unittest
+{
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    auto recipe = packE.recipe("1.0.0");
+    auto dag = DepDAG.prepare(recipe, profile, service);
+
+    dag.checkCompat();
+    dag.resolve();
+    dag.fetchLanguages(recipe, service);
+
+    auto nodes = dag.collectResolved();
+
+    assert(nodes["a"].langs == [Lang.c]);
+    assert(nodes["b"].langs == [Lang.d]);
+    assert(nodes["c"].langs == [Lang.cpp, Lang.c]);
+    assert(nodes["d"].langs == [Lang.d, Lang.cpp, Lang.c]);
+    assert(nodes["e"].langs == [Lang.d, Lang.cpp, Lang.c]);
 }
 
 private:
@@ -1060,10 +1463,15 @@ TestPackage[] buildTestPackBase()
             ),
             TestPackVersion(
                 "0.0.2",
+                [],
+                DepLocation.network
+            ),
+            TestPackVersion(
+                "0.0.3",
                 [
                     DepSpec("a", VersionSpec(">=1.1.0"))
                 ],
-                DepLocation.network
+                DepLocation.system
             ),
         ],
         [Lang.d]
