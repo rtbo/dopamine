@@ -24,7 +24,13 @@ int loginMain(string[] args)
         return usage(1);
     }
 
-    const key = args[1];
+    doLogin(args[1]);
+
+    return 0;
+}
+
+void doLogin(string key)
+{
     const loginKey = decodeLoginKey(key);
 
     if (isLoggedIn())
@@ -37,8 +43,6 @@ int loginMain(string[] args)
 
     logInfo("%s: %s - Registered new key: %s", info("Login"), success("OK"),
         info(loginKey.keyName));
-
-    return 0;
 }
 
 int usage(int code = 0)
