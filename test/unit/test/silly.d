@@ -11,7 +11,7 @@
 /* SPDX-License-Identifier: ISC */
 /* Copyright (c) 2018-2019, Anton Fediushin */
 
-module test.silly;
+module test.unit.test.silly;
 
 version(unittest):
 

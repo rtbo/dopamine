@@ -19,6 +19,7 @@ struct Command
     string desc;
 }
 
+version(DopClientMain)
 int main(string[] args)
 {
     import std.algorithm : canFind, find, map, remove;

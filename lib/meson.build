@@ -40,6 +40,8 @@ dop_src = files([
     'src/dopamine/util.d',
 ])
 
+lua_d_versions = ['LUA_53', 'BindBC_Static']
+
 dop_inc = include_directories('src')
 dop_deps = [ lua_dep ]
 dop_imp = include_directories('src/dopamine/lua')
@@ -57,33 +59,3 @@ dop_dep = declare_dependency(
     dependencies: dop_deps,
     link_with: [dop_lib],
 )
-
-dop_test_src = dop_src + files([
-    'test/main.d',
-    'test/silly.d',
-    'test/util.d',
-    'test/lua/lib.d',
-    'test/lua/ut.d',
-])
-
-dop_test_imp = [dop_imp, include_directories('test/data')]
-
-eh_dep = dependency('exceptionhandling',
-    version: '~>1.0.0',
-    method: 'dub',
-)
-
-# all_mods defined in test
-subdir('test')
-dop_test_src += all_mods
-
-dop_test = executable('doptest', dop_test_src,
-    install: false,
-    include_directories: [ dop_inc, include_directories('.') ],
-    dependencies: dop_deps + [ eh_dep ],
-    d_import_dirs: dop_test_imp,
-    d_module_versions: lua_d_versions,
-    d_unittest: true,
-)
-
-test('Dopamine unit tests', dop_test)

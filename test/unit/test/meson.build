@@ -7,7 +7,6 @@ all_mods = custom_target('gen_allmods',
         discover_unittest, '@INPUT@',
         '--modname', 'test.all_mods',
         '--exclude', 'arsd',
-        '--exclude', 'silly',
-        '--exclude', 'pkgc'
+        '--exclude', 'silly'
     ],
 )
