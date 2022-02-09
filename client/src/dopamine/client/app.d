@@ -1,6 +1,7 @@
 module dopamine.client.app;
 
 import dopamine.client.login;
+import dopamine.client.profile;
 
 import dopamine.conf;
 import dopamine.log;
@@ -29,6 +30,7 @@ int main(string[] args)
 
     const commands = [
         Command("login", &loginMain, "Register login credientials"),
+        Command("profile", &profileMain, "Manage compilation profile"),
     ];
     const commandNames = commands.map!(c => c.name).array;
 
