@@ -673,6 +673,7 @@ final class Profile
     }
 }
 
+/// Return a mock profile typical of a linux system
 version (unittest) Profile mockProfileLinux()
 {
     return new Profile(

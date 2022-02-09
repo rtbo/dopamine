@@ -110,8 +110,8 @@ The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
   - Use only the languages of the current recipe
 - [ ] `dop profile --add-missing`
   - Add missing languages to the compilation profile
-- [ ] `dop profile --add-[lang] [compiler]`
-  - Add language `[lang]` to the compilation profile
+- [ ] `dop profile --set-[lang] [compiler]`
+  - Change compiler for language `[lang]`
   - `[compiler]` is optional and can be a command (e.g. `dmd`) or a path
   - If `[compiler]` is omitted, the default for `[lang]` is picked.
 - [ ] `dop profile --release`
@@ -119,7 +119,8 @@ The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
 - [ ] `dop profile --debug`
   - Set profile in Debug mode
 - [ ] `dop profile --save [name]`
-  - Saves the current profile to the profile cache with name
+  - Saves the current profile to the user profile cache with name
+  - Can be combined with other options that modify the profile.
 
 For more sophisticated need, the profile files can be edited.
 
