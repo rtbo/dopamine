@@ -1,0 +1,13 @@
+{
+    "name": "client",
+    "targetName": "dop",
+    "targetType": "executable",
+    "dependencies": {
+        "lib": {
+            "path": "../lib"
+        }
+    },
+    "lflags": [
+        "-llua5.3"
+    ]
+}
