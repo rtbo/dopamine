@@ -1,5 +1,6 @@
 module e2e_driver;
 
+import std.array;
 import std.exception;
 import std.file;
 import std.path;
@@ -8,13 +9,63 @@ import std.regex;
 import std.stdio;
 import std.string;
 
+interface Expect
+{
+    bool expect(ref Test test, string output);
+    string failMsg();
+}
+
+class ExpectMatch : Expect
+{
+    string exp;
+
+    this(string exp)
+    {
+        this.exp = exp;
+    }
+
+    bool expect(ref Test test, string output)
+    {
+        auto res = matchFirst(output, exp);
+        return !res.empty;
+    }
+
+    string failMsg()
+    {
+        return format("Expected to match %s", exp);
+    }
+}
+
+class ExpectNotMatch : Expect
+{
+    string exp;
+
+    this(string exp)
+    {
+        this.exp = exp;
+    }
+
+    bool expect(ref Test test, string output)
+    {
+        auto res = matchFirst(output, exp);
+        return res.empty;
+    }
+
+    string failMsg()
+    {
+        return format("Unexpected match %s", exp);
+    }
+}
+
 struct Test
 {
     string name;
     string command;
     string directory;
+
     bool expectFail;
-    string[] expectedOutputs;
+
+    Expect[] expectations;
 
     static Test parseFile(string filename)
     {
@@ -45,10 +96,15 @@ struct Test
             {
                 test.expectFail = true;
             }
-            else if (line.startsWith("EXPECT_OUTPUT="))
+            else if (line.startsWith("EXPECT_MATCH="))
             {
-                enum len = "EXPECT_OUTPUT=".length;
-                test.expectedOutputs ~= line[len .. $];
+                enum len = "EXPECT_MATCH=".length;
+                test.expectations ~= new ExpectMatch(line[len .. $]);
+            }
+            else if (line.startsWith("EXPECT_NOT_MATCH="))
+            {
+                enum len = "EXPECT_NOT_MATCH=".length;
+                test.expectations ~= new ExpectNotMatch(line[len .. $]);
             }
             else
             {
@@ -96,8 +152,6 @@ struct Test
 
     void perform(string dopExe)
     {
-        import std.array : Appender;
-
         chdir(sandboxPath(directory));
 
         const quotDop = format(`"%s"`, dopExe);
@@ -128,10 +182,9 @@ struct Test
         Appender!string failureMsg;
         bool outputAdded;
 
-        foreach (exp; expectedOutputs)
+        foreach (exp; expectations)
         {
-            auto res = matchFirst(result.output, exp);
-            if (res.empty)
+            if (!exp.expect(this, result.output))
             {
                 if (!outputAdded)
                 {
@@ -144,7 +197,7 @@ struct Test
                     failureMsg.put("-------\n");
                     outputAdded = true;
                 }
-                failureMsg.put(format("Could not match %s", exp));
+                failureMsg.put(exp.failMsg);
             }
         }
 
@@ -160,12 +213,23 @@ struct Test
     }
 }
 
+int usage(string[] args, int code)
+{
+    stderr.writefln("Usage: %s [TEST_FILE]", args[0]);
+    return code;
+}
+
 int main(string[] args)
 {
-    if (args.length < 2 || !exists(args[1]))
+    if (args.length < 2)
     {
-        stderr.writefln("Usage: %s [TEST_FILE]", args[0]);
-        return -1;
+        stderr.writeln("Error: missing test file");
+        return usage(args, 1);
+    }
+    if (!exists(args[1]))
+    {
+        stderr.writefln("Error: No such file: %s", args[1]);
+        return usage(args, 1);
     }
 
     const dopExe = absolutePath(environment["DOP"]);
