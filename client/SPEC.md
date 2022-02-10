@@ -95,9 +95,9 @@ state of the package between successive invocations of `dop`.
 Set or get the compilation profile for the current package.
 The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
 
-- [ ] `dop profile`
+- [x] `dop profile`
   - Print the name of the currently selected profile or `(no profile selected)`
-- [ ] `dop profile --describe`
+- [x] `dop profile --describe`
   - Print a detailed description of the current profile.
 - [ ] `dop profile default`
   - Sets the default profile as current
