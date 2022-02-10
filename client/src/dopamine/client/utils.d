@@ -6,7 +6,7 @@ import dopamine.recipe;
 
 Recipe parseRecipe(PackageDir dir)
 {
-    auto recipe = Recipe.parseFile(dir.dopamineFile());
+    auto recipe = Recipe.parseFile(dir.recipeFile());
     logInfo("%s: %s - %s-%s", info("Recipe"), success("OK"), recipe.name, recipe.ver);
     return recipe;
 }

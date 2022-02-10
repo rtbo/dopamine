@@ -38,14 +38,14 @@ class Package
         {
             throw new InvalidPackageException(path, "directory does not exist");
         }
-        if (!_dir.hasDopamineFile)
+        if (!_dir.hasRecipeFile)
         {
             throw new InvalidPackageException(path, "has no dopamine.lua file");
         }
 
         try
         {
-            _recipe = Recipe.parseFile(_dir.dopamineFile);
+            _recipe = Recipe.parseFile(_dir.recipeFile);
         }
         catch (Exception ex)
         {

@@ -245,7 +245,7 @@ int profileMain(string[] args)
     // Recipe is needed only in a few situations,
     // so we load it only if available.
     Recipe recipe;
-    if (dir.hasDopamineFile)
+    if (dir.hasRecipeFile)
     {
         recipe = parseRecipe(dir);
     }
@@ -264,7 +264,7 @@ int profileMain(string[] args)
             "Discovered default profile %s:\n%s",
             info(profile.name), app.data
         );
-        profile.saveToFile(userProfileFile(profile.name));
+        profile.saveToFile(homeProfileFile(profile.name));
     }
 
     if (opt.isRead)
@@ -287,7 +287,7 @@ int profileMain(string[] args)
 
     if (opt.profileName)
     {
-        const newProfileFile = userProfileFile(opt.profileName);
+        const newProfileFile = homeProfileFile(opt.profileName);
 
         enforce(exists(newProfileFile), new FormatLogException(
                 "%s No such profile: %s (%s)",
@@ -362,7 +362,7 @@ int profileMain(string[] args)
             logInfo("Renaming profile from %s to %s", info(profile.basename), info(opt.exportName));
             profile = profile.withBasename(opt.exportName);
         }
-        const file = userProfileFile(profile);
+        const file = homeProfileFile(profile);
         logInfo("Exporting profile to %s", file);
         profile.saveToFile(file);
     }

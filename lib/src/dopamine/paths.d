@@ -11,9 +11,13 @@ import std.path;
 
 @safe:
 
-string userDopDir()
+string homeDopDir()
 {
     import std.process : environment;
+
+    const home = environment.get("DOP_HOME");
+    if (home)
+        return home;
 
     version (linux)
     {
@@ -29,49 +33,49 @@ string userDopDir()
     }
 }
 
-string userPackagesDir()
+string homePackagesDir()
 {
-    return buildPath(userDopDir(), "packages");
+    return buildPath(homeDopDir(), "packages");
 }
 
-string userPackageDir(string packname, const(Semver) ver)
+string homePackageDir(string packname, const(Semver) ver)
 {
-    return buildPath(userDopDir(), "packages", format("%s-%s", packname, ver));
+    return buildPath(homeDopDir(), "packages", format("%s-%s", packname, ver));
 }
 
-string userProfilesDir()
+string homeProfilesDir()
 {
-    return buildPath(userDopDir(), "profiles");
+    return buildPath(homeDopDir(), "profiles");
 }
 
-string userProfileFile(string name)
+string homeProfileFile(string name)
 {
-    return buildPath(userProfilesDir(), name ~ ".ini");
+    return buildPath(homeProfilesDir(), name ~ ".ini");
 }
 
-string userProfileFile(Profile profile)
+string homeProfileFile(Profile profile)
 {
-    return userProfileFile(profile.name);
+    return homeProfileFile(profile.name);
 }
 
 string userLoginFile()
 {
-    return buildPath(userDopDir(), "login.json");
+    return buildPath(homeDopDir(), "login.json");
 }
 
 string cacheDepPackDir(string packname)
 {
-    return buildPath(userDopDir(), "packages", packname);
+    return buildPath(homeDopDir(), "packages", packname);
 }
 
 string cacheDepVerDir(string packname, Semver ver)
 {
-    return buildPath(userDopDir(), "packages", packname, ver.toString());
+    return buildPath(homeDopDir(), "packages", packname, ver.toString());
 }
 
 PackageDir cacheDepRevDir(string packname, Semver ver, string revision)
 {
-    return PackageDir(buildPath(userDopDir(), "packages", packname, ver.toString(), revision));
+    return PackageDir(buildPath(homeDopDir(), "packages", packname, ver.toString(), revision));
 }
 
 PackageDir cacheDepRevDir(Recipe recipe) @system
@@ -101,15 +105,15 @@ struct PackageDir
         return dir.exists && dir.isDir;
     }
 
-    @property bool hasDopamineFile() const
+    @property bool hasRecipeFile() const
     {
         import std.file : exists, isFile;
 
-        const df = dopamineFile;
+        const df = recipeFile;
         return df.exists && df.isFile;
     }
 
-    @property string dopamineFile() const
+    @property string recipeFile() const
     {
         return _path("dopamine.lua");
     }
@@ -160,7 +164,7 @@ struct PackageDir
 
         const dirName = _configDirName(profile);
         const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
-                profile.digestHash[0 .. 10], archiveFormat[0]);
+            profile.digestHash[0 .. 10], archiveFormat[0]);
         return _dopPath(dirName, filename);
     }
 
@@ -170,7 +174,7 @@ struct PackageDir
         import std.format : format;
 
         const pdir = PackageDir(dir);
-        enforce(pdir.hasDopamineFile, msg.length ? msg
+        enforce(pdir.hasRecipeFile, msg.length ? msg
                 : format("%s is not a Dopamine package directory", pdir.dir));
         return pdir;
     }
@@ -210,13 +214,13 @@ struct ProfileDirs
         import std.path : absolutePath;
 
         return BuildDirs(src.absolutePath(base), work.absolutePath(base),
-                build.absolutePath(base), install.absolutePath(base));
+            build.absolutePath(base), install.absolutePath(base));
     }
 }
 
-@("PackageDir.dopamineFile")
+@("PackageDir.recipeFile")
 unittest
 {
     const dir = PackageDir(".");
-    assert(dir.dopamineFile == buildPath(".", "dopamine.lua"));
+    assert(dir.recipeFile == buildPath(".", "dopamine.lua"));
 }
