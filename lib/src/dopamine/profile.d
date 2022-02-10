@@ -10,6 +10,7 @@ import std.conv;
 import std.digest.sha;
 import std.exception;
 import std.format;
+import std.range;
 import std.string;
 
 @safe:
@@ -229,11 +230,12 @@ struct HostInfo
         feedDigestData(digest, _os);
     }
 
-    private void describe(ref Appender!string app, int indent) const
+    private void describe(O)(O output, int indent) const
+    if (isOutputRange!(O, char))
     {
         const ind = indentStr(indent);
-        app.put(format("%sArchitecture: %s\n", ind, arch.to!string));
-        app.put(format("%sOS:           %s\n", ind, os.to!string));
+        output.put(format("%sArchitecture: %s\n", ind, arch.to!string));
+        output.put(format("%sOS:           %s\n", ind, os.to!string));
     }
 
     private void writeIniSection(ref Appender!string app) const
@@ -340,15 +342,16 @@ struct Compiler
         }
     }
 
-    private void describe(ref Appender!string app, int indent) const
+    private void describe(O)(O output, int indent) const
+    if (isOutputRange!(O, char))
     {
         auto ind = indentStr(indent);
-        app.put(format("%s%s Compiler:\n", ind, lang.to!string));
+        output.put(format("%s%s Compiler:\n", ind, lang.to!string));
         ind = indentStr(indent + 1);
-        app.put(format("%sname:    %s\n", ind, name));
-        app.put(format("%sversion: %s\n", ind, ver));
-        app.put(format("%spath:    %s\n", ind, path));
-        app.put(format("%sdisplay: %s\n", ind, displayName));
+        output.put(format("%sname:    %s\n", ind, name));
+        output.put(format("%sversion: %s\n", ind, ver));
+        output.put(format("%spath:    %s\n", ind, path));
+        output.put(format("%sdisplay: %s\n", ind, displayName));
     }
 
     private void feedDigest(ref DopDigest digest) const
@@ -511,22 +514,19 @@ final class Profile
         }
     }
 
-    string describe() const
+    void describe(O)(O output) const
+    if (isOutputRange!(O, char))
     {
-        Appender!string app;
-
-        app.put(format("Profile %s\n", name));
-        _hostInfo.describe(app, 1);
-        app.put(format("%sBuild type:   %s\n", indentStr(1), _buildType.toConfig));
+        output.put(format("Profile %s\n", name));
+        _hostInfo.describe(output, 1);
+        output.put(format("%sBuild type:   %s\n", indentStr(1), _buildType.toConfig));
 
         foreach (c; _compilers)
         {
-            c.describe(app, 1);
+            c.describe(output, 1);
         }
 
-        app.put(format("%sDigest hash:  %s\n", indentStr(1), digestHash()));
-
-        return app.data();
+        output.put(format("%sDigest hash:  %s\n", indentStr(1), digestHash()));
     }
 
     void saveToFile(string path, bool withName = true, bool mkdir = false) const
