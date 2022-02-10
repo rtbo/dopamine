@@ -1,0 +1,6 @@
+CMD=$DOP profile --describe
+DIR=recipes/profile
+EXPECT_OUTPUT=Profile ldc-d
+EXPECT_OUTPUT=Architecture:\s+X86-64
+EXPECT_OUTPUT=D Compiler
+EXPECT_OUTPUT=name:\s+LDC

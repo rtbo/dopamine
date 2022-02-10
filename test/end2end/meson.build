@@ -1,7 +1,14 @@
 
-read_profiles = executable('read_profiles', 'read_profiles.d', 'utils.d',
+e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
     install: false,
 )
-test('read profiles', read_profiles,
-    args: [dop_client_exe]
+
+e2e_env = [
+    'DOP='+dop_client_exe.full_path()
+]
+
+test('read-profiles', e2e_driver_exe,
+    env: e2e_env,
+    args: [files('read-profiles.test')],
+    suite: 'e2e',
 )
