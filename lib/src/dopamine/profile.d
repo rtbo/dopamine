@@ -275,6 +275,17 @@ struct Compiler
         _vsvc = vsvc;
     }
 
+    static Compiler detect(Lang lang, string compiler=null)
+    {
+        if (compiler)
+        {
+            // choose regex from compiler, or define common regex
+            // `compiler` can be "dmd", or "/usr/bin/dmd"
+            assert(false, "unimplemented");
+        }
+        return detectDefaultCompiler(lang);
+    }
+
     @property Lang lang() const
     {
         return _lang;

@@ -36,13 +36,13 @@ struct ProfileOptions
     SetLang[] setLangs;
     bool setDebug;
     bool setRelease;
-    string saveName;
+    string exportName;
     string profileName;
 
     @property Mode mode() const
     {
-        if (addMissing || setLangs.length ||
-            setDebug || setRelease || profileName.length)
+        if (addMissing || setLangs.length || setDebug || setRelease ||
+            profileName.length || exportName.length)
         {
             return Mode.write;
         }
@@ -121,21 +121,21 @@ struct ProfileOptions
             {
                 opt.setRelease = true;
             }
-            else if (arg.startsWith("--save"))
+            else if (arg.startsWith("--export"))
             {
-                enum start = "--save".length;
+                enum start = "--export".length;
                 if (arg.length > start && arg[start] == '=')
                 {
-                    opt.saveName = arg[start + 1 .. $];
+                    opt.exportName = arg[start + 1 .. $];
                 }
                 else if (i + 1 < args.length && !args[i + 1].startsWith("-"))
                 {
-                    opt.saveName = args[++i];
+                    opt.exportName = args[++i];
                 }
-                if (!opt.saveName.length)
+                if (!opt.exportName.length)
                 {
                     throw new FormatLogException(
-                        "%s --save must have a [name] argument",
+                        "%s --export must have a [name] argument",
                         error("Error:"),
                     );
                 }
@@ -203,17 +203,12 @@ unittest
     assert(opt.setLangs.length == 1);
     assert(opt.setLangs[0] == SetLang(Lang.d, "dmd"));
 
-    assertThrown(ProfileOptions.parse(["--save"]));
+    assertThrown(ProfileOptions.parse(["--export"]));
 
-    opt = ProfileOptions.parse(["--save", "name"]);
-    // Mode.read is not intuitive, but is correct:
-    // we save into user cache, not in the local profile.
-    assert(opt.isRead);
-
-    opt = ProfileOptions.parse(["--release", "--save", "name"]);
+    opt = ProfileOptions.parse(["--release", "--export", "name"]);
     assert(opt.isWrite);
     assert(opt.setRelease);
-    assert(opt.saveName == "name");
+    assert(opt.exportName == "name");
 
     opt = ProfileOptions.parse(["--debug"]);
     assert(opt.isWrite);
@@ -246,11 +241,17 @@ int profileMain(string[] args)
     }
 
     auto dir = PackageDir(".");
-    if (!dir.hasDopamineFile)
+
+    // Recipe is needed only in a few situations,
+    // so we load it only if available.
+    Recipe recipe;
+    if (dir.hasDopamineFile)
     {
-        logWarning(
-            "%s This does not seem to be a dopamine package directory.",
-            warning("Warning:"));
+        recipe = parseRecipe(dir);
+    }
+    else
+    {
+        logVerbose("no recipe available");
     }
 
     if (opt.discover)
@@ -271,7 +272,7 @@ int profileMain(string[] args)
         enforce(exists(dir.profileFile), new FormatLogException(
                 "%s No profile file to read from",
                 error("Error:")
-            ));
+        ));
         auto profile = Profile.loadFromFile(dir.profileFile);
         if (opt.describe)
         {
@@ -284,18 +285,13 @@ int profileMain(string[] args)
         return 0;
     }
 
-    enforce(dir.hasDopamineFile, new FormatLogException(
-        "%s A recipe file is needed to interact with the profile.",
-        error("Error:")
-    ));
-
     if (opt.profileName)
     {
         const newProfileFile = userProfileFile(opt.profileName);
 
         enforce(exists(newProfileFile), new FormatLogException(
-            "%s No such profile: %s (%s)",
-            error("Error:"), info(opt.profileName), newProfileFile
+                "%s No such profile: %s (%s)",
+                error("Error:"), info(opt.profileName), newProfileFile
         ));
         if (exists(dir.profileFile))
         {
@@ -307,14 +303,82 @@ int profileMain(string[] args)
 
     // the remaining options are about modifying an existing profile
 
-    if (!exists(opt.profileName)) {
-        logError(
-            "%s No profile found in %s. Please set an initial profile first.",
-            error("Error:"), dir
-        );
-        return usage(1);
+    Profile profile;
+    if (exists(dir.profileFile))
+    {
+        profile = Profile.loadFromFile(dir.profileFile);
     }
 
+    auto orig = profile;
+
+    bool modified;
+
+    if (opt.addMissing)
+    {
+        enforce(cast(bool) recipe, new FormatLogException(
+                "%s recipe file is needed to know which languages are missing.",
+                error("Error:"),
+        ));
+        enforce(profile, new FormatLogException(
+                "%s no profile found.",
+                error("Error:"),
+        ));
+
+        const allLangs = recipe.langs;
+        const availLangs = profile.langs;
+
+        foreach (l; allLangs)
+        {
+            import std.algorithm : canFind;
+
+            if (!availLangs.canFind(l))
+            {
+                auto cl = Compiler.detect(l);
+                logInfo("Found %s compiler: %s (%s)",
+                    l.to!string, cl.displayName, cl.path,
+                );
+                auto compilers = profile.compilers.dup ~ cl;
+                profile = profile.withCompilers(compilers);
+            }
+        }
+    }
+
+    if (opt.setDebug || opt.setRelease)
+    {
+        enforce(profile, new FormatLogException(
+                "%s no profile found.",
+                error("Error:"),
+        ));
+
+        const newBt = opt.setDebug ? BuildType.debug_ : BuildType.release;
+        logInfo("Setting profile build type to %s", info(newBt.to!string));
+        profile = profile.withBuildType(newBt);
+    }
+
+    if (opt.exportName)
+    {
+        if (opt.exportName != profile.basename)
+        {
+            logInfo("Renaming profile from %s to %s", info(profile.basename), info(opt.exportName));
+            profile = profile.withBasename(opt.exportName);
+        }
+        const file = userProfileFile(profile);
+        logInfo("Exporting profile to %s", file);
+        profile.saveToFile(file);
+    }
+
+    if (profile !is orig)
+    {
+        logInfo("Saving updated profile to: %s", info(dir.profileFile));
+        profile.saveToFile(dir.profileFile);
+
+        if (opt.describe)
+        {
+            logInfo("Updated profile description:\n");
+            // FIXME describe to logInfo rather than stdout
+            profile.describe(stdout.lockingTextWriter());
+        }
+    }
 
     return 0;
 }
