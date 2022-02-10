@@ -7,10 +7,13 @@ import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 
+import std.array;
 import std.exception;
 import std.file;
+import std.path;
 import std.string;
 import std.stdio;
+import std.typecons;
 
 struct SetLang
 {
@@ -27,6 +30,7 @@ struct ProfileOptions
     }
 
     bool help;
+    bool discover;
     bool describe;
     bool addMissing;
     SetLang[] setLangs;
@@ -74,6 +78,10 @@ struct ProfileOptions
             {
                 opt.help = true;
                 return opt;
+            }
+            else if (arg == "--discover")
+            {
+                opt.discover = true;
             }
             else if (arg == "--describe")
             {
@@ -245,6 +253,19 @@ int profileMain(string[] args)
             warning("Warning:"));
     }
 
+    if (opt.discover)
+    {
+        Lang[] langs = [Lang.d, Lang.cpp, Lang.c];
+        auto profile = detectDefaultProfile(langs, Yes.allowMissing);
+        Appender!string app;
+        profile.describe(app);
+        logInfo(
+            "Discovered default profile %s:\n%s",
+            info(profile.name), app.data
+        );
+        profile.saveToFile(userProfileFile(profile.name));
+    }
+
     if (opt.isRead)
     {
         enforce(exists(dir.profileFile), new FormatLogException(
@@ -263,7 +284,37 @@ int profileMain(string[] args)
         return 0;
     }
 
-    Recipe recipe = parseRecipe(dir);
+    enforce(dir.hasDopamineFile, new FormatLogException(
+        "%s A recipe file is needed to interact with the profile.",
+        error("Error:")
+    ));
+
+    if (opt.profileName)
+    {
+        const newProfileFile = userProfileFile(opt.profileName);
+
+        enforce(exists(newProfileFile), new FormatLogException(
+            "%s No such profile: %s (%s)",
+            error("Error:"), info(opt.profileName), newProfileFile
+        ));
+        if (exists(dir.profileFile))
+        {
+            logInfo("Overwriting previous profile file");
+        }
+        mkdirRecurse(dirName(dir.profileFile));
+        copy(newProfileFile, dir.profileFile);
+    }
+
+    // the remaining options are about modifying an existing profile
+
+    if (!exists(opt.profileName)) {
+        logError(
+            "%s No profile found in %s. Please set an initial profile first.",
+            error("Error:"), dir
+        );
+        return usage(1);
+    }
+
 
     return 0;
 }
