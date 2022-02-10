@@ -744,7 +744,7 @@ string strFromLang(Lang lang)
     return lang.toConfig();
 }
 
-Profile detectDefaultProfile(Lang[] langs)
+Profile detectDefaultProfile(Lang[] langs, Flag!"allowMissing" allowMissing)
 {
     auto hostInfo = currentHostInfo();
 
@@ -753,10 +753,37 @@ Profile detectDefaultProfile(Lang[] langs)
     Compiler[] compilers;
     foreach (lang; langs)
     {
-        compilers ~= detectDefaultCompiler(lang);
+        try {
+            compilers ~= detectDefaultCompiler(lang);
+        }
+        catch (CompilerVersionParseException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            if (!allowMissing) {
+                throw ex;
+            }
+        }
     }
 
+    if (!compilers.length) throw new Exception("No compiler found, cannot initialize profile");
+
     return new Profile("default", hostInfo, BuildType.debug_, compilers);
+}
+
+class CompilerVersionParseException : Exception
+{
+    this (string clName, string[] cmd, string output)
+    {
+        import std.process : escapeShellCommand;
+
+        super(format(
+            "Could not parse version of %s from \"%s\" output:\n",
+            clName, escapeShellCommand(cmd), output,
+        ));
+    }
 }
 
 private:
@@ -872,8 +899,7 @@ string extractCompilerVersion(string versionOutput, string re)
     import std.regex : matchFirst, regex;
 
     auto verMatch = matchFirst(versionOutput, regex(re, "m"));
-    enforce(verMatch.length >= 2, format("Compiler version not found. Command output:\n%s",
-            versionOutput));
+    enforce(verMatch.length >= 2);
     return verMatch[1];
 }
 
@@ -890,11 +916,19 @@ in (command.length >= 1)
     if (result.status != 0)
         return Compiler.init;
 
-    const ver = extractCompilerVersion(result.output, re);
-
     const path = command[0];
 
-    return Compiler(lang, name, ver, path);
+    try
+    {
+        const ver = extractCompilerVersion(result.output, re);
+        return Compiler(lang, name, ver, path);
+    }
+    catch(Exception ex)
+    {
+        throw new CompilerVersionParseException(
+            name, command, result.output
+        );
+    }
 }
 
 enum ldcVersionRe = `^LDC.*\((\d+\.\d+\.\d+[A-Za-z0-9.+-]*)\):$`;
