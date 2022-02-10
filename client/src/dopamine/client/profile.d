@@ -1,9 +1,16 @@
 module dopamine.client.profile;
 
-import dopamine.log;
-import dopamine.profile;
+import dopamine.client.utils;
 
+import dopamine.log;
+import dopamine.paths;
+import dopamine.profile;
+import dopamine.recipe;
+
+import std.exception;
+import std.file;
 import std.string;
+import std.stdio;
 
 struct SetLang
 {
@@ -39,6 +46,16 @@ struct ProfileOptions
         {
             return Mode.read;
         }
+    }
+
+    bool isRead() const
+    {
+        return mode == Mode.read;
+    }
+
+    bool isWrite() const
+    {
+        return mode == Mode.write;
     }
 
     // parse options of the profile command
@@ -142,39 +159,39 @@ unittest
 {
     import std.exception : assertThrown;
 
-    assert(ProfileOptions.parse([]).mode == ProfileOptions.Mode.read);
+    assert(ProfileOptions.parse([]).isRead);
 
     auto opt = ProfileOptions.parse(["--describe"]);
-    assert(opt.mode == ProfileOptions.Mode.read);
+    assert(opt.isRead);
     assert(opt.describe);
 
     opt = ProfileOptions.parse(["blah"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.profileName == "blah");
 
     opt = ProfileOptions.parse(["--add-missing"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.addMissing);
 
     opt = ProfileOptions.parse(["--set-d"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.setLangs.length == 1);
     assert(opt.setLangs[0] == SetLang(Lang.d, null));
 
     opt = ProfileOptions.parse(["--set-d=dmd"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.setLangs.length == 1);
     assert(opt.setLangs[0] == SetLang(Lang.d, "dmd"));
 
     opt = ProfileOptions.parse(["--set-d", "dmd"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.setLangs.length == 1);
     assert(opt.setLangs[0] == SetLang(Lang.d, "dmd"));
 
     assertThrown(ProfileOptions.parse(["--set-x"]));
 
     opt = ProfileOptions.parse(["--set-d=dmd"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.setLangs.length == 1);
     assert(opt.setLangs[0] == SetLang(Lang.d, "dmd"));
 
@@ -183,15 +200,15 @@ unittest
     opt = ProfileOptions.parse(["--save", "name"]);
     // Mode.read is not intuitive, but is correct:
     // we save into user cache, not in the local profile.
-    assert(opt.mode == ProfileOptions.Mode.read);
+    assert(opt.isRead);
 
     opt = ProfileOptions.parse(["--release", "--save", "name"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.setRelease);
     assert(opt.saveName == "name");
 
     opt = ProfileOptions.parse(["--debug"]);
-    assert(opt.mode == ProfileOptions.Mode.write);
+    assert(opt.isWrite);
     assert(opt.setDebug);
 
     assertThrown(ProfileOptions.parse(["--debug", "--release"]));
@@ -214,6 +231,39 @@ int profileMain(string[] args)
         logError("%s Could not parse options: %s", error("Error:"), ex.msg);
         return usage(1);
     }
+
+    if (opt.help)
+    {
+        return usage(0);
+    }
+
+    auto dir = PackageDir(".");
+    if (!dir.hasDopamineFile)
+    {
+        logWarning(
+            "%s This does not seem to be a dopamine package directory.",
+            warning("Warning:"));
+    }
+
+    if (opt.isRead)
+    {
+        enforce(exists(dir.profileFile), new FormatLogException(
+                "%s No profile file to read from",
+                error("Error:")
+            ));
+        auto profile = Profile.loadFromFile(dir.profileFile);
+        if (opt.describe)
+        {
+            profile.describe(stdout.lockingTextWriter());
+        }
+        else
+        {
+            stdout.writeln(profile.name);
+        }
+        return 0;
+    }
+
+    Recipe recipe = parseRecipe(dir);
 
     return 0;
 }
