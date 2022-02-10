@@ -1,7 +1,0 @@
-{
-  "name": "lib",
-  "targetName": "dopamine",
-  "targetType": "library",
-  "versions": ["LUA_53"],
-  "stringImportPaths": ["src/dopamine/lua"]
-}
