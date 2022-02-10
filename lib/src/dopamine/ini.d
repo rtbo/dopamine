@@ -44,6 +44,7 @@ struct Ini
     }
 }
 
+/// an INI section
 struct Section
 {
     /// the name of the section
@@ -82,12 +83,14 @@ struct Section
     }
 }
 
+/// an INI property
 struct Prop
 {
     string name;
     string value;
 }
 
+/// parses the INI range of lines
 @trusted Ini parseIni(R)(R lines)
         if (isInputRange!R && isSomeString!(ElementType!R))
 {

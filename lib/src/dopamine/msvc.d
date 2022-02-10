@@ -1,11 +1,11 @@
 module dopamine.msvc;
 
 // dfmt off
-version (Windows):
+// version (Windows):
 // dfmt on
 
 import dopamine.log;
-import dopamine.profile;
+import dopamine.profile : Arch;
 import dopamine.semver;
 import dopamine.util;
 

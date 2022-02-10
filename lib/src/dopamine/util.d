@@ -4,11 +4,52 @@ import dopamine.log;
 
 import std.digest;
 import std.file;
-import std.path;
 import std.string;
 import std.traits;
 
 @safe:
+
+package:
+
+/// Check if array has duplicates
+/// Will try first as if the array is sorted
+/// and will fallback to brute force if not
+bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
+{
+    if (arr.length <= 1)
+        return false;
+
+    T last = arr[0];
+    foreach (el; arr[1 .. $])
+    {
+        if (last == el)
+            return true;
+        if (last < el)
+        {
+            last = el;
+            continue;
+        }
+        // not sorted: alternative impl
+        foreach (i, a; arr[0 .. $ - 1])
+        {
+            foreach (b; arr[i + 1 .. $])
+            {
+                if (a == b)
+                    return true;
+            }
+        }
+        break;
+    }
+    return false;
+}
+
+size_t indexOrLast(string s, char c) pure
+{
+    import std.string : indexOf;
+
+    const ind = s.indexOf(c);
+    return ind >= 0 ? ind : s.length;
+}
 
 /// Generate a unique name for temporary path (either dir or file)
 /// Params:
@@ -47,55 +88,6 @@ out (res; (!location || res.startsWith(location)) && !exists(res))
     return res;
 }
 
-/// execute pred from directory dir
-/// and chdir back to the previous dir afterwards
-/// Returns: whatever pred returns
-auto fromDir(alias pred)(string dir) @system
-{
-    // shortcut if chdir is not needed
-    if (dir == ".")
-        return pred();
-
-    const cwd = getcwd();
-    chdir(dir);
-    scope (exit)
-        chdir(cwd);
-
-    return pred();
-}
-
-/// Check if array has duplicates
-/// Will try first as if the array is sorted
-/// and will fallback to brute force if not
-bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
-{
-    if (arr.length <= 1)
-        return false;
-
-    T last = arr[0];
-    foreach (el; arr[1 .. $])
-    {
-        if (last == el)
-            return true;
-        if (last < el)
-        {
-            last = el;
-            continue;
-        }
-        // not sorted: alternative impl
-        foreach (i, a; arr[0 .. $ - 1])
-        {
-            foreach (b; arr[i + 1 .. $])
-            {
-                if (a == b)
-                    return true;
-            }
-        }
-        break;
-    }
-    return false;
-}
-
 @("hasDuplicates")
 unittest
 {
@@ -103,6 +95,48 @@ unittest
     assert(!hasDuplicates([1, 5, 2, 4, 3]));
     assert(hasDuplicates([1, 2, 2, 3, 4, 5]));
     assert(hasDuplicates([1, 2, 3, 4, 1]));
+}
+
+struct SizeOfStr
+{
+    size_t bytes;
+    double size;
+    string unit;
+
+    this(size_t bytes) pure @nogc
+    {
+        enum KiB = 1024;
+        enum MiB = KiB * 1024;
+        enum GiB = MiB * 1024;
+
+        if (bytes >= GiB)
+        {
+            size = bytes / cast(double) GiB;
+            unit = "GiB";
+        }
+        if (bytes >= MiB)
+        {
+            size = bytes / cast(double) MiB;
+            unit = "MiB";
+        }
+        if (bytes >= KiB)
+        {
+            size = bytes / cast(double) KiB;
+            unit = "KiB";
+        }
+        else
+        {
+            size = cast(double) bytes;
+            unit = "B";
+        }
+    }
+
+    string toString() const pure
+    {
+        import std.format : format;
+
+        return format("%.1f %s", size, unit);
+    }
 }
 
 void feedDigestData(D)(ref D digest, in string s) if (isDigest!D)
@@ -132,66 +166,82 @@ void feedDigestData(D, V)(ref D digest, in V val)
     digest.put(0);
 }
 
-/// An file written to flag that a condition is met
-struct FlagFile
+/// Get all entries directly contained by dir
+string[] allEntries(string dir) @trusted
 {
-    string path;
+    import std.algorithm : map;
+    import std.array : array;
+    import std.file : dirEntries, SpanMode;
+    import std.path : asAbsolutePath, asRelativePath;
 
-    FlagFile absolute(string cwd = getcwd())
+    dir = asAbsolutePath(dir).array;
+    return dirEntries(dir, SpanMode.shallow, false).map!(d => d.name.asRelativePath(dir)
+            .array).array;
+}
+
+/// Find a program executable name in the system PATH and return its full path
+string findProgram(in string name)
+{
+    import std.process : environment;
+
+    version (Windows)
     {
-        import std.path : absolutePath;
+        import std.algorithm : endsWith;
 
-        return FlagFile(path.absolutePath(cwd));
+        const efn = name.endsWith(".exe") ? name : name ~ ".exe";
+    }
+    else
+    {
+        const efn = name;
     }
 
-    @property bool exists()
+    return searchInEnvPath(environment["PATH"], efn);
+}
+
+/// environment variable path separator
+version (Posix)
+    enum envPathSep = ':';
+else version (Windows)
+    enum envPathSep = ';';
+else
+    static assert(false);
+
+/// Search for filename in the envPath variable content which can
+/// contain multiple paths separated with sep depending on platform.
+/// Returns: null if the file can't be found.
+string searchInEnvPath(in string envPath, in string filename, in char sep = envPathSep)
+{
+    import std.algorithm : splitter;
+    import std.file : exists;
+    import std.path : buildPath;
+
+    foreach (dir; splitter(envPath, sep))
     {
-        import std.file : exists;
-
-        return exists(path);
+        const filePath = buildPath(dir, filename);
+        if (exists(filePath))
+            return filePath;
     }
+    return null;
+}
 
-    string read() @trusted
-    in (exists)
+/// Search for filename pattern in the envPath variable content which can
+/// contain multiple paths separated with sep depending on platform.
+/// Returns: array of matching file names
+string[] searchPatternInEnvPath(in string envPath, in string pattern, in char sep = envPathSep) @trusted
+{
+    import std.algorithm : map, splitter;
+    import std.array : array;
+    import std.file : dirEntries, exists, isDir, SpanMode;
+
+    string[] res = [];
+
+    foreach (dir; splitter(envPath, sep))
     {
-        import std.exception : assumeUnique;
-        import std.file : read;
-
-        return cast(string) assumeUnique(read(path));
+        if (!exists(dir) || !isDir(dir))
+            continue;
+        res ~= dirEntries(dir, pattern, SpanMode.shallow).map!(de => de.name).array;
     }
-
-    void write(string content = "")
-    {
-        import std.file : mkdirRecurse, write;
-        import std.path : dirName;
-
-        mkdirRecurse(dirName(path));
-        write(path, content);
-    }
-
-    void touch()
-    {
-        import std.file : append;
-        import std.path : dirName;
-
-        mkdirRecurse(dirName(path));
-        append(path, []);
-    }
-
-    void remove()
-    {
-        import std.file : exists, remove;
-
-        if (exists(path))
-            remove(path);
-    }
-
-    @property auto timeLastModified()
-    {
-        import std.file : timeLastModified;
-
-        return timeLastModified(path);
-    }
+    return res;
 }
 
 /// Install a single file, that is copy it to dest unless dest exists and is not older.
@@ -216,7 +266,7 @@ in (src.exists && src.isFile, src ~ " does not exist or is not a file")
             symlink(link, dest);
 
             logVerbose("%s %s -> %s", removeLink ? "Recreating symlink" : "Creating symlink  ",
-                    info(dest), color(Color.cyan, link));
+                info(dest), color(Color.cyan, link));
             return;
         }
     }
@@ -265,8 +315,8 @@ void installRecurse(const(char)[] src, const(char)[] dest, bool preserveLinks = 
                     const link = readLink(entry.name);
                     const fullPath = buildPath(dirName(entry.name), link).buildNormalizedPath();
                     enforce(fullPath.startsWith(src),
-                            new FormatLogException("%s: %s links to %s which is outside of %s",
-                                error("Error"), entry.name, fullPath, src));
+                        new FormatLogException("%s: %s links to %s which is outside of %s",
+                            error("Error"), entry.name, fullPath, src));
                 }
             }
 
@@ -344,85 +394,8 @@ void installRecurse(const(char)[] src, const(char)[] dest, bool preserveLinks = 
     }
 }
 
-/// Get all entries directly contained by dir
-string[] allEntries(string dir) @trusted
-{
-    import std.algorithm : map;
-    import std.array : array;
-    import std.file : dirEntries, SpanMode;
-    import std.path : asAbsolutePath, asRelativePath;
-
-    dir = asAbsolutePath(dir).array;
-    return dirEntries(dir, SpanMode.shallow, false).map!(d => d.name.asRelativePath(dir)
-            .array).array;
-}
-
-string findProgram(in string name)
-{
-    import std.process : environment;
-
-    version (Windows)
-    {
-        import std.algorithm : endsWith;
-
-        const efn = name.endsWith(".exe") ? name : name ~ ".exe";
-    }
-    else
-    {
-        const efn = name;
-    }
-
-    return searchInEnvPath(environment["PATH"], efn);
-}
-
-/// environment variable path separator
-version (Posix)
-    enum envPathSep = ':';
-else version (Windows)
-    enum envPathSep = ';';
-else
-    static assert(false);
-
-/// Search for filename in the envPath variable content which can
-/// contain multiple paths separated with sep depending on platform.
-/// Returns: null if the file can't be found.
-string searchInEnvPath(in string envPath, in string filename, in char sep = envPathSep)
-{
-    import std.algorithm : splitter;
-    import std.file : exists;
-    import std.path : buildPath;
-
-    foreach (dir; splitter(envPath, sep))
-    {
-        const filePath = buildPath(dir, filename);
-        if (exists(filePath))
-            return filePath;
-    }
-    return null;
-}
-
-/// Search for filename pattern in the envPath variable content which can
-/// contain multiple paths separated with sep depending on platform.
-/// Returns: array of matching file names
-string[] searchPatternInEnvPath(in string envPath, in string pattern, in char sep = envPathSep) @trusted
-{
-    import std.algorithm : map, splitter;
-    import std.array : array;
-    import std.file : dirEntries, exists, isDir, SpanMode;
-
-    string[] res = [];
-
-    foreach (dir; splitter(envPath, sep))
-    {
-        if (!exists(dir) || !isDir(dir))
-            continue;
-        res ~= dirEntries(dir, pattern, SpanMode.shallow).map!(de => de.name).array;
-    }
-    return res;
-}
-
 void runCommand(in string[] cmd, string workDir = null,
-        LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
+    LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
 {
     import std.algorithm : canFind;
     import std.conv : to;
@@ -483,7 +456,7 @@ void runCommand(in string[] cmd, string workDir = null,
         }
 
         throw new FormatLogException("%s: %s failed with code %s\n%s%s%s",
-                error("Error"), info(cmd[0]), status, cmd.commandRep, outMsg, errMsg);
+            error("Error"), info(cmd[0]), status, cmd.commandRep, outMsg, errMsg);
     }
 }
 
@@ -493,49 +466,4 @@ void runCommand(in string[] cmd, string workDir = null,
     import std.array : join;
 
     return cmd.map!(c => c.canFind(' ') ? '"' ~ c ~ '"' : c).join(" ");
-}
-
-struct SizeOfStr
-{
-    size_t bytes;
-    double size;
-    string unit;
-
-    string toString() const
-    {
-        import std.format : format;
-
-        return format("%.1f %s", size, unit);
-    }
-}
-
-SizeOfStr convertBytesSizeOf(in size_t bytes) pure @nogc nothrow
-{
-    enum KiB = 1024;
-    enum MiB = KiB * 1024;
-    enum GiB = MiB * 1024;
-
-    if (bytes >= GiB)
-    {
-        return SizeOfStr(bytes, bytes / cast(double) GiB, "GiB");
-    }
-    if (bytes >= MiB)
-    {
-        return SizeOfStr(bytes, bytes / cast(double) MiB, "MiB");
-    }
-    if (bytes >= KiB)
-    {
-        return SizeOfStr(bytes, bytes / cast(double) KiB, "KiB");
-    }
-    return SizeOfStr(bytes, cast(double) bytes, "B");
-}
-
-package:
-
-size_t indexOrLast(string s, char c) pure
-{
-    import std.string : indexOf;
-
-    const ind = s.indexOf(c);
-    return ind >= 0 ? ind : s.length;
 }

@@ -252,7 +252,7 @@ struct ColorizedText
     int color;
     const(char)[] text;
 
-    void toString(scope void delegate(const(char)[]) sink)
+    void toString(scope void delegate(const(char)[]) sink) const
     {
         if (logging)
         {

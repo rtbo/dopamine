@@ -1,18 +1,9 @@
-module dopamine.dependency;
+module dopamine.dep.spec;
 
 import dopamine.semver;
 
 import std.exception;
 import std.string;
-
-/// Dependency specification
-struct Dependency
-{
-    /// name of the package
-    string name;
-    /// version specification
-    VersionSpec spec;
-}
 
 /// Exception thrown when parsing invalid Version Specification
 class InvalidVersionSpecException : Exception
@@ -218,7 +209,7 @@ struct VersionSpec
 
         // lower passed, checking upper
 
-        // special check if upper = Semver.init and _upperIncluded is true
+        // special match-all check if upper = Semver.init and _upperIncluded is true
         if (_upperIncluded && _upper == Semver.init)
             return true;
 

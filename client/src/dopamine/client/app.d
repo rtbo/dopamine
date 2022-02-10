@@ -1,20 +1,14 @@
 module dopamine.client.app;
 
-import dopamine.client.build;
-import dopamine.client.cache;
-import dopamine.client.depinstall;
-import dopamine.client.deplock;
 import dopamine.client.login;
-import dopamine.client.pack;
 import dopamine.client.profile;
-import dopamine.client.publish;
-import dopamine.client.source;
+
 import dopamine.conf;
 import dopamine.log;
+import dopamine.lua;
 
 import std.getopt;
-import std.file;
-import std.format;
+import std.stdio;
 
 alias CommandFunc = int function(string[] args);
 
@@ -25,29 +19,21 @@ struct Command
     string desc;
 }
 
+version(DopClientMain)
 int main(string[] args)
 {
     import std.algorithm : canFind, find, map, remove;
     import std.array : array;
-    import dopamine.lua : initLua;
+    import std.file : chdir;
+    import std.format : format;
 
     initLua();
 
     const commands = [
         Command("login", &loginMain, "Register login credientials"),
-        Command("profile", &profileMain, "Set compilation profile for the current package"),
-        Command("deplock", &depLockMain, "Lock dependencies"),
-        Command("depinstall", &depInstallMain, "Install dependencies"),
-        Command("source", &sourceMain, "Download package source"),
-        Command("build", &buildMain, "Build package"),
-        Command("package", &packageMain, "Create package from build"),
-        Command("cache", &cacheMain, "Add package to local cache"),
-        Command("publish", &publishMain, "Publish package to repository"),
+        Command("profile", &profileMain, "Manage compilation profile"),
     ];
-
     const commandNames = commands.map!(c => c.name).array;
-
-    // processing a few global args here
 
     string[] globalArgs = args;
     string[] leftover;
@@ -65,22 +51,26 @@ int main(string[] args)
     bool verbose;
     bool showVer;
 
-    auto helpInfo = getopt(globalArgs, "change-dir|C",
-            "Change current directory before running command", &changeDir, "verbose|v",
-            "Enable verbose mode", &verbose, "version", "Show dop version and exits", &showVer);
+    auto helpInfo = getopt(globalArgs,
+        "change-dir|C", "Change current directory before running command", &changeDir,
+        "verbose|v", "Enable verbose mode", &verbose,
+        "version", "Show dopamine version", &showVer
+    );
 
     if (helpInfo.helpWanted)
     {
-        return showHelp(helpInfo, commands);
+        return showHelp(helpInfo, args.length > 0 ? args[0] : "dop", commands);
     }
-    if (showVer)
-    {
-        logInfo("%s", info(dopamineVersion));
-        return 0;
-    }
+
     if (verbose)
     {
         minLogLevel = LogLevel.verbose;
+    }
+    if (showVer)
+    {
+        // verbose version info?
+        logInfo("%s", info(dopamineVersion));
+        return 0;
     }
     if (changeDir.length)
     {
@@ -105,7 +95,7 @@ int main(string[] args)
         return 1;
     }
 
-    // merge command name
+    // prepare command line for the actual driver
     args[0] = format("dop-%s", cmdName);
     args = args.remove(1);
 
@@ -124,14 +114,14 @@ int main(string[] args)
     return 1;
 }
 
-int showHelp(GetoptResult helpInfo, in Command[] commands)
+int showHelp(GetoptResult helpInfo, string exeName, in Command[] commands)
 {
     import std.algorithm : map, max, maxElement;
 
     logInfo("%s - Dopamine package manager client", info("dop"));
     logInfo("");
     logInfo("%s", info("Usage"));
-    logInfo("    dop [global options] command [command options]");
+    logInfo("    %s [global options] command [command options]", exeName);
     logInfo("");
 
     logInfo("%s", info("Global options"));
@@ -151,16 +141,17 @@ int showHelp(GetoptResult helpInfo, in Command[] commands)
     foreach (opt; helpInfo.options)
     {
         logInfo("    %*s %*s%*s %s", ls, opt.optShort, ll, opt.optLong,
-                hasRequired ? re.length : 1, opt.required ? re : " ", opt.help);
+            hasRequired ? re.length : 1, opt.required ? re : " ", opt.help);
     }
 
     logInfo("");
     logInfo("%s", info("Commands:"));
-    const maxName = commands.map!(cmd => cmd.name.length).maxElement;
+    const maxName = commands.length ? commands.map!(cmd => cmd.name.length).maxElement : 0;
     foreach (cmd; commands)
     {
         logInfo("    %*s  %s", maxName, cmd.name, cmd.desc);
     }
+    logInfo("");
     logInfo("For individual command help, type %s", info("dop [command] --help"));
 
     return 0;

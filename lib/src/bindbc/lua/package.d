@@ -10,4 +10,5 @@ public import bindbc.lua.config;
 version(LUA_51) public import bindbc.lua.v51;
 else version(LUA_52) public import bindbc.lua.v52;
 else version(LUA_53) public import bindbc.lua.v53;
-else static assert(0, "Please specify a Lua version on the commandline (e.g. -version=LUA_52) or in your dub.json/sdl configuration");
+else static assert(0, "Please specify a Lua version on the commandline "
+    ~ "(e.g. -version=LUA_52) or in your dub.json/sdl configuration");

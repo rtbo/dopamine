@@ -128,13 +128,11 @@ const(Profile) luaReadProfile(lua_State* L, int ind)
 @("Profile can pass to lua and come back identical")
 unittest
 {
-    import test.util : ensureDefaultProfile;
-
     auto L = luaL_newstate();
     scope (exit)
         lua_close(L);
 
-    auto profile = ensureDefaultProfile();
+    auto profile = mockProfileLinux();
     luaPushProfile(L, profile);
     auto copy = luaReadProfile(L, -1);
 

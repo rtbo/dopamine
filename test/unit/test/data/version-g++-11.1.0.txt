@@ -1,0 +1,5 @@
+g++ (GCC) 11.1.0
+Copyright © 2021 Free Software Foundation, Inc.
+Ce logiciel est un logiciel libre; voir les sources pour les conditions de copie.  Il n'y a
+AUCUNE GARANTIE, pas même pour la COMMERCIALISATION ni L'ADÉQUATION À UNE TÂCHE PARTICULIÈRE.
+

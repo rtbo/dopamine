@@ -1,9 +1,9 @@
 module dopamine.recipe;
 
+import dopamine.dep.spec;
 import dopamine.lua.lib;
 import dopamine.lua.profile;
 import dopamine.lua.util;
-import dopamine.dependency;
 import dopamine.profile;
 import dopamine.semver;
 
@@ -14,6 +14,12 @@ import std.json;
 import std.string;
 import std.stdio;
 import std.variant;
+
+/// A recipe dependency specification
+struct DepSpec {
+    string name;
+    VersionSpec spec;
+}
 
 enum BuildOptionType
 {
@@ -96,7 +102,7 @@ struct Recipe
 
     private RecipePayload d;
 
-    private this(RecipePayload d)
+    private this(RecipePayload d) @safe
     in (d !is null && d.rc == 1)
     {
         this.d = d;
@@ -132,22 +138,22 @@ struct Recipe
         }
     }
 
-    bool opCast(T : bool)() const
+    bool opCast(T : bool)() const @safe
     {
         return d !is null;
     }
 
-    @property RecipeType type() const
+    @property RecipeType type() const @safe
     {
         return d.type;
     }
 
-    @property bool isLight() const
+    @property bool isLight() const @safe
     {
         return d.type == RecipeType.light;
     }
 
-    @property bool isPackage() const
+    @property bool isPackage() const @safe
     {
         return d.type == RecipeType.pack;
     }
@@ -187,7 +193,7 @@ struct Recipe
         return d.depFunc || d.dependencies.length != 0;
     }
 
-    @property const(Dependency)[] dependencies(const(Profile) profile)
+    @property const(DepSpec)[] dependencies(const(Profile) profile) @system
     {
         if (!d.depFunc)
             return d.dependencies;
@@ -233,7 +239,7 @@ struct Recipe
         return d.filename;
     }
 
-    @property string revision()
+    @property string revision() @system
     in (isPackage, "Light recipes do not have revision")
     {
         if (d.revision)
@@ -264,14 +270,14 @@ struct Recipe
     }
 
     /// Returns: whether the source is included with the package
-    @property bool inTreeSrc() const
+    @property bool inTreeSrc() const @safe
     {
         return d.inTreeSrc.length > 0;
     }
 
     /// Execute the 'source' function if the recipe has one and return its result.
     /// Otherwise return the 'source' string variable (default to "." if undefined)
-    string source()
+    string source() @system
     in (isPackage, "Light recipes do not have source")
     {
         if (d.inTreeSrc)
@@ -292,7 +298,7 @@ struct Recipe
         return L.luaPop!string();
     }
 
-    private void pushBuildDirs(lua_State* L, BuildDirs dirs)
+    private void pushBuildDirs(lua_State* L, BuildDirs dirs) @trusted
     {
         lua_createtable(L, 0, 2);
         const ind = lua_gettop(L);
@@ -302,7 +308,7 @@ struct Recipe
         luaSetTable(L, ind, "install", dirs.install);
     }
 
-    private void pushPackDirs(lua_State* L, PackDirs dirs)
+    private void pushPackDirs(lua_State* L, PackDirs dirs) @trusted
     {
         lua_createtable(L, 0, 2);
         const ind = lua_gettop(L);
@@ -313,7 +319,7 @@ struct Recipe
         luaSetTable(L, ind, "dest", dirs.dest);
     }
 
-    private void pushConfig(lua_State* L, Profile profile)
+    private void pushConfig(lua_State* L, Profile profile) @trusted
     {
         lua_createtable(L, 0, 4);
         const ind = lua_gettop(L);
@@ -330,7 +336,7 @@ struct Recipe
         luaSetTable(L, ind, "short_hash", shortHash);
     }
 
-    private void pushDepInfos(lua_State* L, DepInfo[string] depInfos)
+    private void pushDepInfos(lua_State* L, DepInfo[string] depInfos) @trusted
     {
         if (!depInfos)
         {
@@ -352,7 +358,7 @@ struct Recipe
     }
 
     /// Execute the `build` function of this recipe
-    bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null)
+    bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null) @system
     in (isPackage, "Light recipes do not build")
     {
         auto L = d.L;
@@ -387,13 +393,13 @@ struct Recipe
         return result;
     }
 
-    @property bool hasPackFunc() const
+    @property bool hasPackFunc() const @safe
     {
         return d.packFunc;
     }
 
     /// Execute the `package` function of this recipe
-    void pack(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
+    void pack(PackDirs dirs, Profile profile, DepInfo[string] depInfos) @system
     in (isPackage, "Light recipes do not package")
     in (d.packFunc, "Recipe has no 'package' function")
     {
@@ -414,7 +420,7 @@ struct Recipe
     }
 
     /// Execute the `patch_install` function of this recipe
-    void patchInstall(PackDirs dirs, Profile profile, DepInfo[string] depInfos)
+    void patchInstall(PackDirs dirs, Profile profile, DepInfo[string] depInfos) @system
     in (isPackage, "Light recipes do not patch")
     {
         auto L = d.L;
@@ -445,13 +451,13 @@ struct Recipe
         }
     }
 
-    static Recipe parseFile(string path, string revision = null)
+    static Recipe parseFile(string path, string revision = null) @system
     {
         auto d = RecipePayload.parse(path, revision);
         return Recipe(d);
     }
 
-    static Recipe mock(string name, Semver ver, Dependency[] deps, Lang[] langs, string revision) @trusted
+    static Recipe mock(string name, Semver ver, DepSpec[] deps, Lang[] langs, string revision) @trusted
     {
         import bindbc.lua : lua_createtable;
 
@@ -479,7 +485,7 @@ package class RecipePayload
     string copyright;
     Lang[] langs;
 
-    Dependency[] dependencies;
+    DepSpec[] dependencies;
     bool depFunc;
 
     string inTreeSrc;
@@ -493,7 +499,7 @@ package class RecipePayload
     lua_State* L;
     int rc;
 
-    this()
+    this() @trusted
     {
         L = luaL_newstate();
         luaL_openlibs(L);
@@ -522,7 +528,7 @@ package class RecipePayload
         }
     }
 
-    private static RecipePayload parse(string filename, string revision)
+    private static RecipePayload parse(string filename, string revision) @system
     in (filename !is null)
     {
         import std.path : isAbsolute;
@@ -696,7 +702,7 @@ package class RecipePayload
 
 private:
 
-string sha1RevisionFromContent(const(char)[] luaContent)
+string sha1RevisionFromContent(const(char)[] luaContent) @safe
 {
     import std.digest.sha : sha1Of;
     import std.digest : toHexString, LetterCase;
@@ -705,7 +711,7 @@ string sha1RevisionFromContent(const(char)[] luaContent)
     return toHexString!(LetterCase.lower)(hash).idup;
 }
 
-string sha1RevisionFromFile(string filename)
+string sha1RevisionFromFile(string filename) @safe
 {
     import std.file : read;
 
@@ -714,7 +720,7 @@ string sha1RevisionFromFile(string filename)
 
 /// Read a dependency table from top of the stack.
 /// The table is left on the stack after return
-Dependency[] readDependencies(lua_State* L)
+DepSpec[] readDependencies(lua_State* L) @trusted
 {
     const typ = lua_type(L, -1);
     if (typ == LUA_TNIL)
@@ -722,7 +728,7 @@ Dependency[] readDependencies(lua_State* L)
 
     enforce(typ == LUA_TTABLE, "invalid dependencies return type");
 
-    Dependency[] res;
+    DepSpec[] res;
 
     // first key
     lua_pushnil(L);
@@ -732,7 +738,7 @@ Dependency[] readDependencies(lua_State* L)
         scope (failure)
             lua_pop(L, 1);
 
-        Dependency dep;
+        DepSpec dep;
         dep.name = enforce(luaTo!string(L, -2, null),
                 // probably a number key (dependencies specified as array)
                 // relying on lua_tostring for having a correct string inference

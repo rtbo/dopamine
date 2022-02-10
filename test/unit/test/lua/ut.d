@@ -13,17 +13,17 @@ import std.path;
 import std.string;
 
 /// test assertions in the given lua string
-void testLuaStr(string lua)
+void testLuaStr(lua_State* L, string lua)
 {
-    const res = luaL_dostring(utL, lua.toStringz);
+    const res = luaL_dostring(L, lua.toStringz);
 
     string err;
     if (res != LUA_OK)
     {
-        err = luaPop!string(utL);
+        err = luaPop!string(L);
     }
     assert(res == LUA_OK, err);
-    assert(lua_gettop(utL) == 0, "test did not clean lua stack");
+    assert(lua_gettop(L) == 0, "test did not clean lua stack");
 }
 
 @("lua.testscripts")
@@ -31,19 +31,25 @@ unittest
 {
     import std.algorithm : filter;
 
+    auto L = makeTestL();
+    scope (exit)
+        lua_close(L);
+
+    // FIXME: test is not reentrant (uses chdir)
+
     testPath("lua").fromDir!({
         foreach (e; dirEntries(testPath("lua"), SpanMode.breadth).filter!(
             e => e.name.endsWith(".lua")))
         {
             const fn = e.name.baseName;
-            const res = luaL_dofile(utL, e.name.toStringz);
+            const res = luaL_dofile(L, e.name.toStringz);
             string err;
             if (res != LUA_OK)
             {
-                err = luaPop!string(utL);
+                err = luaPop!string(L);
             }
             assert(res == LUA_OK, err);
-            assert(lua_gettop(utL) == 0, "test " ~ fn ~ " did not clean lua stack");
+            assert(lua_gettop(L) == 0, "test " ~ fn ~ " did not clean lua stack");
         }
     });
 }
@@ -60,6 +66,10 @@ else
     {
         import std.path : dirName;
         import std.string : replace;
+
+        auto L = makeTestL();
+        scope (exit)
+            lua_close(L);
 
         const thisDir = dirName(__FILE_FULL_PATH__).replace('\\', '/');
 
@@ -86,6 +96,6 @@ else
             assert(string.find(ls_res, 'pkgconfig.lua'))
         `, thisDir, lsCmd);
 
-        testLuaStr(lua);
+        testLuaStr(L, lua);
     }
 }

@@ -10,6 +10,7 @@ import std.conv;
 import std.digest.sha;
 import std.exception;
 import std.format;
+import std.range;
 import std.string;
 
 @safe:
@@ -229,11 +230,12 @@ struct HostInfo
         feedDigestData(digest, _os);
     }
 
-    private void describe(ref Appender!string app, int indent) const
+    private void describe(O)(O output, int indent) const
+    if (isOutputRange!(O, char))
     {
         const ind = indentStr(indent);
-        app.put(format("%sArchitecture: %s\n", ind, arch.to!string));
-        app.put(format("%sOS:           %s\n", ind, os.to!string));
+        output.put(format("%sArchitecture: %s\n", ind, arch.to!string));
+        output.put(format("%sOS:           %s\n", ind, os.to!string));
     }
 
     private void writeIniSection(ref Appender!string app) const
@@ -271,6 +273,17 @@ struct Compiler
         _ver = vsvc.ver.toString();
         _path = vsvc.installPath;
         _vsvc = vsvc;
+    }
+
+    static Compiler detect(Lang lang, string compiler=null)
+    {
+        if (compiler)
+        {
+            // choose regex from compiler, or define common regex
+            // `compiler` can be "dmd", or "/usr/bin/dmd"
+            assert(false, "unimplemented");
+        }
+        return detectDefaultCompiler(lang);
     }
 
     @property Lang lang() const
@@ -340,15 +353,16 @@ struct Compiler
         }
     }
 
-    private void describe(ref Appender!string app, int indent) const
+    private void describe(O)(O output, int indent) const
+    if (isOutputRange!(O, char))
     {
         auto ind = indentStr(indent);
-        app.put(format("%s%s Compiler:\n", ind, lang.to!string));
+        output.put(format("%s%s Compiler:\n", ind, lang.to!string));
         ind = indentStr(indent + 1);
-        app.put(format("%sname:    %s\n", ind, name));
-        app.put(format("%sversion: %s\n", ind, ver));
-        app.put(format("%spath:    %s\n", ind, path));
-        app.put(format("%sdisplay: %s\n", ind, displayName));
+        output.put(format("%sname:    %s\n", ind, name));
+        output.put(format("%sversion: %s\n", ind, ver));
+        output.put(format("%spath:    %s\n", ind, path));
+        output.put(format("%sdisplay: %s\n", ind, displayName));
     }
 
     private void feedDigest(ref DopDigest digest) const
@@ -481,7 +495,7 @@ final class Profile
     }
 
     Profile subset(const(Lang)[] langs) const
-    in(langs.length, "Cannot create a Profile subset without language")
+    in (langs.length, "Cannot create a Profile subset without language")
     {
         Compiler[] comps;
         foreach (l; langs)
@@ -511,22 +525,19 @@ final class Profile
         }
     }
 
-    string describe() const
+    void describe(O)(O output) const
+    if (isOutputRange!(O, char))
     {
-        Appender!string app;
-
-        app.put(format("Profile %s\n", name));
-        _hostInfo.describe(app, 1);
-        app.put(format("%sBuild type:   %s\n", indentStr(1), _buildType.toConfig));
+        output.put(format("Profile %s\n", name));
+        _hostInfo.describe(output, 1);
+        output.put(format("%sBuild type:   %s\n", indentStr(1), _buildType.toConfig));
 
         foreach (c; _compilers)
         {
-            c.describe(app, 1);
+            c.describe(output, 1);
         }
 
-        app.put(format("%sDigest hash:  %s\n", indentStr(1), digestHash()));
-
-        return app.data();
+        output.put(format("%sDigest hash:  %s\n", indentStr(1), digestHash()));
     }
 
     void saveToFile(string path, bool withName = true, bool mkdir = false) const
@@ -666,18 +677,32 @@ final class Profile
         {
             const hash = enforceKey(digestSect, "hash");
             enforce(p.digestHash() == hash,
-                    "Digest hash do not match with the one of the profile file");
+                "Digest hash do not match with the one of the profile file");
         }
 
         return p;
     }
+}
 
+/// Return a mock profile typical of a linux system
+version (unittest) Profile mockProfileLinux()
+{
+    return new Profile(
+        "mock",
+        HostInfo(Arch.x86_64, OS.linux),
+        BuildType.debug_,
+        [
+            Compiler(Lang.d, "DMD", "2.098.1", "/usr/bin/dmd"),
+            Compiler(Lang.cpp, "G++", "11.1.0", "/usr/bin/g++"),
+            Compiler(Lang.c, "GCC", "11.1.0", "/usr/bin/gcc"),
+        ]
+    );
 }
 
 private static string nameSuffix(const(Lang)[] langs)
-in(langs.length)
-in(isStrictlyMonotonic(langs))
-in(langs.uniq().equal(langs))
+in (langs.length)
+in (isStrictlyMonotonic(langs))
+in (langs.uniq().equal(langs))
 {
     return "-" ~ langs.map!(l => l.toConfig()).join("-");
 }
@@ -730,7 +755,7 @@ string strFromLang(Lang lang)
     return lang.toConfig();
 }
 
-Profile detectDefaultProfile(Lang[] langs)
+Profile detectDefaultProfile(Lang[] langs, Flag!"allowMissing" allowMissing)
 {
     auto hostInfo = currentHostInfo();
 
@@ -739,18 +764,42 @@ Profile detectDefaultProfile(Lang[] langs)
     Compiler[] compilers;
     foreach (lang; langs)
     {
-        compilers ~= detectDefaultCompiler(lang);
+        try {
+            compilers ~= detectDefaultCompiler(lang);
+        }
+        catch (CompilerVersionParseException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            if (!allowMissing) {
+                throw ex;
+            }
+        }
     }
 
+    if (!compilers.length) throw new Exception("No compiler found, cannot initialize profile");
+
     return new Profile("default", hostInfo, BuildType.debug_, compilers);
+}
+
+class CompilerVersionParseException : Exception
+{
+    this (string clName, string[] cmd, string output)
+    {
+        import std.process : escapeShellCommand;
+
+        super(format(
+            "Could not parse version of %s from \"%s\" output:\n",
+            clName, escapeShellCommand(cmd), output,
+        ));
+    }
 }
 
 private:
 
 import dopamine.util;
-
-import std.process;
-import std.regex;
 
 HostInfo currentHostInfo()
 {
@@ -855,9 +904,21 @@ version (Windows)
     }
 }
 
-Compiler detectCompiler(string[] command, string re, string name, Lang lang)
-in(command.length >= 1)
+string extractCompilerVersion(string versionOutput, string re)
 {
+    import std.exception : enforce;
+    import std.regex : matchFirst, regex;
+
+    auto verMatch = matchFirst(versionOutput, regex(re, "m"));
+    enforce(verMatch.length >= 2);
+    return verMatch[1];
+}
+
+Compiler detectCompiler(string[] command, string re, string name, Lang lang)
+in (command.length >= 1)
+{
+    import std.process : execute, Config;
+
     command[0] = findProgram(command[0]);
     if (!command[0])
         return Compiler.init;
@@ -866,100 +927,94 @@ in(command.length >= 1)
     if (result.status != 0)
         return Compiler.init;
 
-    auto verMatch = matchFirst(result.output, regex(re, "m"));
-    if (verMatch.length < 2)
-    {
-        throw new Exception(format("Could not determine %s version. Command output:\n%s",
-                name, result.output));
-    }
-    const ver = verMatch[1];
     const path = command[0];
 
-    return Compiler(lang, name, ver, path);
+    try
+    {
+        const ver = extractCompilerVersion(result.output, re);
+        return Compiler(lang, name, ver, path);
+    }
+    catch(Exception ex)
+    {
+        throw new CompilerVersionParseException(
+            name, command, result.output
+        );
+    }
 }
+
+enum ldcVersionRe = `^LDC.*\((\d+\.\d+\.\d+[A-Za-z0-9.+-]*)\):$`;
+enum dmdVersionRe = `^DMD.*v(\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
+enum gccVersionRe = `^gcc.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
+enum gppVersionRe = `^g\+\+.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
+enum clangVersionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
 
 Compiler detectLdc()
 {
-    enum versionRe = `^LDC.*\((\d+\.\d+\.\d+[A-Za-z0-9.+-]*)\):$`;
-
-    auto comp = detectCompiler(["ldc", "--version"], versionRe, "LDC", Lang.d);
+    auto comp = detectCompiler(["ldc", "--version"], ldcVersionRe, "LDC", Lang.d);
     if (!comp)
-        comp = detectCompiler(["ldc2", "--version"], versionRe, "LDC", Lang.d);
+        comp = detectCompiler(["ldc2", "--version"], ldcVersionRe, "LDC", Lang.d);
 
     return comp;
 }
 
 Compiler detectDmd()
 {
-    enum versionRe = `^DMD.*v(\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
-
-    return detectCompiler(["dmd", "--version"], versionRe, "DMD", Lang.d);
+    return detectCompiler(["dmd", "--version"], dmdVersionRe, "DMD", Lang.d);
 }
 
 Compiler detectGcc()
 {
-    enum versionRe = `^gcc.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
-
-    return detectCompiler(["gcc", "--version"], versionRe, "GCC", Lang.c);
+    return detectCompiler(["gcc", "--version"], gccVersionRe, "GCC", Lang.c);
 }
 
 Compiler detectGpp()
 {
-    enum versionRe = `^g\+\+.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
-
-    return detectCompiler(["g++", "--version"], versionRe, "G++", Lang.cpp);
+    return detectCompiler(["g++", "--version"], gppVersionRe, "G++", Lang.cpp);
 }
 
 Compiler detectClang()
 {
-    enum versionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
-
-    return detectCompiler(["clang", "--version"], versionRe, "CLANG", Lang.c);
+    return detectCompiler(["clang", "--version"], clangVersionRe, "CLANG", Lang.c);
 }
 
 Compiler detectClangpp()
 {
-    enum versionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
-
-    return detectCompiler(["clang++", "--version"], versionRe, "CLANG++", Lang.cpp);
+    return detectCompiler(["clang++", "--version"], clangVersionRe, "CLANG++", Lang.cpp);
 }
 
-@("detectClang")
+@("extract Clang version")
 unittest
 {
-    if (findProgram("clang"))
-    {
-        const cl = detectClang();
-        assert(cl.path.length);
-    }
+    auto output = import("version-clang-13.0.0.txt");
+    assert(extractCompilerVersion(output, clangVersionRe) == "13.0.0");
 }
 
-@("detectGcc")
+@("extract gcc/g++ version")
 unittest
 {
-    if (findProgram("gcc"))
-    {
-        const cl = detectGcc();
-        assert(cl.path.length);
-    }
+    auto output = import("version-gcc-11.1.0.txt");
+    assert(extractCompilerVersion(output, gccVersionRe) == "11.1.0");
+
+    output = import("version-g++-11.1.0.txt");
+    assert(extractCompilerVersion(output, gppVersionRe) == "11.1.0");
+
+    output = import("version-gcc-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
+    assert(extractCompilerVersion(output, gccVersionRe) == "8.1.0");
+
+    output = import("version-g++-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
+    assert(extractCompilerVersion(output, gppVersionRe) == "8.1.0");
 }
 
-@("detectDmd")
+@("extract DMD version")
 unittest
 {
-    if (findProgram("dmd"))
-    {
-        const cl = detectDmd();
-        assert(cl.path.length);
-    }
+    auto output = import("version-dmd-2.098.1.txt");
+    assert(extractCompilerVersion(output, dmdVersionRe) == "2.098.1");
 }
 
-@("detectLdc")
+@("extract LDC version")
 unittest
 {
-    if (findProgram("ldc"))
-    {
-        const cl = detectLdc();
-        assert(cl.path.length);
-    }
+    auto output = import("version-ldc-1.28.1.txt");
+    assert(extractCompilerVersion(output, ldcVersionRe) == "1.28.1");
 }

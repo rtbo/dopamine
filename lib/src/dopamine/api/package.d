@@ -46,13 +46,13 @@ struct API
         return transport.login;
     }
 
-    Response!Package getPackageByName(string name)
+    Response!PackagePayload getPackageByName(string name)
     {
         const uri = resource("/packages", ["name": name]);
         return transport.jsonGet(uri).mapResp!(jv => packageFromJson(jv));
     }
 
-    Response!Package postPackage(string name)
+    Response!PackagePayload postPackage(string name)
     {
         const uri = resource("/packages");
         JSONValue json;
@@ -72,7 +72,7 @@ struct API
     }
 
     /// POST a new package recipe
-    Response!PackageRecipe postRecipe(PackageRecipePost prp)
+    Response!PackageRecipePayload postRecipe(PackageRecipePost prp)
     {
         const uri = resource("/packages/%s/recipes", prp.packageId);
         JSONValue json;
@@ -82,7 +82,7 @@ struct API
         return transport.jsonPost(uri, json).mapResp!(jv => packageRecipeFromJson(jv));
     }
 
-    Response!PackageRecipe getRecipe(PackageRecipeGet prg)
+    Response!PackageRecipePayload getRecipe(PackageRecipeGet prg)
     {
         string[string] params;
         if (prg.rev)

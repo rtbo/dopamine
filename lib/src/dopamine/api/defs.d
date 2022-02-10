@@ -5,7 +5,7 @@ import dopamine.semver;
 import std.json;
 
 /// A Package root object as retrieved with GET /packages
-struct Package
+struct PackagePayload
 {
     string id;
     string name;
@@ -20,12 +20,12 @@ string[] jsonStringArray(const(JSONValue) jv)
     return jv.arrayNoRef.map!(v => v.str).array;
 }
 
-package Package packageFromJson(const(JSONValue) json)
+package PackagePayload packageFromJson(const(JSONValue) json)
 {
     import std.algorithm : map;
     import std.array : array;
 
-    Package p;
+    PackagePayload p;
     p.id = json["id"].str;
     p.name = json["name"].str;
     p.maintainerId = json["maintainerId"].str;
@@ -54,7 +54,7 @@ struct PackageRecipeGet
     string rev;
 }
 
-struct PackageRecipe
+struct PackageRecipePayload
 {
     string packageId;
     string ver;
@@ -64,9 +64,9 @@ struct PackageRecipe
     string created;
 }
 
-package PackageRecipe packageRecipeFromJson(const(JSONValue) json)
+package PackageRecipePayload packageRecipeFromJson(const(JSONValue) json)
 {
-    PackageRecipe pr;
+    PackageRecipePayload pr;
     pr.packageId = json["packageId"].str;
     pr.ver = json["version"].str;
     pr.rev = json["revision"].str;
