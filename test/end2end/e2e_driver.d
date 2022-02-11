@@ -152,7 +152,10 @@ struct Test
 
     void perform(string dopExe)
     {
+        const cwd = getcwd();
         chdir(sandboxPath(directory));
+        scope (exit)
+            chdir(cwd);
 
         const quotDop = format(`"%s"`, dopExe);
         auto cmd = this.command
