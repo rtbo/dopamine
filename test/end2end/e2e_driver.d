@@ -61,7 +61,8 @@ struct Test
 {
     string name;
     string command;
-    string directory;
+    string recipeDir;
+    string homeDir;
 
     bool expectFail;
 
@@ -88,9 +89,13 @@ struct Test
             {
                 test.command = line[4 .. $];
             }
-            else if (line.startsWith("DIR="))
+            else if (line.startsWith("RECIPE="))
             {
-                test.directory = line[4 .. $];
+                test.recipeDir = line[7 .. $];
+            }
+            else if (line.startsWith("HOME="))
+            {
+                test.homeDir = line[5 .. $];
             }
             else if (line == "EXPECT_FAIL")
             {
@@ -112,32 +117,57 @@ struct Test
             }
         }
 
+        if (!test.homeDir)
+        {
+            test.homeDir = "empty";
+        }
+
         return test;
+    }
+
+    void checkDir(string dir)
+    {
+        enforce(exists(dir) && isDir(dir), format("%s: no such directory: %s", name, dir));
     }
 
     void check()
     {
         enforce(command, format("%s: CMD must be provided", name));
-        enforce(directory, format("%s: DIR must be provided", name));
+        enforce(recipeDir, format("%s: RECIPE must be provided", name));
+
+        checkDir(e2ePath("recipes", recipeDir));
+        checkDir(e2ePath("homes", homeDir));
     }
 
-    File lockSandbox()
+    string sandboxPath(Args...)(Args args)
     {
-        string path = sandboxPath(setExtension(directory, "lock"));
-        mkdirRecurse(dirName(path));
-        auto lock = File(path, "w");
-        lock.lock();
-        return lock;
+        return e2ePath("sandbox", name, args);
+    }
+
+    string sandboxRecipePath(Args...)(Args args)
+    {
+        return sandboxPath("recipe", args);
+    }
+
+    string sandboxHomePath(Args...)(Args args)
+    {
+        return sandboxPath("home", args);
     }
 
     void prepareSandbox()
     {
-        string e2e = e2ePath();
+        copyContentToSandbox(e2ePath("recipes", recipeDir), sandboxRecipePath());
+        copyContentToSandbox(e2ePath("homes", homeDir), sandboxHomePath());
+    }
 
-        foreach (entry; dirEntries(e2ePath(directory), SpanMode.breadth))
+    void copyContentToSandbox(string src, string sandbox)
+    {
+        mkdirRecurse(sandbox);
+
+        foreach (entry; dirEntries(src, SpanMode.breadth))
         {
-            string radical = relativePath(entry.name, e2e);
-            string dest = sandboxPath(radical);
+            string radical = relativePath(entry.name, src);
+            string dest = buildPath(sandbox, radical);
 
             if (entry.isDir)
             {
@@ -150,33 +180,46 @@ struct Test
         }
     }
 
+    string[string] makeSandboxEnv(string dopExe)
+    {
+        string[string] env;
+        env["DOP"] = dopExe;
+        env["DOP_HOME"] = sandboxHomePath();
+        return env;
+    }
+
     void perform(string dopExe)
     {
-        const cwd = getcwd();
-        chdir(sandboxPath(directory));
+
+        auto env = makeSandboxEnv(dopExe);
+
+        mkdirRecurse(sandboxPath());
         scope (exit)
-            chdir(cwd);
+            rmdirRecurse(sandboxPath());
 
-        const quotDop = format(`"%s"`, dopExe);
-        auto cmd = this.command
-            .replace("\"$DOP\"", quotDop)
-            .replace("$DOP", quotDop);
+        prepareSandbox();
 
-        auto result = executeShell(cmd);
+        const cmd = expandEnvVars(command, env);
+
+        // FIXME: we'd better have a command parser that return an array of args
+        // in platform independent way instead of relying on native shell.
+        // This would allow portable CMD in test files.
+        auto result = executeShell(cmd, env, Config.none, size_t.max, sandboxRecipePath());
 
         const fail = result.status != 0;
 
         if (expectFail != fail)
         {
             Appender!string app;
-            if (expectFail)
-            {
-                app.put(format("%s: expected to fail but succeeded\n", name));
-            }
-            else
+            if (!expectFail)
             {
                 app.put(format("%s: command failed with status %s\n", name, result.status));
             }
+            else
+            {
+                app.put(format("%s: expected to fail but succeeded\n", name));
+            }
+            app.put(format("Command: %s\n", cmd));
             app.put("Output:\n");
             app.put(result.output);
             throw new Exception(app.data);
@@ -209,11 +252,6 @@ struct Test
             throw new Exception(failureMsg.data);
         }
     }
-
-    void cleanup()
-    {
-        rmdirRecurse(sandboxPath(directory));
-    }
 }
 
 int usage(string[] args, int code)
@@ -241,24 +279,17 @@ int main(string[] args)
     {
         auto test = Test.parseFile(args[1]);
         test.check();
-
-        File lock = test.lockSandbox();
-        scope (exit)
-            lock.close();
-
-        test.prepareSandbox();
         test.perform(dopExe);
-
-        test.cleanup();
     }
     catch (Exception ex)
     {
         stderr.writeln(ex.msg);
+        stderr.writeln("Driver stack trace:");
+        stderr.writeln(ex.info);
         return 1;
     }
 
     return 0;
-
 }
 
 string e2ePath(Args...)(Args args)
@@ -266,7 +297,63 @@ string e2ePath(Args...)(Args args)
     return buildNormalizedPath(dirName(__FILE_FULL_PATH__), args);
 }
 
-string sandboxPath(Args...)(Args args)
+// expand env vars of shape $VAR or ${VAR}
+string expandEnvVars(string input, string[string] environment)
 {
-    return e2ePath("sandbox", args);
+    import std.algorithm : canFind;
+    import std.ascii : isAlphaNum;
+
+    string result;
+
+    string var;
+    bool env;
+    bool mustach;
+
+    void expand()
+    {
+        const val = var in environment;
+        enforce(val, "Could not find %s in sandbox environment");
+        result ~= *val;
+        var = null;
+        env = false;
+        mustach = false;
+    }
+
+    foreach (dchar c; input)
+    {
+        if (env && !mustach)
+        {
+            if (isAlphaNum(c))
+                var ~= c;
+            else if (var.length == 0 && c == '{')
+                mustach = true;
+            else
+            {
+                expand();
+                result ~= c;
+            }
+        }
+        else if (env && mustach)
+        {
+            if (c == '}')
+                expand();
+            else
+                var ~= c;
+        }
+        else if (c == '$')
+        {
+            env = true;
+        }
+        else
+        {
+            result ~= c;
+        }
+    }
+
+    if (env)
+    {
+        throw new Exception("Unterminated environment variable");
+    }
+
+    return result;
 }
