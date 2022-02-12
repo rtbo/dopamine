@@ -1254,7 +1254,7 @@ unittest
 
     const heuristics = Heuristics.preferSystem;
 
-    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics, Yes.preFilter);
     dag1.checkCompat();
     dag1.resolve();
 
