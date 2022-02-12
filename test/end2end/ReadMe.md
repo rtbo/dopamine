@@ -29,16 +29,16 @@ with the `$DOP_REGISTRY` environment variable. (one server instance per test)
 
 ## Assetions
 
- - [X] `EXPECT_FAIL`
+ - `EXPECT_FAIL`
     - expect the command to fail
- - [X] `EXPECT_MATCH`
-    - expect to match a regex on the command output
- - [X] `EXPECT_NOT_MATCH`
-    - expect to NOT match a regex on the command output
- - [ ] `EXPECT_MATCH[FILE]`
+ - `EXPECT_MATCH[FILE]=regex`
     - expect to match a regex in the `FILE` content
     - `FILE` string can contain environment variable such as $DOP_HOME
     - `FILE` string can also be `"stdout"` or `"stderr"`
- - [ ] `EXPECT_NOT_MATCH[FILE]`
+ - `EXPECT_NOT_MATCH[FILE]=regex`
     - expect to NOT match a regex in the `FILE` content
     - same rules regarding `FILE` apply than with `EXPECT_MATCH`
+ - `EXPECT_FILE=path`
+    - expect that path points to a file
+ - `EXPECT_DIR=path`
+    - expect that path points to a directory

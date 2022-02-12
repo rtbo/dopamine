@@ -36,25 +36,14 @@ class StatusExpect : Expect
     }
 }
 
-abstract class FileExpect : Expect
+class ExpectMatch : Expect
 {
     string filename;
-
-    this(string filename)
-    {
-        this.filename = filename ? filename : "stdout";
-    }
-
-    //string expect(ref RunResult res);
-}
-
-class ExpectMatch : FileExpect
-{
     string rexp;
 
     this(string filename, string rexp)
     {
-        super(filename);
+        this.filename = filename ? filename : "stdout";
         this.rexp = rexp;
     }
 
@@ -100,6 +89,46 @@ class ExpectNotMatch : ExpectMatch
         }
 
         return format("Unexpected match %s in %s", rexp, filename);
+    }
+}
+
+class ExpectFile : Expect
+{
+    string filename;
+
+    this(string filename)
+    {
+        this.filename = filename;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        const path = res.filepath(filename);
+        if (exists(path) && isFile(path)) {
+            return null;
+        }
+
+        return "No such file: " ~ path;
+    }
+}
+
+class ExpectDir : Expect
+{
+    string filename;
+
+    this(string filename)
+    {
+        this.filename = filename;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        const path = res.filepath(filename);
+        if (exists(path) && isDir(path)) {
+            return null;
+        }
+
+        return "No such directory: " ~ path;
     }
 }
 
@@ -163,6 +192,12 @@ struct Test
                 case "NOT_MATCH":
                     auto exp = new ExpectNotMatch(file, data);
                     test.expectations ~= exp;
+                    break;
+                case "FILE":
+                    test.expectations ~= new ExpectFile(data);
+                    break;
+                case "DIR":
+                    test.expectations ~= new ExpectDir(data);
                     break;
                 default:
                     throw new Exception("Unknown assertion: " ~ type);
