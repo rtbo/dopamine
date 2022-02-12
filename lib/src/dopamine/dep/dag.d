@@ -1059,7 +1059,7 @@ unittest
     import std.array : array;
     import std.typecons : No, Yes;
 
-    auto service = TestDepService.withBase();
+    auto service = MockDepService.withBase();
     auto profile = mockProfileLinux();
 
     // preferSystem (default): b is a leave
@@ -1112,7 +1112,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = TestDepService.withBase();
+    auto service = MockDepService.withBase();
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferSystem;
@@ -1136,7 +1136,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = TestDepService.withBase();
+    auto service = MockDepService.withBase();
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferCache;
@@ -1160,7 +1160,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = TestDepService.withBase();
+    auto service = MockDepService.withBase();
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferLocal;
@@ -1184,7 +1184,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = TestDepService.withBase();
+    auto service = MockDepService.withBase();
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.pickHighest;
@@ -1209,7 +1209,7 @@ unittest
     import std.array : array;
     import std.typecons : No, Yes;
 
-    auto service = TestDepService.withBase();
+    auto service = MockDepService.withBase();
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferSystem;
@@ -1266,7 +1266,7 @@ unittest
     auto pack = TestPackage("a", [
             TestPackVersion("1.0.1", [], DepLocation.cache)
         ], [Lang.c]);
-    auto service = new TestDepService([]);
+    auto service = new MockDepService([]);
     auto profile = mockProfileLinux();
 
     auto dag = DepDAG.prepare(pack.recipe("1.0.1"), profile, service);
@@ -1287,7 +1287,7 @@ unittest
 {
     import std.exception : assertThrown;
 
-    auto service = TestDepService.withNotResolvableBase();
+    auto service = MockDepService.withNotResolvableBase();
     auto profile = mockProfileLinux();
 
     auto recipe = packNotResolvable.recipe("1.0.0");
@@ -1301,7 +1301,7 @@ unittest
 {
     import std.file : write;
 
-    auto service = TestDepService.withBase();
+    auto service = MockDepService.withBase();
     auto profile = mockProfileLinux();
 
     auto recipe = packE.recipe("1.0.0");
@@ -1624,7 +1624,7 @@ TestPackage packNotResolvable = TestPackage(
 );
 
 /// A mock Dependency Service
-final class TestDepService : DepService
+final class MockDepService : DepService
 {
     TestPackage[string] packs;
 
@@ -1638,12 +1638,12 @@ final class TestDepService : DepService
 
     static DepService withBase()
     {
-        return new TestDepService(buildTestPackBase());
+        return new MockDepService(buildTestPackBase());
     }
 
     static DepService withNotResolvableBase()
     {
-        return new TestDepService(buildNotResolvable());
+        return new MockDepService(buildNotResolvable());
     }
 
     override AvailVersion[] packAvailVersions(string packname) @trusted
