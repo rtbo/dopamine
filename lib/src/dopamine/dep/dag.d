@@ -838,20 +838,42 @@ struct DepDAG
                         // in the subgraph and specify lhead
                         // we pick the last highest version in an arbitrary way
                         // it makes the arrows point towards it, but stop at the subgraph border
+                        // in case of non-resolvable graph (pack without node), we point to the first version
 
-                        auto downNode = e.down.resolvedNode
-                            ? e.down.resolvedNode.aver : e.down.consideredVersions[$ - 1];
+                        string[] props;
+                        AvailVersion downNode;
+
+                        if (e.down.resolvedNode)
+                        {
+                            downNode = e.down.resolvedNode.aver;
+                        }
+                        else if (e.down.nodes.length)
+                        {
+                            downNode = e.down.nodes[$ - 1].aver;
+                        }
+                        else if (e.down.allVersions.length)
+                        {
+                            props ~= "color=\"crimson\"";
+                            downNode = e.down.allVersions[0];
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
                         const downNgn = nodeGName(e.down.name, downNode);
 
-                        string head = "";
                         if (!e.onResolvedPath)
                         {
                             const downPgn = packGNames[e.down.name];
                             assert(ngn, "unprocessed package: " ~ ngn);
-                            head = "lhead=" ~ downPgn ~ " ";
+                            props ~= format("lhead=%s", downPgn);
                         }
+
+                        props ~= format(`label=" %s  "`, e.spec);
+
                         // space around label to provide some margin
-                        line(`%s -> %s [%slabel=" %s  "];`, ngn, downNgn, head, e.spec);
+                        line(`%s -> %s [%s];`, ngn, downNgn, props.join(" "));
                     }
                 }
             }
