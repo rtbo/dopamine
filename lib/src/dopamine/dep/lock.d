@@ -1,6 +1,8 @@
 /// Module to read and write dependency lock files
 module dopamine.dep.lock;
 
+package:
+
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.dep.spec;
@@ -17,17 +19,17 @@ import std.typecons;
 enum lockVer = 1;
 
 /// Serialize a dependency DAG to JSON
-JSONValue writeDagLock(ref DepDAG dag,
+JSONValue dagToJson(ref DepDAG dag,
     Flag!"emitAllVersions" emitAllVersions = Yes.emitAllVersions,
     int ver = lockVer)
 in (emitAllVersions || dag.resolved)
 {
     enforce(ver == 1, "Unsupported lock file format");
 
-    return writeDagV1(dag, emitAllVersions);
+    return jsonToDagV1(dag, emitAllVersions);
 }
 
-private JSONValue writeDagV1(ref DepDAG dag,
+private JSONValue jsonToDagV1(ref DepDAG dag,
     Flag!"emitAllVersions" emitAllVersions)
 {
     JSONValue[string] dagDict;
@@ -37,7 +39,7 @@ private JSONValue writeDagV1(ref DepDAG dag,
     JSONValue[string] heur;
     heur["mode"] = dag.heuristics.mode.to!string;
     heur["system"] = dag.heuristics.system.to!string;
-    heur["systemList"] = JSONValue(dag.heuristics.systemList);
+    heur["system-list"] = JSONValue(dag.heuristics.systemList);
     dagDict["heuristics"] = heur;
 
     JSONValue[] packs;
@@ -112,13 +114,19 @@ private JSONValue writeDagV1(ref DepDAG dag,
     return JSONValue(dagDict);
 }
 
+DepDAG jsonToDag(JSONValue json)
+{
+    enforce(json["dopamine-lock-ver"].integer == 1, "Unsupported dependency lock format");
+
+    return jsonToDagV1(json);
+}
+
 /// Deserialize a dependency DAG from JSON
-DepDAG readDagLock(JSONValue value)
+private DepDAG jsonToDagV1(JSONValue json)
 {
     import std.algorithm : map;
     import std.array : array;
 
-    enforce(value["dopamine-lock-ver"].integer == 1, "Unsupported dependency lock format");
 
     static struct Dep
     {
@@ -129,7 +137,7 @@ DepDAG readDagLock(JSONValue value)
     }
 
     Heuristics heuristics;
-    JSONValue jheur = value["heuristics"];
+    JSONValue jheur = json["heuristics"];
     heuristics.mode = jheur["mode"].str.to!(Heuristics.Mode);
     heuristics.system = jheur["system"].str.to!(Heuristics.System);
     heuristics.systemList = jheur["system-list"].array.map!(jv => jv.str).array;
@@ -138,7 +146,7 @@ DepDAG readDagLock(JSONValue value)
     DagPack[string] packs;
     Dep[] deps;
 
-    foreach (jpack; value["packages"].array)
+    foreach (jpack; json["packages"].array)
     {
         DagPack p = new DagPack(jpack["name"].str);
 
@@ -159,6 +167,10 @@ DepDAG readDagLock(JSONValue value)
             {
                 DagNode node = new DagNode(p, aver);
                 nodes ~= node;
+                if (status == "resolved")
+                {
+                    p.resolvedNode = node;
+                }
 
                 if (const(JSONValue)* jrev = "revision" in jver)
                 {
@@ -181,7 +193,7 @@ DepDAG readDagLock(JSONValue value)
                     Dep dep;
                     dep.pack = p.name;
                     dep.aver = aver;
-                    dep.down = jdep["down"].str;
+                    dep.down = jdep["name"].str;
                     dep.spec = VersionSpec(jdep["spec"].str);
                     deps ~= dep;
                 }

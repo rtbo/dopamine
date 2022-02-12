@@ -292,6 +292,7 @@ unittest
 /// and the provided algorithms.
 struct DepDAG
 {
+    import std.json;
     import std.typecons : Flag, No, Yes;
 
     private DagPack _root;
@@ -718,6 +719,20 @@ struct DepDAG
         }
 
         return res;
+    }
+
+    JSONValue toJson(Flag!"emitAllVersions" emitAllVersions = Yes.emitAllVersions)
+    {
+        import dopamine.dep.lock : dagToJson;
+
+        return dagToJson(this, emitAllVersions);
+    }
+
+    static DepDAG fromJson(JSONValue json)
+    {
+        import dopamine.dep.lock : jsonToDag;
+
+        return jsonToDag(json);
     }
 
     /// Issue a GraphViz' Dot representation of the graph
@@ -1358,6 +1373,26 @@ unittest
     auto dag = DepDAG.prepare(recipe, profile, service);
 
     assertThrown!UnresolvedDepException(dag.checkCompat());
+}
+
+@("Test DAG (de)serialization through JSON")
+unittest
+{
+    import std.file : write;
+
+    auto service = TestDepService.withBase();
+    auto profile = mockProfileLinux();
+
+    auto recipe = packE.recipe("1.0.0");
+    auto dag = DepDAG.prepare(recipe, profile, service);
+    dag.checkCompat();
+    dag.resolve();
+    dag.fetchLanguages(recipe, service);
+
+    auto json = dag.toJson();
+    auto dag2 = DepDAG.fromJson(json);
+
+    assert(dag.toDot() == dag2.toDot());
 }
 
 private:
