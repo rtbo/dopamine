@@ -137,7 +137,7 @@ struct Heuristics
     /// Choose a compatible version according defined heuristics.
     /// [compatibleVersions] have already been checked as compatible for the target.
     /// [compatibleVersions] MUST be sorted.
-    AvailVersion chooseVersion(const(AvailVersion)[] compatibleVersions) const
+    AvailVersion chooseVersion(const(AvailVersion)[] compatibleVersions) const @safe
     in (compatibleVersions.length > 0)
     {
         import std.algorithm : map, maxIndex;
@@ -364,11 +364,11 @@ struct DepDAG
         void doPackVersion(Recipe rec, DagPack pack, AvailVersion aver)
         {
             auto node = pack.getOrCreateNode(aver);
+
             if (visited.canFind(node))
             {
                 return;
             }
-
             visited ~= node;
 
             const(DepSpec)[] deps = rec.dependencies(profile);
@@ -410,12 +410,48 @@ struct DepDAG
         return DepDAG(root);
     }
 
-    /// 2nd phase of filtering to eliminate all incompatible versions in the DAG.
-    /// Unless [preFilter] was disabled during the [prepare] phase, this algorithm will only handle
-    /// some special cases, like diamond layout or such.
+    /// Final phase of resolution to eliminate incompatible versions and
+    /// attribute a resolved version to each package.
     ///
-    /// Throws: UnresolvedDepException
-    void checkCompat() @trusted
+    /// Throws:
+    /// UnresolvedDepException if a dependency cannot be resolved to a single version.
+    void resolve() @safe
+    {
+        void resolveDeps(DagPack pack) @safe
+        in (pack.resolvedNode)
+        {
+            foreach (e; pack.resolvedNode.downEdges)
+            {
+                if (e.down.resolvedNode)
+                    continue;
+
+                const resolved = _heuristics.chooseVersion(e.down.consideredVersions);
+
+                foreach (n; e.down.nodes)
+                {
+                    if (n.aver == resolved)
+                    {
+                        e.down.resolvedNode = n;
+                        break;
+                    }
+                }
+                resolveDeps(e.down);
+            }
+        }
+
+        checkCompat();
+
+        root.resolvedNode = root.nodes[0];
+        resolveDeps(root);
+    }
+
+
+    // 2nd phase of filtering to eliminate all incompatible versions in the DAG.
+    // Unless [preFilter] was disabled during the [prepare] phase, this algorithm will only handle
+    // some special cases, like diamond layout or such.
+    //
+    // Throws: UnresolvedDepException
+    private void checkCompat() @trusted
     {
         import std.algorithm : any, canFind, filter, remove;
 
@@ -485,75 +521,6 @@ struct DepDAG
         }
     }
 
-    /// Final phase of resolution to attribute a resolved version to each package
-    void resolve()
-    {
-        void resolveDeps(DagPack pack)
-        in (pack.resolvedNode)
-        {
-            foreach (e; pack.resolvedNode.downEdges)
-            {
-                if (e.down.resolvedNode)
-                    continue;
-
-                const resolved = _heuristics.chooseVersion(e.down.consideredVersions);
-
-                foreach (n; e.down.nodes)
-                {
-                    if (n.aver == resolved)
-                    {
-                        e.down.resolvedNode = n;
-                        break;
-                    }
-                }
-                resolveDeps(e.down);
-            }
-        }
-
-        root.resolvedNode = root.nodes[0];
-        resolveDeps(root);
-    }
-
-    /// Fetch languages for each resolved node.
-    /// This is used to compute the right profile to build the dependency tree.
-    /// Each node is associated with its language + the cumulated
-    /// languages of its dependencies.
-    void fetchLanguages(Recipe rootRecipe, DepService service) @system
-    in (resolved)
-    in (root.name == rootRecipe.name)
-    in (root.resolvedNode.ver == rootRecipe.ver)
-    {
-        import std.algorithm : sort, uniq;
-        import std.array : array;
-
-        // Bottom-up traversal with collection of all languages along the way
-        // It is possible to traverse several times the same package in case
-        // of diamond dependency configuration. In this case, we have to cumulate the languages
-        // from all passes
-
-        void traverse(DagPack pack, Lang[] fromDeps)
-        {
-            if (!pack.resolvedNode)
-                return;
-
-            const rec = pack is root ?
-        rootRecipe : service.packRecipe(pack.name, pack.resolvedNode.aver);
-
-            // resolvedNode may have been previously traversed,
-            // we add the previously found languages
-            auto all = fromDeps ~ rec.langs ~ pack.resolvedNode.langs;
-            sort(all);
-            auto langs = uniq(all).array;
-            pack.resolvedNode.langs = langs;
-
-            foreach (e; pack.upEdges)
-                traverse(e.up.pack, langs);
-        }
-
-        foreach (l; collectLeaves())
-            traverse(l, []);
-    }
-
     /// Check whether this DAG was prepared
     bool opCast(T : bool)() const @safe
     {
@@ -581,15 +548,6 @@ struct DepDAG
         return traverseTopDown(Yes.root).all!((DagPack p) {
             return p.resolvedNode !is null;
         });
-    }
-
-    /// Get the languages involved in the DAG
-    @property Lang[] allLangs() @safe
-    {
-        // languages are gathered at the root dag, so no need to go further down.
-        if (root && root.resolvedNode)
-            return root.resolvedNode.langs;
-        return [];
     }
 
     /// Return a generic range of DagPack that will traverse the whole graph
@@ -1028,10 +986,6 @@ class DagNode
     /// The edges going to dependencies of this package
     DagEdge[] downEdges;
 
-    /// The languages of this node and all dependencies
-    /// This is generally fetched after resolution
-    Lang[] langs;
-
     /// User data
     Object userData;
 
@@ -1080,8 +1034,8 @@ class UnresolvedDepException : Exception
         Appender!string app;
 
         app.put(format(
-            "Dependencies to \"%s\" could not be resolved to a single version:\n",
-            pack.name
+                "Dependencies to \"%s\" could not be resolved to a single version:\n",
+                pack.name
         ));
 
         foreach (up; ups)
@@ -1139,12 +1093,7 @@ unittest
     assert(names[0] == "a");
     assert(names.canFind("a", "b", "c", "d"));
 
-    // dag.toDotPng("prepared.png");
-
-    dag.checkCompat();
-    // dag.toDotPng("checked.png");
     dag.resolve();
-    // dag.toDotPng("resolved.png");
 
     names = dag.traverseTopDownResolved(Yes.root).map!(n => n.pack.name).array;
     assert(names.length == 5);
@@ -1169,7 +1118,6 @@ unittest
     const heuristics = Heuristics.preferSystem;
 
     auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
-    dag.checkCompat();
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1194,7 +1142,6 @@ unittest
     const heuristics = Heuristics.preferCache;
 
     auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
-    dag.checkCompat();
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1219,7 +1166,6 @@ unittest
     const heuristics = Heuristics.preferLocal;
 
     auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
-    dag.checkCompat();
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1244,7 +1190,6 @@ unittest
     const heuristics = Heuristics.pickHighest;
 
     auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
-    dag.checkCompat();
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1270,11 +1215,9 @@ unittest
     const heuristics = Heuristics.preferSystem;
 
     auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics, Yes.preFilter);
-    dag1.checkCompat();
     dag1.resolve();
 
     auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics, No.preFilter);
-    dag2.checkCompat();
     dag2.resolve();
 
     static struct NodeData
@@ -1339,28 +1282,6 @@ unittest
     assert(arr.length == 1);
 }
 
-@("Test DepDAG.fetchLanguages")
-unittest
-{
-    auto service = TestDepService.withBase();
-    auto profile = mockProfileLinux();
-
-    auto recipe = packE.recipe("1.0.0");
-    auto dag = DepDAG.prepare(recipe, profile, service);
-
-    dag.checkCompat();
-    dag.resolve();
-    dag.fetchLanguages(recipe, service);
-
-    auto nodes = dag.collectResolved();
-
-    assert(nodes["a"].langs == [Lang.c]);
-    assert(nodes["b"].langs == [Lang.d]);
-    assert(nodes["c"].langs == [Lang.cpp, Lang.c]);
-    assert(nodes["d"].langs == [Lang.d, Lang.cpp, Lang.c]);
-    assert(nodes["e"].langs == [Lang.d, Lang.cpp, Lang.c]);
-}
-
 @("Test not resolvable DAG")
 unittest
 {
@@ -1372,7 +1293,7 @@ unittest
     auto recipe = packNotResolvable.recipe("1.0.0");
     auto dag = DepDAG.prepare(recipe, profile, service);
 
-    assertThrown!UnresolvedDepException(dag.checkCompat());
+    assertThrown!UnresolvedDepException(dag.resolve());
 }
 
 @("Test DAG (de)serialization through JSON")
@@ -1385,9 +1306,7 @@ unittest
 
     auto recipe = packE.recipe("1.0.0");
     auto dag = DepDAG.prepare(recipe, profile, service);
-    dag.checkCompat();
     dag.resolve();
-    dag.fetchLanguages(recipe, service);
 
     auto json = dag.toJson();
     auto dag2 = DepDAG.fromJson(json);

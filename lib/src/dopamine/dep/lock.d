@@ -85,12 +85,6 @@ private JSONValue jsonToDagV1(ref DepDAG dag,
                     verDict["revision"] = n.revision;
                 }
 
-                if (n.langs.length)
-                {
-                    import dopamine.profile : strFromLangs;
-
-                    verDict["langs"] = n.langs.strFromLangs();
-                }
                 JSONValue[] deps;
                 foreach (e; n.downEdges)
                 {
@@ -175,15 +169,6 @@ private DepDAG jsonToDagV1(JSONValue json)
                 if (const(JSONValue)* jrev = "revision" in jver)
                 {
                     node.revision = jrev.str;
-                }
-                if (const(JSONValue)* jlangs = "langs" in jver)
-                {
-                    import dopamine.profile : fromConfig, strToLang;
-
-                    node.langs = jlangs.array
-                        .map!(jv => jv.str)
-                        .map!(ls => strToLang(ls))
-                        .array;
                 }
             }
             if (const(JSONValue)* jdeps = "dependencies" in jver)
