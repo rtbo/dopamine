@@ -11,49 +11,95 @@ import std.string;
 
 interface Expect
 {
-    bool expect(ref Test test, string output);
-    string failMsg();
+    // return error message on failure
+    string expect(ref RunResult res);
 }
 
-class ExpectMatch : Expect
+class StatusExpect : Expect
 {
-    string exp;
+    bool expectFail;
 
-    this(string exp)
+    string expect(ref RunResult res)
     {
-        this.exp = exp;
-    }
+        const fail = res.status != 0;
+        if (fail == expectFail)
+        {
+            return null;
+        }
 
-    bool expect(ref Test test, string output)
-    {
-        auto res = matchFirst(output, exp);
-        return !res.empty;
-    }
+        if (expectFail)
+        {
+            return "Expected command failure";
+        }
 
-    string failMsg()
-    {
-        return format("Expected to match %s", exp);
+        return format("Command failed with status %s", res.status);
     }
 }
 
-class ExpectNotMatch : Expect
+abstract class FileExpect : Expect
 {
-    string exp;
+    string filename;
 
-    this(string exp)
+    this(string filename)
     {
-        this.exp = exp;
+        this.filename = filename ? filename : "stdout";
     }
 
-    bool expect(ref Test test, string output)
+    //string expect(ref RunResult res);
+}
+
+class ExpectMatch : FileExpect
+{
+    string rexp;
+
+    this(string filename, string rexp)
     {
-        auto res = matchFirst(output, exp);
-        return res.empty;
+        super(filename);
+        this.rexp = rexp;
     }
 
-    string failMsg()
+    bool hasMatch(File file)
     {
-        return format("Unexpected match %s", exp);
+        import std.typecons : No;
+
+        auto re = regex(rexp);
+
+        foreach (line; file.byLine(No.keepTerminator))
+        {
+            if (line.matchFirst(re))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        if (hasMatch(res.file(filename)))
+        {
+            return null;
+        }
+
+        return format("Expected to match %s in %s", rexp, filename);
+    }
+}
+
+class ExpectNotMatch : ExpectMatch
+{
+    this(string filename, string rexp)
+    {
+        super(filename, rexp);
+    }
+
+    override string expect(ref RunResult res)
+    {
+        if (!hasMatch(res.file(filename)))
+        {
+            return null;
+        }
+
+        return format("Unexpected match %s in %s", rexp, filename);
     }
 }
 
@@ -64,24 +110,23 @@ struct Test
     string recipeDir;
     string homeDir;
 
-    bool expectFail;
-
     Expect[] expectations;
 
     static Test parseFile(string filename)
     {
-        import std.typecons : No;
+        const expectRe = regex(`^EXPECT_([A-Z_]+)(\[(.*?)\])?(=(.+))?$`);
 
         Test test;
         test.name = baseName(stripExtension(filename));
 
         auto testFile = File(filename, "r");
+        auto statusExpect = new StatusExpect;
+        test.expectations ~= statusExpect;
 
-        foreach (line; testFile.byLineCopy(No.keepTerminator))
+        foreach (line; testFile.byLineCopy())
         {
             line = line.strip();
-
-            if (line.startsWith("#"))
+            if (line.length == 0 || line.startsWith("#"))
             {
                 continue;
             }
@@ -97,23 +142,31 @@ struct Test
             {
                 test.homeDir = line[5 .. $];
             }
-            else if (line == "EXPECT_FAIL")
-            {
-                test.expectFail = true;
-            }
-            else if (line.startsWith("EXPECT_MATCH="))
-            {
-                enum len = "EXPECT_MATCH=".length;
-                test.expectations ~= new ExpectMatch(line[len .. $]);
-            }
-            else if (line.startsWith("EXPECT_NOT_MATCH="))
-            {
-                enum len = "EXPECT_NOT_MATCH=".length;
-                test.expectations ~= new ExpectNotMatch(line[len .. $]);
-            }
             else
             {
-                throw new Exception(format("%s: Unrecognized input: %s", test.name, line));
+                auto m = matchFirst(line, expectRe);
+                enforce(!m.empty, format("%s: Unrecognized entry: %s", test.name, line));
+
+                const type = m[1];
+                const file = m[3];
+                const data = m[5];
+
+                switch (type)
+                {
+                case "FAIL":
+                    statusExpect.expectFail = true;
+                    break;
+                case "MATCH":
+                    auto exp = new ExpectMatch(file, data);
+                    test.expectations ~= exp;
+                    break;
+                case "NOT_MATCH":
+                    auto exp = new ExpectNotMatch(file, data);
+                    test.expectations ~= exp;
+                    break;
+                default:
+                    throw new Exception("Unknown assertion: " ~ type);
+                }
             }
         }
 
@@ -188,9 +241,8 @@ struct Test
         return env;
     }
 
-    void perform(string dopExe)
+    int perform(string dopExe)
     {
-
         auto env = makeSandboxEnv(dopExe);
 
         mkdirRecurse(sandboxPath());
@@ -201,56 +253,87 @@ struct Test
 
         const cmd = expandEnvVars(command, env);
 
+        const outPath = sandboxPath("stdout");
+        const errPath = sandboxPath("stderr");
+
         // FIXME: we'd better have a command parser that return an array of args
         // in platform independent way instead of relying on native shell.
         // This would allow portable CMD in test files.
-        auto result = executeShell(cmd, env, Config.none, size_t.max, sandboxRecipePath());
 
-        const fail = result.status != 0;
+        auto pid = spawnShell(
+            cmd, stdin, File(outPath, "w"), File(errPath, "w"),
+            env, Config.newEnv, sandboxRecipePath
+        );
 
-        if (expectFail != fail)
-        {
-            Appender!string app;
-            if (!expectFail)
-            {
-                app.put(format("%s: command failed with status %s\n", name, result.status));
-            }
-            else
-            {
-                app.put(format("%s: expected to fail but succeeded\n", name));
-            }
-            app.put(format("Command: %s\n", cmd));
-            app.put("Output:\n");
-            app.put(result.output);
-            throw new Exception(app.data);
-        }
+        int status = pid.wait();
 
-        Appender!string failureMsg;
-        bool outputAdded;
+        auto result = RunResult(
+            name, status, outPath, errPath, sandboxRecipePath, env
+        );
+
+        bool outputShown;
+        int numFailed;
 
         foreach (exp; expectations)
         {
-            if (!exp.expect(this, result.output))
+            const failMsg = exp.expect(result);
+            if (failMsg)
             {
-                if (!outputAdded)
+                if (!outputShown)
                 {
-                    auto lineSplit = result.output.endsWith("\n") ? "" : "\n";
-                    failureMsg.put(format("%s FAILURE\n", name));
-                    failureMsg.put(format("command: %s\n", cmd));
-                    failureMsg.put("output:\n");
-                    failureMsg.put("-------\n");
-                    failureMsg.put(format("%s%s", result.output, lineSplit));
-                    failureMsg.put("-------\n");
-                    outputAdded = true;
+                    import std.typecons : Yes;
+
+                    stderr.writefln("TEST %s", name);
+                    stderr.writefln("Command: %s", cmd);
+                    stderr.writefln("Return status: %s", status);
+                    stderr.writeln("STDOUT ------");
+                    foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
+                    {
+                        stderr.write(l);
+                    }
+                    stderr.writeln("-------------");
+                    stderr.writeln("STDERR ------");
+                    foreach (l; File(errPath, "r").byLine(Yes.keepTerminator))
+                    {
+                        stderr.write(l);
+                    }
+                    stderr.writeln("-------------");
                 }
-                failureMsg.put(exp.failMsg);
+                stderr.writeln("ASSERTION FAILED: ", failMsg);
+                numFailed++;
             }
         }
 
-        if (failureMsg.data.length)
+        return numFailed;
+    }
+}
+
+struct RunResult
+{
+    string name;
+    int status;
+    string stdout;
+    string stderr;
+
+    string cwd;
+    string[string] env;
+
+    string filepath(string name)
+    {
+        if (name == "stdout")
         {
-            throw new Exception(failureMsg.data);
+            return stdout;
         }
+        if (name == "stderr")
+        {
+            return stderr;
+        }
+        return absolutePath(expandEnvVars(name, env));
+    }
+
+    File file(string name)
+    {
+        return File(filepath(name), "r");
     }
 }
 
@@ -264,7 +347,8 @@ int main(string[] args)
 {
     if (args.length < 2)
     {
-        stderr.writeln("Error: missing test file");
+        stderr.writeln(
+            "Error: missing test file");
         return usage(args, 1);
     }
     if (!exists(args[1]))
@@ -273,26 +357,32 @@ int main(string[] args)
         return usage(args, 1);
     }
 
-    const dopExe = absolutePath(environment["DOP"]);
+    const dopExe = absolutePath(
+        environment["DOP"]);
 
     try
     {
-        auto test = Test.parseFile(args[1]);
+        auto test = Test.parseFile(
+            args[1]);
         test.check();
-        test.perform(dopExe);
+        return test.perform(dopExe);
     }
     catch (Exception ex)
     {
         stderr.writeln(ex.msg);
-        stderr.writeln("Driver stack trace:");
-        stderr.writeln(ex.info);
+        if (environment.get("E2E_STACKTRACE"))
+        {
+            stderr.writeln(
+                "Driver stack trace:");
+            stderr.writeln(
+                ex.info);
+        }
         return 1;
     }
-
-    return 0;
 }
 
-string e2ePath(Args...)(Args args)
+string e2ePath(Args...)(
+    Args args)
 {
     return buildNormalizedPath(dirName(__FILE_FULL_PATH__), args);
 }
@@ -352,7 +442,8 @@ string expandEnvVars(string input, string[string] environment)
 
     if (env)
     {
-        throw new Exception("Unterminated environment variable");
+        throw new Exception(
+            "Unterminated environment variable");
     }
 
     return result;
