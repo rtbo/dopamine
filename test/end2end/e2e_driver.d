@@ -1,3 +1,6 @@
+/// Driver for end to end tests
+///
+/// Read one *.test file, run the provided command and perform the associated assertions
 module e2e_driver;
 
 import std.array;
