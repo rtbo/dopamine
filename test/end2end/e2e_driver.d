@@ -372,49 +372,6 @@ struct RunResult
     }
 }
 
-int usage(string[] args, int code)
-{
-    stderr.writefln("Usage: %s [TEST_FILE]", args[0]);
-    return code;
-}
-
-int main(string[] args)
-{
-    if (args.length < 2)
-    {
-        stderr.writeln(
-            "Error: missing test file");
-        return usage(args, 1);
-    }
-    if (!exists(args[1]))
-    {
-        stderr.writefln("Error: No such file: %s", args[1]);
-        return usage(args, 1);
-    }
-
-    const dopExe = absolutePath(
-        environment["DOP"]);
-
-    try
-    {
-        auto test = Test.parseFile(
-            args[1]);
-        test.check();
-        return test.perform(dopExe);
-    }
-    catch (Exception ex)
-    {
-        stderr.writeln(ex.msg);
-        if (environment.get("E2E_STACKTRACE"))
-        {
-            stderr.writeln(
-                "Driver stack trace:");
-            stderr.writeln(
-                ex.info);
-        }
-        return 1;
-    }
-}
 
 string e2ePath(Args...)(
     Args args)
@@ -482,4 +439,48 @@ string expandEnvVars(string input, string[string] environment)
     }
 
     return result;
+}
+
+int usage(string[] args, int code)
+{
+    stderr.writefln("Usage: %s [TEST_FILE]", args[0]);
+    return code;
+}
+
+int main(string[] args)
+{
+    if (args.length < 2)
+    {
+        stderr.writeln(
+            "Error: missing test file");
+        return usage(args, 1);
+    }
+    if (!exists(args[1]))
+    {
+        stderr.writefln("Error: No such file: %s", args[1]);
+        return usage(args, 1);
+    }
+
+    const dopExe = absolutePath(
+        environment["DOP"]);
+
+    try
+    {
+        auto test = Test.parseFile(
+            args[1]);
+        test.check();
+        return test.perform(dopExe);
+    }
+    catch (Exception ex)
+    {
+        stderr.writeln(ex.msg);
+        if (environment.get("E2E_STACKTRACE"))
+        {
+            stderr.writeln(
+                "Driver stack trace:");
+            stderr.writeln(
+                ex.info);
+        }
+        return 1;
+    }
 }
