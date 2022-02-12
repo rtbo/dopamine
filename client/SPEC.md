@@ -1,5 +1,11 @@
 # Dopamine client specification
 
+This document is a coding spec for dopamine CLI client `dop`.
+The status marks indicated along the document have the following meaning:
+ - :x: : Not coded
+ - :white_check_mark: : Coded
+ - :heavy_check_mark: : Covered by tests
+
 ## Basic usage
 
 ```
@@ -8,15 +14,15 @@ $ dop [global options] [command] [command options]
 
 ## Global options
 
-- [x] `-C|--change-dir [directory]`
+- `-C|--change-dir [directory]` :white_check_mark:
   - Change to directory before executing the command
-- [x] `-v|--verbose`
+- `-v|--verbose` :white_check_mark:
   - Enable verbose mode
-- [ ] `-c|--no-color`
+- `-c|--no-color` :x:
   - Disable colored output
-- [x] `--version`
+- `--version` :white_check_mark:
   - Print client version and exit
-- [x] `--help`
+- `--help` :white_check_mark:
   - Print help and exit
 
 ## Recipe file
@@ -53,9 +59,9 @@ Documentation TBD, see `lib/src/dopamine/lua` source folder.
 
 ## Paths and Files
 
-The following table contains paths, that may be referred to with the Spec symbol in the next sections.
+The following table contains paths, that may be referred to in the next sections.
 
-| Spec. symbol  | Path                  | Description                                 |
+| Symbol        | Path                  | Description                                 |
 | ------------- | ----------------      | -------------------------------             |
 | `$USR_DIR`    | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine    |
 |               | `$USR_DIR/profiles`   | Local cache for profiles                    |
@@ -81,7 +87,7 @@ state of the package between successive invocations of `dop`.
 | ------------ | ------------------------------------------------ |
 | `profile`    | Get, set or adjust the compilation profile.      |
 | `options`    | Get, set or adjust the package build options.    |
-| `deplock`    | Resolve an and lock dependencies.                |
+| `resolve`    | Resolve an and lock dependencies.                |
 | `depinstall` | Install dependencies.                            |
 | `source`     | Download package source.                         |
 | `build`      | Build package with selected compilation profile. |
@@ -95,45 +101,45 @@ state of the package between successive invocations of `dop`.
 Set or get the compilation profile for the current package.
 The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
 
-- [x] `dop profile`
+- `dop profile` :heavy_check_mark:
   - Print the name of the currently selected profile or `(no profile selected)`
-- [x] `dop profile --describe`
+- `dop profile --describe` :heavy_check_mark:
   - Print a detailed description of the current profile.
-- [ ] `dop profile default`
+- `dop profile default` :white_check_mark:
   - Sets the default profile as current
   - Use only the languages of the current recipe
-- [ ] `dop profile default-lang1[-lang2...]`
+- `dop profile default-lang1[-lang2...]` :white_check_mark:
   - Sets the default profile as current
   - Use the languages of the current recipe in addition to the one(s) specified
-- [ ] `dop profile [name]`
+- `dop profile [name]` :white_check_mark:
   - Sets the named profile as current
   - Use only the languages of the current recipe
-- [ ] `dop profile --add-missing`
+- `dop profile --add-missing` :white_check_mark:
   - Add missing languages to the compilation profile
-- [ ] `dop profile --set-[lang] [compiler]`
+- `dop profile --set-[lang] [compiler]` :white_check_mark:
   - Change compiler for language `[lang]`
   - `[compiler]` is optional and can be a command (e.g. `dmd`) or a path
   - If `[compiler]` is omitted, the default for `[lang]` is picked.
-- [ ] `dop profile --release`
+- `dop profile --release` :white_check_mark:
   - Set profile in Release mode
-- [ ] `dop profile --debug`
+- `dop profile --debug` :white_check_mark:
   - Set profile in Debug mode
-- [ ] `dop profile --save [name]`
+- `dop profile --save [name]` :white_check_mark:
   - Saves the current profile to the user profile cache with name
   - Can be combined with other options that modify the profile.
 
-For more sophisticated need, the profile files can be edited.
+For more sophisticated need, the profile INI files can be edited.
 
 ### Profile files
 
 Profile files are INI files containing info about:
 
-- [X] the host (OS, architecture)
-- [X] build mode (Release or Debug)
-- [X] The compiler (one per language):
-  - [X] name (Gcc, Dmd...)
-  - [X] version
-  - [ ] ABI
+- the host (OS, architecture)
+- build mode (Release or Debug)
+- The compiler (one per language):
+  - name (Gcc, Dmd...)
+  - version
+  - ABI
 
 Profile files can be cached in `~/.dopamine/profiles`. <br>
 The filename for profiles is `[basename]-[langlist].ini`.
@@ -143,25 +149,25 @@ For example:
 
 ## Options command
 
-## Deplock command
+## Resolve command
 
 Resolve and lock dependencies.<br>
 _Prerequisite_: A profile must be chosen (dependencies can depend on profile)
 
-- [ ] `dop deplock`
+- `dop deplock` :x:
   - Creates a dependency lockfile for the current package.
   - If one exists already, exits without alteration.
-- [ ] `dop deplock -f|--force`
+- `dop deplock -f|--force` :x:
   - Creates or reset a dependency lock file for the current package
-- [ ] `dop deplock --prefer-cached`
+- `dop deplock --prefer-cached` :x:
   - Creates/reset a dependency lockfile using the `preferCached` heuristic.
   - This is the default heuristic and therefore equivalent to `--force`.
-- [ ] `dop deplock --pick-highest`
+- `dop deplock --pick-highest` :x:
   - Creates/reset a dependency lockfile using the `pickHighest` heuristic.
-- [ ] `dop deplock --cache-only`
+- `dop deplock --cache-only` :x:
   - Creates/reset a dependency lockfile using the `cacheOnly` heuristic.
   - This resolution heuristic do not need network.
-- [ ] `dop deplock --use [dependency] [version]`
+- `dop deplock --use [dependency] [version]` :x:
   - Use the specified version of dependency package in the lock file.
   - If lock file exists, alter it.
   - If lock file does not exist, create it with this version.
@@ -184,11 +190,11 @@ _State_:
     If empty, deps were installed under `$USR_DIR/packages`, otherwise the content points to the dependencies prefix.
 
 _Command invocations_:
-- [ ] `dop depinstall`
+- `dop depinstall` :x:
   - Download and install the dependencies
   - Dependencies that are not built for the chosen profile are built.
   - They are installed in a per-dependency and per-profile directory under the `~/.dopamine/packages` directory.
-- [ ] `dop depinstall --stage [prefix]`
+- `dop depinstall --stage [prefix]` :x:
   - Same as `dop depinstall` except that dependencies are staged in the given prefix.
   - The build process will use the dependencies installed in `[prefix]` instead of the ones in the `~/.dopamine/packages` directory.
 
@@ -204,7 +210,7 @@ _Requirements_:
 
 _Command options_:
 
-- [ ] `dop source`
+- `dop source` :x:
   - Execute the `source` function of the recipe file.
   - If `source` symbol is a string, the source code is expected
     local with the package, `source` being the relative path to the source directory.
@@ -243,13 +249,13 @@ _Requirements_:
 
 _Command options_:
 
-- [ ] `dop build`
+- `dop build` :x:
   - Execute the `build` function of the recipe file.
-- [ ] `dop build --profile [profile]`
+- `dop build --profile [profile]` :x:
   - Execute the `build` function of the recipe file using `[profile]` as compilation profile instead of the one currently selected.
-- [ ] `dop build --debug`
+- `dop build --debug` :x:
   - Execute the `build` function of the recipe file using a debug variant of the currently selected profile.
-- [ ] `dop build --release`
+- `dop build --release` :x:
   - Execute the `build` function of the recipe file using a release variant of the currently selected profile.
 
 ## Package command
@@ -284,10 +290,10 @@ _Requirements_:
 
 _Command options_:
 
-- [ ] `dop package`
+- `dop package` :x:
   - Execute the `package` function of the recipe with the default destination.
   - If `package` symbol is `nil` and the package was installed, simply copy the installation to the destination directory.
-- [ ] `dop package [dest]`
+- `dop package [dest]` :x:
   - Same as previous but package to `[dest]`.
 
 ## Cache command
