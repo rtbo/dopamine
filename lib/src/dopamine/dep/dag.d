@@ -412,6 +412,8 @@ struct DepDAG
     /// 2nd phase of filtering to eliminate all incompatible versions in the DAG.
     /// Unless [preFilter] was disabled during the [prepare] phase, this algorithm will only handle
     /// some special cases, like diamond layout or such.
+    ///
+    /// Throws: UnresolvedDepException
     void checkCompat() @trusted
     {
         import std.algorithm : any, canFind, filter, remove;
@@ -469,6 +471,12 @@ struct DepDAG
                         ni++;
                     }
                 }
+
+                if (pack.nodes.length == 0)
+                {
+                    throw new UnresolvedDepException(pack, ups);
+                }
+
             }
 
             if (!diff)
@@ -1023,6 +1031,36 @@ class DagEdge
     }
 }
 
+class UnresolvedDepException : Exception
+{
+    private this(DagPack pack, DagPack[] ups)
+    {
+        import std.algorithm : find;
+        import std.array : Appender;
+        import std.format : format;
+        import std.range : front;
+
+        Appender!string app;
+
+        app.put(format(
+            "Dependencies to \"%s\" could not be resolved to a single version:\n",
+            pack.name
+        ));
+
+        foreach (up; ups)
+        {
+            const spec = pack.upEdges
+                .find!(e => e.up.pack == up)
+                .front
+                .spec;
+
+            app.put(format(" - %s depends on %s %s\n", up.name, pack.name, spec));
+        }
+
+        super(app.data);
+    }
+}
+
 @("Test general graph utility")
 unittest
 {
@@ -1286,6 +1324,20 @@ unittest
     assert(nodes["e"].langs == [Lang.d, Lang.cpp, Lang.c]);
 }
 
+@("Test not resolvable DAG")
+unittest
+{
+    import std.exception : assertThrown;
+
+    auto service = TestDepService.withNotResolvableBase();
+    auto profile = mockProfileLinux();
+
+    auto recipe = packNotResolvable.recipe("1.0.0");
+    auto dag = DepDAG.prepare(recipe, profile, service);
+
+    assertThrown!UnresolvedDepException(dag.checkCompat());
+}
+
 private:
 
 inout(DagPack)[] getMoreDown(inout(DagPack) pack)
@@ -1529,6 +1581,71 @@ TestPackage packE = TestPackage(
     [Lang.d]
 );
 
+TestPackage[] buildNotResolvable()
+{
+    auto a = TestPackage(
+        "a",
+        [
+            TestPackVersion(
+                "1.0.0",
+                [],
+                DepLocation.cache,
+            ),
+            TestPackVersion(
+                "2.0.0",
+                [],
+                DepLocation.cache,
+            ),
+        ],
+        [Lang.c],
+    );
+
+    // a DepDAG depending on both b and c cannot be resolved
+
+    auto b = TestPackage(
+        "b",
+        [
+            TestPackVersion(
+                "1.0.0",
+                [
+                    DepSpec("a", VersionSpec("1.0.0")),
+                ],
+                DepLocation.cache,
+            ),
+        ],
+        [Lang.c],
+    );
+
+    auto c = TestPackage(
+        "c",
+        [
+            TestPackVersion(
+                "1.0.0",
+                [
+                    DepSpec("a", VersionSpec("2.0.0")),
+                ],
+                DepLocation.cache,
+            ),
+        ],
+        [Lang.c],
+    );
+    return [a, b, c];
+}
+
+TestPackage packNotResolvable = TestPackage(
+    "not-resolvable",
+    [
+        TestPackVersion(
+            "1.0.0",
+            [
+                DepSpec("b", VersionSpec("1.0.0")),
+                DepSpec("c", VersionSpec("1.0.0")),
+            ],
+            DepLocation.cache,
+        ),
+    ],
+    [Lang.c],
+);
 
 /// A mock Dependency Service
 final class TestDepService : DepService
@@ -1546,6 +1663,11 @@ final class TestDepService : DepService
     static DepService withBase()
     {
         return new TestDepService(buildTestPackBase());
+    }
+
+    static DepService withNotResolvableBase()
+    {
+        return new TestDepService(buildNotResolvable());
     }
 
     override AvailVersion[] packAvailVersions(string packname) @trusted
