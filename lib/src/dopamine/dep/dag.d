@@ -926,7 +926,7 @@ class DagPack
     /// Edges towards packages that depends on this
     DagEdge[] upEdges;
 
-    private this(string name) @safe
+    package this(string name) @safe
     {
         this.name = name;
     }
