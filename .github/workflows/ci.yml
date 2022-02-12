@@ -10,7 +10,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         dc: [dmd-latest, ldc-latest]
-        meson: ['0.58.1']
+        meson: ['0.58.1', '0.61.1']
 
     runs-on: ${{ matrix.os }}
 
@@ -35,9 +35,6 @@ jobs:
           python -m pip install meson==${{ matrix.meson }}
           python -m pip install ninja
 
-      - name: Install Dub dependencies
-        run: rdmd tools/meson_dub_deps.d --dc ${{ env.DC }}
-
       - name: Enable MS Developer Command Prompt
         if: ${{ matrix.os == 'windows-latest' }}
         uses: ilammy/msvc-dev-cmd@v1.7.0
@@ -48,5 +45,5 @@ jobs:
           meson compile -C build
 
       - name: Run dopamine tests
-        run: lib/doptest -t 1 -v
+        run: meson test --print-errorlogs
         working-directory: build
