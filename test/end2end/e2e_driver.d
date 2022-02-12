@@ -300,7 +300,7 @@ struct Test
 
         auto pid = spawnShell(
             cmd, stdin, File(outPath, "w"), File(errPath, "w"),
-            env, Config.newEnv, sandboxRecipePath
+            env, Config.none, sandboxRecipePath
         );
 
         int status = pid.wait();
