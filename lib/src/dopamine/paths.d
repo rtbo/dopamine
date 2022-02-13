@@ -33,16 +33,6 @@ string homeDopDir()
     }
 }
 
-string homePackagesDir()
-{
-    return buildPath(homeDopDir(), "packages");
-}
-
-string homePackageDir(string packname, const(Semver) ver)
-{
-    return buildPath(homeDopDir(), "packages", format("%s-%s", packname, ver));
-}
-
 string homeProfilesDir()
 {
     return buildPath(homeDopDir(), "profiles");
@@ -63,24 +53,39 @@ string userLoginFile()
     return buildPath(homeDopDir(), "login.json");
 }
 
-string cacheDepPackDir(string packname)
+string cacheDir()
+{
+    return buildPath(homeDopDir(), "packages");
+}
+
+string cachePackDir(string packname)
 {
     return buildPath(homeDopDir(), "packages", packname);
 }
 
-string cacheDepVerDir(string packname, Semver ver)
+string cacheVerDir(string packname, Semver ver)
 {
     return buildPath(homeDopDir(), "packages", packname, ver.toString());
 }
 
-PackageDir cacheDepRevDir(string packname, Semver ver, string revision)
+PackageDir cacheRevDir(string packname, Semver ver, string revision)
 {
     return PackageDir(buildPath(homeDopDir(), "packages", packname, ver.toString(), revision));
 }
 
-PackageDir cacheDepRevDir(Recipe recipe) @system
+PackageDir cacheRevDir(Recipe recipe) @system
 {
-    return cacheDepRevDir(recipe.name, recipe.ver, recipe.revision());
+    return cacheRevDir(recipe.name, recipe.ver, recipe.revision());
+}
+
+string cacheRevLock(string packname, Semver ver, string revision)
+{
+    return buildPath(homeDopDir(), "packages", packname, ver.toString(), revision~".lock");
+}
+
+string cacheRevLock(Recipe recipe) @system
+{
+    return cacheRevLock(recipe.name, recipe.ver, recipe.revision());
 }
 
 struct PackageDir
