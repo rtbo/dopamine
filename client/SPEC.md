@@ -154,20 +154,25 @@ For example:
 Resolve and lock dependencies.<br>
 _Prerequisite_: A profile must be chosen (dependencies can depend on profile)
 
-- `dop deplock` :x:
-  - Creates a dependency lockfile for the current package.
+- `dop resolve` :x:
+  - Resolve dependencies and creates a dependency lockfile for the current package.
   - If one exists already, exits without alteration.
-- `dop deplock -f|--force` :x:
-  - Creates or reset a dependency lock file for the current package
-- `dop deplock --prefer-cached` :x:
-  - Creates/reset a dependency lockfile using the `preferCached` heuristic.
+- `dop resolve -f|--force` :x:
+  - Resolve dependencies and overwrite the dependency lockfile
+- `dop resolve --prefer-system` :x:
+  - Creates/reset a dependency lockfile using the `preferSystem` heuristic mode.
   - This is the default heuristic and therefore equivalent to `--force`.
-- `dop deplock --pick-highest` :x:
-  - Creates/reset a dependency lockfile using the `pickHighest` heuristic.
-- `dop deplock --cache-only` :x:
-  - Creates/reset a dependency lockfile using the `cacheOnly` heuristic.
-  - This resolution heuristic do not need network.
-- `dop deplock --use [dependency] [version]` :x:
+- `dop resolve --prefer-cached` :x:
+  - Creates/reset a dependency lockfile using the `preferCached` heuristic mode.
+- `dop resolve --prefer-local` :x:
+  - Creates/reset a dependency lockfile using the `preferLocal` heuristic mode.
+- `dop resolve --pick-highest` :x:
+  - Creates/reset a dependency lockfile using the `pickHighest` heuristic mode.
+- `dop resolve --no-network` :x:
+  - Disable access to network for the resolution of dependencies
+- `dop resolve --no-system` :x:
+  - Disable access to system installation for the resolution of dependencies.
+- `dop resolve --use [dependency] [version]` :x:
   - Use the specified version of dependency package in the lock file.
   - If lock file exists, alter it.
   - If lock file does not exist, create it with this version.
