@@ -21,9 +21,13 @@ Content of these two directories is copied in the sandbox dir:
  - `sandbox/[test name]/recipe` will be the `CWD` during.
  - `sandbox/[test name]/home` will correspond to `DOP_HOME`
 
+The sandbox is however not a virtual machine. The end-to-end tests require some
+tools to be present on the system, and the exact testing behavior can vary depending
+on what tools are installed on the system and in which versions they are installed.
+
 ## Registry
 
-NOT IMPLEMENTED
+TO BE DEFINED.
 The remote registry will also be sandboxed by being run as localhost mock server
 with the `$DOP_REGISTRY` environment variable. (one server instance per test)
 
@@ -42,3 +46,9 @@ with the `$DOP_REGISTRY` environment variable. (one server instance per test)
     - expect that path points to a file
  - `EXPECT_DIR=path`
     - expect that path points to a directory
+
+## Skip rules
+
+TO BE DEFINED.
+Rules are needed to skip some tests depending on platform, or if an external
+tool is not found or not in the right version.
