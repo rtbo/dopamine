@@ -114,13 +114,21 @@ struct PackageDir
     {
         import std.file : exists, isFile;
 
-        const df = recipeFile;
-        return df.exists && df.isFile;
+        const rf = recipeFile;
+        return rf.exists && rf.isFile;
     }
 
     @property string recipeFile() const
     {
         return _path("dopamine.lua");
+    }
+
+    @property bool hasLockFile() const
+    {
+        import std.file : exists, isFile;
+
+        const lf = lockFile;
+        return lf.exists && lf.isFile;
     }
 
     @property string lockFile() const
