@@ -2,6 +2,7 @@ dop_client_src = files([
     'src/dopamine/client/app.d',
     'src/dopamine/client/login.d',
     'src/dopamine/client/profile.d',
+    'src/dopamine/client/resolve.d',
     'src/dopamine/client/utils.d',
 ])
 
