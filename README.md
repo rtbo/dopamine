@@ -28,6 +28,7 @@ This is still largely in progress, but in a nutshell:
     - Package/publish
     - Upload a build
     - ...
+    - See the [client spec](https://github.com/rtbo/dopamine/blob/main/client/SPEC.md) for more details.
 
  - Recipes are Lua scripts.
     - Recipes provide some descriptive fields and functions for:
@@ -49,6 +50,71 @@ This is still largely in progress, but in a nutshell:
     - A consumer can consume this pre-built package as dependency if the same ID is computed.
     - If no build is found, the recipe is used to build the package (and optionally upload it after the build).
 
+## Example of Recipe
+
+Here is an example of recipe that would build and package `libpng`.
+Because it is packaging a 3rd party library, it has to download the source,
+and perform a few adjustement in the build options.
+
+```lua
+return {
+    name = 'libpng',
+    version = '1.6.37',
+    description = 'The PNG reference library',
+    authors = {'The PNG Reference Library Authors'},
+    license = 'http://www.libpng.org/pub/png/src/libpng-LICENSE.txt',
+    copyright = 'Copyright (c) 1995-2019 The PNG Reference Library Authors',
+    langs = {'c'},
+
+    dependencies = {zlib = '>=1.2.5'},
+
+    source = function (self)
+        local folder = 'libpng-' .. self.version
+        local archive = folder .. '.tar.xz'
+        dop.download {
+            url = 'https://download.sourceforge.net/libpng/' .. archive,
+            dest = archive,
+        }
+        dop.checksum {
+            archive,
+            sha256 = '505e70834d35383537b6491e7ae8641f1a4bed1876dbfe361201fc80868d88ca',
+        }
+        dop.extract_archive {archive = archive, outdir = '.'}
+
+        return folder
+    end,
+
+    build = function (self, dirs, config, dep_infos)
+        local cmake = dop.CMake:new(config.profile)
+
+        dop.mkdir {dirs.build, recurse = true}
+        dop.from_dir(dirs.build, function()
+
+            local zlib = dep_infos.zlib
+
+            cmake_defs = {
+                ['PNG_TESTS'] = false,
+            }
+
+            if not zlib.system then
+                cmake_defs['ZLIB_INCLUDE_DIR'] = dop.path(zlib.install_dir, 'include')
+                cmake_defs['ZLIB_LIBRARY'] = dop.path(zlib.install_dir, 'lib', 'libz.so')
+            end
+
+            cmake:configure({
+                src_dir = dirs.src,
+                install_dir = dirs.install,
+                defs = cmake_defs,
+            })
+            cmake:build()
+            cmake:install()
+        end)
+
+        -- return whether the build could be installed in dirs.install
+        return true
+    end,
+}
+```
 
 ## Build
 
