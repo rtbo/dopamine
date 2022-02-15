@@ -4,6 +4,7 @@ module dopamine.log;
 import std.format;
 import std.stdio;
 
+/// Flags to describe a color used in color formatted output.
 enum Color
 {
     black = 0,
@@ -21,15 +22,21 @@ enum Color
     bright = BRIGHT_BIT,
 }
 
+/// A level for the logging operations.
+/// The level give a specification on the level of filtering applied
+/// (low levels are the most filtered).
+/// The level is also used to determined which output stream is used.
+/// See_Also:
+///  [minLogLevel], [setLogOutput]
 enum LogLevel
 {
-    /// Log level that is typically activated with a --verbose switch
+    /// Log level that is typically activated with a --verbose switch.
     verbose,
     /// Regular information log level
     info,
-    /// Warning log level, that will print on stderr
+    /// Warning log level
     warning,
-    /// Error log level, that will print on stderr
+    /// Error log level
     error,
     /// If [minLogLevel] is set to [silent], nothing will be printed, not even errors
     silent,
@@ -74,26 +81,38 @@ void setDebugOutput(File output)
     debugOutput = LogOutput.makeFor(output);
 }
 
+/// Returns a type that will color the provided text when
+/// sent to the `log*` formatting functions in this module
+/// (if the log goes to a terminal).
+/// Will format the text unmodified otherwise.
 auto color(Color color, const(char)[] text) @safe
 {
     return ColorizedText(color, text);
 }
 
+/// Format the text in bright white, suitable to highlight regular information.
+/// See_Also: [color]
 auto info(const(char)[] text) @safe
 {
     return ColorizedText(Color.white | Color.bright, text);
 }
 
+/// Format the text in bright green, suitable to highlight successful operation.
+/// See_Also: [color]
 auto success(const(char)[] text) @safe
 {
     return ColorizedText(Color.green | Color.bright, text);
 }
 
+/// Format the text in bright yellow, suitable to highlight warning.
+/// See_Also: [color]
 auto warning(const(char)[] text) @safe
 {
     return ColorizedText(Color.yellow | Color.bright, text);
 }
 
+/// Format the text in bright red, suitable to highlight errors.
+/// See_Also: [color]
 auto error(const(char)[] text) @safe
 {
     return ColorizedText(Color.red | Color.bright, text);
@@ -109,6 +128,17 @@ private void privLog(Args...)(LogLevel level, string msgf, Args args) @trusted
     }
 }
 
+/// Log info to the debug stream.
+/// [debugOutput] is effectively written to if [debugEnabled] is true.
+void logDebug(Args...)(string msgf, Args args) @safe
+{
+    if (debugEnabled)
+    {
+        doLog(debugOutput, msgf, args);
+    }
+}
+
+/// Log formatted message on the provided log level.
 void log(Args...)(LogLevel level, string msgf, Args args) @trusted
 {
     import std.exception : enforce;
@@ -118,32 +148,40 @@ void log(Args...)(LogLevel level, string msgf, Args args) @trusted
     privLog(level, msgf, args);
 }
 
-void logDebug(Args...)(string msgf, Args args) @safe
-{
-    if (debugEnabled)
-    {
-        doLog(debugOutput, msgf, args);
-    }
-}
-
+/// Log formatted message on verbose log level.
 void logVerbose(Args...)(string msgf, Args args) @safe
 {
     privLog(LogLevel.warning, msgf, args);
 }
 
+/// Log formatted message on info log level.
 void logInfo(Args...)(string msgf, Args args) @safe
 {
     privLog(LogLevel.warning, msgf, args);
 }
 
+/// Log formatted message on warning log level.
 void logWarning(Args...)(string msgf, Args args) @safe
 {
     privLog(LogLevel.warning, msgf, args);
 }
 
+/// Same as [logWarning], but with a "Warning: " formatted header.
+void logWarningH(Args...)(string msgf, Args args) @safe
+{
+    privLog(LogLevel.warning, "%s " ~ msgf, warning("Warning:"), args);
+}
+
+/// Log formatted message on error log level.
 void logError(Args...)(string msgf, Args args) @safe
 {
     privLog(LogLevel.error, msgf, args);
+}
+
+/// Same as [logError], but with a "Error: " formatted header.
+void logErrorH(Args...)(string msgf, Args args) @safe
+{
+    privLog(LogLevel.error, "%s " ~ msgf, error("Error:"), args);
 }
 
 /// Exception that formats its argument according a format string
@@ -259,6 +297,26 @@ unittest
     assert(output.output.data == expectedLog);
 }
 
+/// A FormatLogException with Error log level as well as
+/// "Error: " formatted prefix in the message
+class ErrorLogException : FormatLogException
+{
+    this(Args...)(string fmsg, Args args)
+    {
+        super(LogLevel.error, "%s " ~ fmsg, error("Error:"), args);
+    }
+}
+
+/// A FormatLogException with Warning log level as well as
+/// "Warning: " formatted prefix in the message
+class WarningLogException : FormatLogException
+{
+    this(Args...)(string fmsg, Args args)
+    {
+        super(LogLevel.warning, "%s " ~ fmsg, warning("Warning:"), args);
+    }
+}
+
 private:
 
 version (Windows)
@@ -302,6 +360,7 @@ version (Windows)
         }
     }
 }
+
 
 bool isConsole(File file)
 {
