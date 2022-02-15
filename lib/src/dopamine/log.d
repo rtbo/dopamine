@@ -23,7 +23,9 @@ enum Color
 
 enum LogLevel
 {
-    /// Log level only for debugging
+    /// Log level only for debugging.
+    /// Debug output is enabled with [debugEnabled], [minLogLevel] does not interfere with it.
+    /// That way [logDebug] can be used without [logVerbose] pollution and vice-versa.
     debug_,
     /// Log level that is typically activated with a --verbose switch
     verbose,
@@ -38,6 +40,7 @@ enum LogLevel
 }
 
 LogLevel minLogLevel = LogLevel.info;
+bool debugEnabled = false;
 
 auto color(Color color, const(char)[] text) @safe
 {
@@ -66,18 +69,20 @@ auto error(const(char)[] text) @safe
 
 void log(Args...)(LogLevel level, string msgf, Args args) @trusted
 {
-    if (level >= minLogLevel)
+    if (level == LogLevel.debug_ && debugEnabled)
     {
-        logging = level >= LogLevel.warning ? stderrOutput : stdoutOutput;
-        scope (exit)
-        {
-            logging = null;
-        }
-
-        formattedWrite(logging, msgf, args);
-        logging.put("\n");
-        logging.flush();
+        doLog(stdoutOutput, msgf, args);
     }
+    else if (level != level.debug_ && level >= minLogLevel)
+    {
+        auto output = level >= LogLevel.warning ? stderrOutput : stdoutOutput;
+        doLog(output, msgf, args);
+    }
+}
+
+void logDebug(Args...)(string msgf, Args args) @safe
+{
+    log(LogLevel.debug_, msgf, args);
 }
 
 void logVerbose(Args...)(string msgf, Args args) @safe
@@ -261,7 +266,7 @@ bool isConsole(File file)
     {
         import core.sys.posix.unistd : isatty;
 
-        return cast(bool)isatty(file.fileno);
+        return cast(bool) isatty(file.fileno);
     }
 }
 
@@ -320,6 +325,19 @@ static ~this()
 {
     stdoutOutput = null;
     stderrOutput = null;
+}
+
+void doLog(Args...)(LogOutput output, string msgf, Args args)
+{
+    logging = output;
+    scope (exit)
+    {
+        logging = null;
+    }
+
+    formattedWrite(logging, msgf, args);
+    logging.put("\n");
+    logging.flush();
 }
 
 struct ColorizedText
