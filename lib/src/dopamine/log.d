@@ -1,19 +1,39 @@
+/// A logging module that support colorized text when connected to a terminal.
 module dopamine.log;
-
-import arsd.terminal;
 
 import std.format;
 import std.stdio;
 
-alias Color = arsd.terminal.Color;
-alias Bright = arsd.terminal.Bright;
+enum Color
+{
+    black = 0,
+
+    red = RED_BIT,
+    green = GREEN_BIT,
+    blue = BLUE_BIT,
+
+    yellow = red | green,
+    magenta = red | blue,
+    cyan = blue | green,
+
+    white = red | green | blue,
+
+    bright = BRIGHT_BIT,
+}
 
 enum LogLevel
 {
+    /// Log level only for debugging
+    debug_,
+    /// Log level that is typically activated with a --verbose switch
     verbose,
+    /// Regular information log level
     info,
+    /// Warning log level, that will print on stderr
     warning,
+    /// Error log level, that will print on stderr
     error,
+    /// If [minLogLevel] is set to [silent], nothing will be printed, not even errors
     silent,
 }
 
@@ -26,34 +46,37 @@ auto color(Color color, const(char)[] text) @safe
 
 auto info(const(char)[] text) @safe
 {
-    return ColorizedText(Color.DEFAULT | Bright, text);
+    return ColorizedText(Color.white | Color.bright, text);
 }
 
 auto success(const(char)[] text) @safe
 {
-    return ColorizedText(Color.green | Bright, text);
+    return ColorizedText(Color.green | Color.bright, text);
 }
 
 auto warning(const(char)[] text) @safe
 {
-    return ColorizedText(Color.yellow | Bright, text);
+    return ColorizedText(Color.yellow | Color.bright, text);
 }
 
 auto error(const(char)[] text) @safe
 {
-    return ColorizedText(Color.red | Bright, text);
+    return ColorizedText(Color.red | Color.bright, text);
 }
 
 void log(Args...)(LogLevel level, string msgf, Args args) @trusted
 {
     if (level >= minLogLevel)
     {
-        logging = true;
+        logging = level >= LogLevel.warning ? stderrOutput : stdoutOutput;
         scope (exit)
-            logging = false;
-        formattedWrite(instance, msgf, args);
-        instance.put("\n");
-        instance.flush();
+        {
+            logging = null;
+        }
+
+        formattedWrite(logging, msgf, args);
+        logging.put("\n");
+        logging.flush();
     }
 }
 
@@ -113,9 +136,11 @@ class FormatLogException : Exception
         if (level < minLogLevel)
             return;
 
-        logging = true;
+        logging = level >= LogLevel.warning ? stderrOutput : stdoutOutput;
         scope (exit)
-            logging = false;
+        {
+            logging = null;
+        }
 
         size_t valI;
         auto f = fmt;
@@ -127,7 +152,7 @@ class FormatLogException : Exception
                 enforce(f.length > 1, "Invalid log format string: \"" ~ fmt ~ "\"");
                 if (f[1] == '%')
                 {
-                    instance.put("%");
+                    logging.put("%");
                     f = f[2 .. $];
                     continue;
                 }
@@ -149,33 +174,33 @@ class FormatLogException : Exception
                 size_t len = 1;
                 while (f.length > len && f[len] != '%')
                     len++;
-                instance.put(f[0 .. len]);
+                logging.put(f[0 .. len]);
                 f = f[len .. $];
             }
         }
         enforce(valI == values.length, "Orphean log format value");
-        instance.put("\n");
-        instance.flush();
+        logging.put("\n");
+        logging.flush();
     }
 }
 
 @("FormatLogException")
 unittest
 {
-    auto oldInstance = instance;
+    auto oldOutput = stderrOutput;
     const oldLevel = minLogLevel;
     scope (exit)
     {
-        instance = oldInstance;
+        stderrOutput = oldOutput;
         minLogLevel = oldLevel;
     }
 
     auto output = new TestLogOutput;
-    instance = output;
+    stderrOutput = output;
     minLogLevel = LogLevel.info;
 
-    auto e = new FormatLogException(LogLevel.info, "Test %s and %s. fourty-two = %s",
-            ColorizedText(Color.green, "success"), ColorizedText(Color.red, "error"), 42);
+    auto e = new FormatLogException(LogLevel.warning, "Test %s and %s. fourty-two = %s",
+        ColorizedText(Color.green, "success"), ColorizedText(Color.red, "error"), 42);
 
     enum expectedMsg = "Test success and error. fourty-two = 42";
     enum expectedLog = "Test [green]success[reset] and [red]error[reset]. fourty-two = 42\n[flush]";
@@ -190,6 +215,70 @@ unittest
 }
 
 private:
+
+version (Windows)
+{
+    import core.sys.windows.windows;
+
+    void winEnforce(BOOL res, string fname)
+    {
+        if (!res)
+        {
+            // from https://stackoverflow.com/a/17387176/1382702
+
+            const errorMessageId = GetLastError();
+            if (!errorMessageId)
+            {
+                throw new Exception(format("%s failed, (but GetLastError do not report error)", fname));
+            }
+
+            LPSTR messageBuffer = nullptr;
+
+            //Ask Win32 to give us the string version of that message ID.
+            //The parameters we pass in, tell Win32 to create the buffer that holds the message for us (because we don't yet know how long the message string will be).
+            size_t size = FormatMessageA(
+                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR) & messageBuffer, 0, NULL);
+
+            //Copy the error message into a string.
+            const msg = messageBuffer[0 .. size].idup;
+
+            //Free the Win32's string's buffer.
+            LocalFree(messageBuffer);
+
+            throw new Exception(format("%s failed (%s)", fname, msg));
+        }
+    }
+}
+
+bool isConsole(File file)
+{
+    version (Windows)
+    {
+        return GetFileType(file.windowsHandle) == FILE_TYPE_CHAR;
+    }
+    version (Posix)
+    {
+        import core.sys.posix.unistd : isatty;
+
+        return cast(bool)isatty(file.fileno);
+    }
+}
+
+version (Windows)
+{
+    enum RED_BIT = FOREGROUND_RED;
+    enum GREEN_BIT = FOREGROUND_GREEN;
+    enum BLUE_BIT = FOREGROUND_BLUE;
+    enum BRIGHT_BIT = FOREGROUND_INTENSITY;
+}
+version (Posix)
+{
+    enum RED_BIT = 1;
+    enum GREEN_BIT = 2;
+    enum BLUE_BIT = 4;
+    enum BRIGHT_BIT = 8;
+}
 
 bool isEndOfSpec(char c)
 {
@@ -216,49 +305,35 @@ bool isEndOfSpec(char c)
     }
 }
 
-LogOutput instance;
-bool logging; // true when currently logging through instance
+LogOutput stdoutOutput;
+LogOutput stderrOutput;
+// set when currently logging because ColorizedText has no reference to it
+LogOutput logging;
 
 static this()
 {
-    version (unittest)
-    {
-        // weird stuff happens with TerminalLogOutput
-        // in multi threaded context generated by unit-threaded
-        instance = new FlatLogOutput();
-    }
-    else
-    {
-        if (Terminal.stdoutIsTerminal())
-        {
-            instance = new TerminalLogOutput();
-        }
-        else
-        {
-            instance = new FlatLogOutput();
-        }
-    }
+    stdoutOutput = LogOutput.makeFor(stdout);
+    stderrOutput = LogOutput.makeFor(stderr);
 }
 
 static ~this()
 {
-    // necessary to run Terminal.~this() out of GC collection
-    destroy(instance);
-    instance = null;
+    stdoutOutput = null;
+    stderrOutput = null;
 }
 
 struct ColorizedText
 {
-    int color;
+    Color color;
     const(char)[] text;
 
     void toString(scope void delegate(const(char)[]) sink) const
     {
         if (logging)
         {
-            instance.color(color);
-            instance.put(text);
-            instance.reset();
+            logging.color(color);
+            logging.put(text);
+            logging.reset();
         }
         else
         {
@@ -269,27 +344,34 @@ struct ColorizedText
 
 interface LogOutput
 {
-    void color(int col);
+    void color(Color col);
     void reset();
     void put(const(char)[] text);
     void flush();
+
+    static LogOutput makeFor(File file)
+    {
+        if (isConsole(file))
+        {
+            return new TerminalLogOutput(file);
+        }
+        else
+        {
+            return new FlatLogOutput(file);
+        }
+    }
 }
 
 class FlatLogOutput : LogOutput
 {
     private File output;
 
-    this()
-    {
-        output = stdout;
-    }
-
     this(File output)
     {
         this.output = output;
     }
 
-    override void color(int col)
+    override void color(Color col)
     {
     }
 
@@ -308,33 +390,62 @@ class FlatLogOutput : LogOutput
     }
 }
 
+enum defaultForeground = Color.white;
+
 class TerminalLogOutput : LogOutput
 {
-    private Terminal term;
-
-    this()
+    File output;
+    version (Windows)
     {
-        term = Terminal(ConsoleOutputType.linear);
+        WORD resetAttribute;
     }
 
-    override void color(int col)
+    this(File output)
     {
-        term.color(col, Color.DEFAULT);
+        this.output = output;
+        version (Windows)
+        {
+            CONSOLE_SCREEN_BUFFER_INFO info;
+            winEnforce(GetConsoleScreenBufferInfo(output.windowsHandle, &info));
+            resetAttribute = info.wAttributes;
+        }
+    }
+
+    override void color(Color col)
+    {
+        version (Windows)
+        {
+            SetConsoleTextAttribute(output.windowsHandle, cast(WORD) col);
+        }
+        version (Posix)
+        {
+            const tint = col & ~Color.bright;
+            const bright = col & Color.bright;
+            output.rawWrite(format("\u001B[3%d%sm", cast(int) tint, bright ? ";1" : ""));
+        }
     }
 
     override void reset()
     {
-        term.reset();
+        version (Windows)
+        {
+            SetConsoleTextAttribute(output.windowsHandle, resetAttribute);
+        }
+
+        version (Posix)
+        {
+            output.rawWrite("\u001B[0m");
+        }
     }
 
     override void put(const(char)[] msg)
     {
-        term.write(msg);
+        output.write(msg);
     }
 
     override void flush()
     {
-        term.flush();
+        output.flush();
     }
 }
 
@@ -347,12 +458,11 @@ version (unittest)
 
         Appender!string output;
 
-        override void color(int col)
+        override void color(Color col)
         {
             import std.conv : to;
 
-            auto c = cast(Color) col;
-            output.put("[" ~ c.to!string ~ "]");
+            output.put("[" ~ col.to!string ~ "]");
         }
 
         override void reset()
@@ -388,6 +498,6 @@ class TDynLogValue(T) : DynLogValue
 
     override void formatVal(scope const ref FormatSpec!char spec)
     {
-        formatValue(instance, value, spec);
+        formatValue(logging, value, spec);
     }
 }

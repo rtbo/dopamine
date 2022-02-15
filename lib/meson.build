@@ -1,8 +1,6 @@
 subdir('src/dopamine')
 
 dop_src = files([
-    'src/arsd/terminal.d',
-
     'src/bindbc/loader/package.d',
     'src/bindbc/loader/sharedlib.d',
     'src/bindbc/loader/system.d',
