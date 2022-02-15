@@ -237,13 +237,20 @@ version (Windows)
                 throw new Exception(format("%s failed, (but GetLastError do not report error)", fname));
             }
 
-            LPSTR messageBuffer = nullptr;
+            LPSTR messageBuffer = null;
 
-            //Ask Win32 to give us the string version of that message ID.
-            //The parameters we pass in, tell Win32 to create the buffer that holds the message for us (because we don't yet know how long the message string will be).
-            size_t size = FormatMessageA(
+            // Ask Win32 to give us the string version of that message ID.
+            // The parameters we pass in, tell Win32 to create the buffer that holds the message for us 
+            // (because we don't yet know how long the message string will be).
+            const size = FormatMessageA(
                 FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR) & messageBuffer, 0, NULL);
+                null, 
+                errorMessageId,
+                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                messageBuffer, 
+                0,
+                null
+            );
 
             //Copy the error message into a string.
             const msg = messageBuffer[0 .. size].idup;
@@ -424,7 +431,10 @@ class TerminalLogOutput : LogOutput
         version (Windows)
         {
             CONSOLE_SCREEN_BUFFER_INFO info;
-            winEnforce(GetConsoleScreenBufferInfo(output.windowsHandle, &info));
+            winEnforce(
+                GetConsoleScreenBufferInfo(output.windowsHandle, &info),
+                "GetConsoleScreenBufferInfo"
+            );
             resetAttribute = info.wAttributes;
         }
     }
