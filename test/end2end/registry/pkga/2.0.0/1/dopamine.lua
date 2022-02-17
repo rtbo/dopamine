@@ -1,12 +1,8 @@
 return {
-    name = 'pkgb',
-    version = '1.0.0',
-    langs = {'d'},
-    revision = '2',
-
-    dependencies = {
-        pkga = '>=1.0.0'
-    },
+    name = 'pkga',
+    version = '2.0.0',
+    langs = {'c'},
+    revision = '1',
 
     build = function(self, dirs, config)
         local profile = config.profile

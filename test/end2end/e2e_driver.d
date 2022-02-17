@@ -6,6 +6,7 @@ module e2e_driver;
 import std.array;
 import std.exception;
 import std.file;
+import std.json;
 import std.path;
 import std.process;
 import std.regex;
@@ -141,8 +142,10 @@ struct Test
 {
     string name;
     string command;
-    string recipeDir;
-    string homeDir;
+
+    string recipe;
+    string cache;
+    string registry;
 
     Expect[] expectations;
 
@@ -164,20 +167,31 @@ struct Test
             {
                 continue;
             }
-            else if (line.startsWith("CMD="))
+
+            enum cmdMark = "CMD=";
+            enum recipeMark = "RECIPE=";
+            enum cacheMark = "CACHE=";
+            enum registryMark = "REGISTRY=";
+
+            const mark = line.startsWith(
+                cmdMark, recipeMark, cacheMark, registryMark
+            );
+            switch (mark)
             {
-                test.command = line[4 .. $];
-            }
-            else if (line.startsWith("RECIPE="))
-            {
-                test.recipeDir = line[7 .. $];
-            }
-            else if (line.startsWith("HOME="))
-            {
-                test.homeDir = line[5 .. $];
-            }
-            else
-            {
+            case 1:
+                test.command = line[cmdMark.length .. $];
+                break;
+            case 2:
+                test.recipe = line[recipeMark.length .. $];
+                break;
+            case 3:
+                test.cache = line[cacheMark.length .. $];
+                break;
+            case 4:
+                test.registry = line[registryMark.length .. $];
+                break;
+            case 0:
+            default:
                 auto m = matchFirst(line, expectRe);
                 enforce(!m.empty, format("%s: Unrecognized entry: %s", test.name, line));
 
@@ -207,12 +221,8 @@ struct Test
                 default:
                     throw new Exception("Unknown assertion: " ~ type);
                 }
+                break;
             }
-        }
-
-        if (!test.homeDir)
-        {
-            test.homeDir = "empty";
         }
 
         return test;
@@ -226,10 +236,7 @@ struct Test
     void check()
     {
         enforce(command, format("%s: CMD must be provided", name));
-        enforce(recipeDir, format("%s: RECIPE must be provided", name));
-
-        checkDir(e2ePath("recipes", recipeDir));
-        checkDir(e2ePath("homes", homeDir));
+        enforce(recipe, format("%s: RECIPE must be provided", name));
     }
 
     string sandboxPath(Args...)(Args args)
@@ -247,30 +254,42 @@ struct Test
         return sandboxPath("home", args);
     }
 
-    void prepareSandbox()
+    string sandboxRegistryPath(Args...)(Args args)
     {
-        copyContentToSandbox(e2ePath("recipes", recipeDir), sandboxRecipePath());
-        copyContentToSandbox(e2ePath("homes", homeDir), sandboxHomePath());
+        return sandboxPath("registry", args);
     }
 
-    void copyContentToSandbox(string src, string sandbox)
+    void prepareSandbox()
     {
-        mkdirRecurse(sandbox);
+        import std.algorithm : each, map;
 
-        foreach (entry; dirEntries(src, SpanMode.breadth))
+        auto defs = parseJSON(cast(string)read(e2ePath("definitions.json")));
+
+        if (registry)
         {
-            string radical = relativePath(entry.name, src);
-            string dest = buildPath(sandbox, radical);
-
-            if (entry.isDir)
-            {
-                mkdirRecurse(dest);
-            }
-            else
-            {
-                copy(entry.name, dest);
-            }
+            defs["registry"][registry].array
+                .map!(jv => jv.str)
+                .each!((p) {
+                    const src = e2ePath("registry", p);
+                    const dest = sandboxRegistryPath(p);
+                    copyRecurse(src, dest);
+                });
         }
+
+        mkdirRecurse(sandboxHomePath("cache"));
+        if (cache)
+        {
+            defs["caches"][cache].array
+                .map!(jv => jv.str)
+                .each!((p) {
+                    const src = e2ePath("registry", p);
+                    const dest = sandboxHomePath("cache", p);
+                    copyRecurse(src, dest);
+                });
+        }
+
+        writefln("copy %s to %s", e2ePath("recipes", recipe), sandboxRecipePath);
+        copyRecurse(e2ePath("recipes", recipe), sandboxRecipePath);
     }
 
     string[string] makeSandboxEnv(string dopExe)
@@ -304,6 +323,8 @@ struct Test
         // in platform independent way instead of relying on native shell.
         // This would allow portable CMD in test files.
 
+        writeln("will spawn in ", sandboxRecipePath);
+
         auto pid = spawnShell(
             cmd, stdin, File(outPath, "w"), File(errPath, "w"),
             env, Config.none, sandboxRecipePath
@@ -327,12 +348,13 @@ struct Test
                 {
                     import std.typecons : Yes;
 
-                    stderr.writefln("TEST:    %s", name);
-                    stderr.writefln("HOME:    %s", homeDir);
-                    stderr.writefln("RECIPE:  %s", recipeDir);
-                    stderr.writefln("SANDBOX: %s", sbDir);
-                    stderr.writefln("COMMAND: %s", cmd);
-                    stderr.writefln("STATUS:  %s", status);
+                    stderr.writefln("TEST:     %s", name);
+                    stderr.writefln("RECIPE:   %s", recipe);
+                    stderr.writefln("CACHE:    %s", cache);
+                    stderr.writefln("REGISTRY: %s", registry);
+                    stderr.writefln("SANDBOX:  %s", sbDir);
+                    stderr.writefln("COMMAND:  %s", cmd);
+                    stderr.writefln("STATUS:   %s", status);
                     stderr.writeln("STDOUT ------");
                     foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
                     {
@@ -392,10 +414,27 @@ struct RunResult
     }
 }
 
-string e2ePath(Args...)(
-    Args args)
+string e2ePath(Args...)(Args args)
 {
     return buildNormalizedPath(dirName(__FILE_FULL_PATH__), args);
+}
+
+void copyRecurse(string src, string dest)
+in (exists(src) && isDir(src))
+in (!exists(dest) || !isFile(dest))
+{
+    mkdirRecurse(dest);
+
+    foreach(e; dirEntries(src, SpanMode.breadth))
+    {
+        const relative = relativePath(e.name, src);
+        const path = buildPath(dest, relative);
+
+        if (e.isDir)
+            mkdir(path);
+        else
+            copy(e.name, path);
+    }
 }
 
 // expand env vars of shape $VAR or ${VAR}
