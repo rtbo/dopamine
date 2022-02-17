@@ -19,7 +19,7 @@ extern "C"
 #   define API
 #endif
 
-API int funca();
+API int funca(int x);
 
 #ifdef __cplusplus
 }

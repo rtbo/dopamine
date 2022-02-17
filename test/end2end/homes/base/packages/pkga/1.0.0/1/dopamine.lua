@@ -2,6 +2,7 @@ return {
     name = 'pkga',
     version = '1.0.0',
     langs = {'c'},
+    revision = '1',
 
     build = function(self, dirs, config)
         local profile = config.profile
