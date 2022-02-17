@@ -73,7 +73,7 @@ class ExpectMatch : Expect
             return null;
         }
 
-        return format("Expected to match %s in %s", rexp, filename);
+        return format("Expected to match '%s' in '%s'", rexp, filename);
     }
 }
 
@@ -91,7 +91,7 @@ class ExpectNotMatch : ExpectMatch
             return null;
         }
 
-        return format("Unexpected match %s in %s", rexp, filename);
+        return format("Unexpected match '%s' in '%s'", rexp, filename);
     }
 }
 
