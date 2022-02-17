@@ -107,7 +107,8 @@ class ExpectFile : Expect
     override string expect(ref RunResult res)
     {
         const path = res.filepath(filename);
-        if (exists(path) && isFile(path)) {
+        if (exists(path) && isFile(path))
+        {
             return null;
         }
 
@@ -127,7 +128,8 @@ class ExpectDir : Expect
     override string expect(ref RunResult res)
     {
         const path = res.filepath(filename);
-        if (exists(path) && isDir(path)) {
+        if (exists(path) && isDir(path))
+        {
             return null;
         }
 
@@ -281,11 +283,15 @@ struct Test
 
     int perform(string dopExe)
     {
+        // we delete previous sandbox if any
+        const sbDir = sandboxPath();
+        if (exists(sbDir) && isDir(sbDir))
+            rmdirRecurse(sbDir);
+
         auto env = makeSandboxEnv(dopExe);
 
-        mkdirRecurse(sandboxPath());
-        scope (exit)
-            rmdirRecurse(sandboxPath());
+        // create the sandbox dir
+        mkdirRecurse(sbDir);
 
         prepareSandbox();
 
@@ -321,9 +327,12 @@ struct Test
                 {
                     import std.typecons : Yes;
 
-                    stderr.writefln("TEST %s", name);
-                    stderr.writefln("Command: %s", cmd);
-                    stderr.writefln("Return status: %s", status);
+                    stderr.writefln("TEST:    %s", name);
+                    stderr.writefln("HOME:    %s", homeDir);
+                    stderr.writefln("RECIPE:  %s", recipeDir);
+                    stderr.writefln("SANDBOX: %s", sbDir);
+                    stderr.writefln("COMMAND: %s", cmd);
+                    stderr.writefln("STATUS:  %s", status);
                     stderr.writeln("STDOUT ------");
                     foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
                     {
@@ -336,11 +345,19 @@ struct Test
                         stderr.write(l);
                     }
                     stderr.writeln("-------------");
+                    outputShown = true;
                 }
                 stderr.writeln("ASSERTION FAILED: ", failMsg);
                 numFailed++;
             }
         }
+
+        // in case of success, we delete the sandbox dir,
+        // otherwise we leave it here as it might be useful
+        // to look at its content for debug
+
+        if (numFailed == 0)
+            rmdirRecurse(sbDir);
 
         return numFailed;
     }
@@ -366,7 +383,7 @@ struct RunResult
         {
             return stderr;
         }
-        return absolutePath(expandEnvVars(name, env));
+        return absolutePath(expandEnvVars(name, env), cwd);
     }
 
     File file(string name)
@@ -374,7 +391,6 @@ struct RunResult
         return File(filepath(name), "r");
     }
 }
-
 
 string e2ePath(Args...)(
     Args args)
