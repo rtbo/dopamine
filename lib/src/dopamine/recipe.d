@@ -132,6 +132,10 @@ struct Recipe
             assert(lua_gettop(L) == 0, "Light recipe do not have proper stack");
             break;
         case RecipeType.pack:
+            if (lua_gettop(L) != 1)
+            {
+                luaPrintStack(L, stderr);
+            }
             assert(lua_gettop(L) == 1, "Package recipe do not have proper stack");
             assert(lua_type(L, 1) == LUA_TTABLE, "Package recipe has corrupted stack");
             break;
@@ -677,6 +681,10 @@ package class RecipePayload
                     break;
                 case LUA_TNIL:
                     // revision will be lazily computed from the file content in Recipe.revision
+                    break;
+                case LUA_TSTRING:
+                    d.revision = luaToString(L, -1);
+                    writefln(d.revision);
                     break;
                 default:
                     throw new Exception("Invalid revision specification");
