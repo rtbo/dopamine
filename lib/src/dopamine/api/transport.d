@@ -14,14 +14,14 @@ class ErrorResponseException : Exception
     /// A message that might be given by the server in case of error.
     string error;
 
-    this(int code, string reason, string error)
+    this(int code, string reason, string error, string file = __FILE__, size_t line = __LINE__)
     {
         import std.format : format;
 
         this.code = code;
         this.reason = reason;
         this.error = error;
-        super(format("Error: Server response is %s - %s: %s", code, reason, error));
+        super(format("Error: Server response is %s - %s: %s", code, reason, error), file, line);
     }
 }
 
@@ -33,13 +33,13 @@ class ServerDownException : Exception
     /// A message from Curl backend
     string reason;
 
-    this(string host, string reason)
+    this(string host, string reason, string file = __FILE__, size_t line = __LINE__)
     {
         import std.format : format;
 
         this.host = host;
         this.reason = reason;
-        super(format("Error: Server %s appears to be down: %s", host, reason));
+        super(format("Server %s appears to be down: %s", host, reason), file, line);
     }
 }
 

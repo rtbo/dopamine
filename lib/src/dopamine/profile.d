@@ -786,14 +786,14 @@ Profile detectDefaultProfile(Lang[] langs, Flag!"allowMissing" allowMissing)
 
 class CompilerVersionParseException : Exception
 {
-    this (string clName, string[] cmd, string output)
+    this (string clName, string[] cmd, string output, string file = __FILE__, size_t line = __LINE__)
     {
         import std.process : escapeShellCommand;
 
         super(format(
             "Could not parse version of %s from \"%s\" output:\n",
             clName, escapeShellCommand(cmd), output,
-        ));
+        ), file, line);
     }
 }
 

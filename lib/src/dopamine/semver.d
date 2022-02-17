@@ -11,11 +11,11 @@ class InvalidSemverException : Exception
     /// The reason of the parse error
     string reason;
 
-    this(string semver, string reason) pure
+    this(string semver, string reason, string file = __FILE__, size_t line = __LINE__) pure
     {
         import std.format : format;
 
-        super(format("'%s' is not a valid Semantic Version: %s", semver, reason));
+        super(format("'%s' is not a valid Semantic Version: %s", semver, reason), file, line);
         this.semver = semver;
         this.reason = reason;
     }

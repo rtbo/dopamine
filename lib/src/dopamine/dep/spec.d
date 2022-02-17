@@ -13,9 +13,9 @@ class InvalidVersionSpecException : Exception
     /// The reason of the parse error
     string reason;
 
-    this(string spec, string reason) @safe pure
+    this(string spec, string reason, string file = __FILE__, size_t line = __LINE__) @safe pure
     {
-        super(format("'%s': invalid version specification - %s", spec, reason));
+        super(format("'%s': invalid version specification - %s", spec, reason), file, line);
         this.spec = spec;
         this.reason = reason;
     }

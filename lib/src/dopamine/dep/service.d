@@ -12,22 +12,21 @@ import std.typecons;
 
 class DependencyException : Exception
 {
-    this(string msg) @safe
-    {
-        super(msg);
-    }
+    import std.exception : basicExceptionCtors;
+
+    mixin basicExceptionCtors;
 }
 
 class NoSuchPackageException : DependencyException
 {
     string packname;
 
-    this(string packname) @safe
+    this(string packname, string file = __FILE__, size_t line = __LINE__) @safe
     {
         import std.format : format;
 
         this.packname = packname;
-        super(format("No such package: %s", packname));
+        super(format("No such package: %s", packname), file, line);
     }
 }
 
@@ -36,13 +35,14 @@ class NoSuchVersionException : DependencyException
     string packname;
     const(Semver) ver;
 
-    this(string packname, const(Semver) ver) @safe
+    this(string packname, const(Semver) ver,
+        string file = __FILE__, size_t line = __LINE__) @safe
     {
         import std.format : format;
 
         this.packname = packname;
         this.ver = ver;
-        super(format("No such package version: %s-%s", packname, ver));
+        super(format("No such package version: %s-%s", packname, ver), file, line);
     }
 }
 
@@ -52,14 +52,15 @@ class NoSuchRevisionException : DependencyException
     const(Semver) ver;
     string revision;
 
-    this(string packname, const(Semver) ver, string revision) @safe
+    this(string packname, const(Semver) ver, string revision,
+        string file = __FILE__, size_t line = __LINE__) @safe
     {
         import std.format : format;
 
         this.packname = packname;
         this.ver = ver;
         this.revision = revision;
-        super(format("No such package version: %s-%s/%s", packname, ver, revision));
+        super(format("No such package version: %s-%s/%s", packname, ver, revision), file, line);
     }
 }
 

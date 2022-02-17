@@ -10,9 +10,9 @@ class InvalidPackageException : Exception
     string path;
     string reason;
 
-    this(string path, string reason)
+    this(string path, string reason, string file = __FILE__, size_t line = __LINE__)
     {
-        super(format("package %s is invalid: %s", path, reason));
+        super(format("package %s is invalid: %s", path, reason), file, line);
         this.path = path;
         this.reason = reason;
     }
@@ -20,9 +20,9 @@ class InvalidPackageException : Exception
 
 class InvalidRecipeException : InvalidPackageException
 {
-    this(string path, string reason)
+    this(string path, string reason, string file = __FILE__, size_t line = __LINE__)
     {
-        super(path, format("Invalid recipe: %s", reason));
+        super(path, format("Invalid recipe: %s", reason), file, line);
     }
 }
 

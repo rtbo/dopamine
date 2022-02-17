@@ -1024,7 +1024,7 @@ class DagEdge
 
 class UnresolvedDepException : Exception
 {
-    private this(DagPack pack, DagPack[] ups)
+    private this(DagPack pack, DagPack[] ups, string file = __FILE__, size_t line = __LINE__)
     {
         import std.algorithm : find;
         import std.array : Appender;
@@ -1048,7 +1048,7 @@ class UnresolvedDepException : Exception
             app.put(format(" - %s depends on %s %s\n", up.name, pack.name, spec));
         }
 
-        super(app.data);
+        super(app.data, file, line);
     }
 }
 
