@@ -6,7 +6,14 @@ import dopamine.recipe;
 
 Recipe parseRecipe(PackageDir dir)
 {
+    import std.format : format;
+
     auto recipe = Recipe.parseFile(dir.recipeFile());
-    logInfo("%s: %s - %s-%s", info("Recipe"), success("OK"), recipe.name, recipe.ver);
+
+    string namever;
+    if (!recipe.isLight)
+        namever = format(" - %s-%s", recipe.name, recipe.ver);
+
+    logInfo("%s: %s%s", info("Recipe"), success("OK"), namever);
     return recipe;
 }
