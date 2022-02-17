@@ -55,22 +55,22 @@ string userLoginFile()
 
 string cacheDir()
 {
-    return buildPath(homeDopDir(), "packages");
+    return buildPath(homeDopDir(), "cache");
 }
 
 string cachePackDir(string packname)
 {
-    return buildPath(homeDopDir(), "packages", packname);
+    return buildPath(homeDopDir(), "cache", packname);
 }
 
 string cacheVerDir(string packname, Semver ver)
 {
-    return buildPath(homeDopDir(), "packages", packname, ver.toString());
+    return buildPath(homeDopDir(), "cache", packname, ver.toString());
 }
 
 PackageDir cacheRevDir(string packname, Semver ver, string revision)
 {
-    return PackageDir(buildPath(homeDopDir(), "packages", packname, ver.toString(), revision));
+    return PackageDir(buildPath(homeDopDir(), "cache", packname, ver.toString(), revision));
 }
 
 PackageDir cacheRevDir(Recipe recipe) @system
@@ -80,7 +80,7 @@ PackageDir cacheRevDir(Recipe recipe) @system
 
 string cacheRevLock(string packname, Semver ver, string revision)
 {
-    return buildPath(homeDopDir(), "packages", packname, ver.toString(), revision~".lock");
+    return buildPath(homeDopDir(), "cache", packname, ver.toString(), revision~".lock");
 }
 
 string cacheRevLock(Recipe recipe) @system
