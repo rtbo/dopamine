@@ -151,13 +151,13 @@ void log(Args...)(LogLevel level, string msgf, Args args) @trusted
 /// Log formatted message on verbose log level.
 void logVerbose(Args...)(string msgf, Args args) @safe
 {
-    privLog(LogLevel.warning, msgf, args);
+    privLog(LogLevel.verbose, msgf, args);
 }
 
 /// Log formatted message on info log level.
 void logInfo(Args...)(string msgf, Args args) @safe
 {
-    privLog(LogLevel.warning, msgf, args);
+    privLog(LogLevel.info, msgf, args);
 }
 
 /// Log formatted message on warning log level.
