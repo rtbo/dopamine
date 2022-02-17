@@ -42,7 +42,6 @@ enum LogLevel
     silent,
 }
 
-
 /// Filters what level of logging actually goes to output.
 @property LogLevel minLogLevel()
 {
@@ -59,7 +58,7 @@ enum LogLevel
 void setLogOutput(LogLevel level, File output)
 in (level < LogLevel.silent)
 {
-    const ind = cast(size_t)level;
+    const ind = cast(size_t) level;
     if (logOutputs[ind])
     {
         logOutputs[ind].dispose();
@@ -338,14 +337,14 @@ version (Windows)
             LPSTR messageBuffer = null;
 
             // Ask Win32 to give us the string version of that message ID.
-            // The parameters we pass in, tell Win32 to create the buffer that holds the message for us 
+            // The parameters we pass in, tell Win32 to create the buffer that holds the message for us
             // (because we don't yet know how long the message string will be).
             const size = FormatMessageA(
                 FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                null, 
+                null,
                 errorMessageId,
                 MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                messageBuffer, 
+                messageBuffer,
                 0,
                 null
             );
@@ -360,7 +359,6 @@ version (Windows)
         }
     }
 }
-
 
 bool isConsole(File file)
 {
@@ -418,42 +416,41 @@ bool isEndOfSpec(char c)
 
 LogLevel _minLogLevel = LogLevel.info;
 
-enum levelCount = cast(size_t)LogLevel.silent;
+enum levelCount = cast(size_t) LogLevel.silent;
 
 LogOutput[levelCount] logOutputs;
 
 LogOutput debugOutput;
 
-// set when currently logging because ColorizedText 
+// set when currently logging because ColorizedText
 // need a reference to the currently logging output.
 LogOutput logging;
 
 LogOutput logOutput(LogLevel level)
-    in(level < LogLevel.silent)
+in (level < LogLevel.silent)
 {
-    const ind = cast(size_t)level;
+    const ind = cast(size_t) level;
     return logOutputs[ind];
 }
-
 
 static this()
 {
     // we could reuse the same stdout and stderr instances, but it would cause
     // problem to release the handle (we assign to File.init in dispose)
     // in case some file system file is set.
-    logOutputs[cast(size_t)LogLevel.verbose] = LogOutput.makeFor(stdout);
-    logOutputs[cast(size_t)LogLevel.info] = LogOutput.makeFor(stdout);
-    logOutputs[cast(size_t)LogLevel.warning] = LogOutput.makeFor(stderr);
-    logOutputs[cast(size_t)LogLevel.error] = LogOutput.makeFor(stderr);
+    logOutputs[cast(size_t) LogLevel.verbose] = LogOutput.makeFor(stdout);
+    logOutputs[cast(size_t) LogLevel.info] = LogOutput.makeFor(stdout);
+    logOutputs[cast(size_t) LogLevel.warning] = LogOutput.makeFor(stderr);
+    logOutputs[cast(size_t) LogLevel.error] = LogOutput.makeFor(stderr);
     debugOutput = LogOutput.makeFor(stdout);
 }
 
 static ~this()
 {
-    logOutputs[cast(size_t)LogLevel.verbose].dispose();
-    logOutputs[cast(size_t)LogLevel.info].dispose();
-    logOutputs[cast(size_t)LogLevel.warning].dispose();
-    logOutputs[cast(size_t)LogLevel.error].dispose();
+    logOutputs[cast(size_t) LogLevel.verbose].dispose();
+    logOutputs[cast(size_t) LogLevel.info].dispose();
+    logOutputs[cast(size_t) LogLevel.warning].dispose();
+    logOutputs[cast(size_t) LogLevel.error].dispose();
     debugOutput.dispose();
 }
 
