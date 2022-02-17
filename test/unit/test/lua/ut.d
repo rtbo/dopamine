@@ -35,8 +35,6 @@ unittest
     scope (exit)
         lua_close(L);
 
-    // FIXME: test is not reentrant (uses chdir)
-
     testPath("lua").fromDir!({
         foreach (e; dirEntries(testPath("lua"), SpanMode.breadth).filter!(
             e => e.name.endsWith(".lua")))
