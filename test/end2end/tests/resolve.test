@@ -1,0 +1,7 @@
+CMD=$DOP resolve --no-network
+HOME=base
+RECIPE=app1
+
+# light recipes have no name printed by the client
+EXPECT_MATCH=^Recipe: OK$
+EXPECT_FILE=dop.lock
