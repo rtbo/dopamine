@@ -3,6 +3,7 @@ module dopamine.lua.util;
 import bindbc.lua;
 
 import std.exception;
+import std.stdio;
 import std.string;
 import std.traits;
 
@@ -140,7 +141,7 @@ T luaGetTable(T)(lua_State* L, int tableInd, string key, T defaultVal) nothrow
     return luaPop!T(L, defaultVal);
 }
 
-void luaSetTable(T)(lua_State* L, int tableInd, string key, T value) nothrow 
+void luaSetTable(T)(lua_State* L, int tableInd, string key, T value) nothrow
         if (isLuaScalar!T)
 {
     tableInd = positiveStackIndex(L, tableInd);
@@ -155,7 +156,7 @@ T luaGetGlobal(T)(lua_State* L, string varName) if (isLuaScalar!T)
     return luaPop!T(L);
 }
 
-T luaGetGlobal(T)(lua_State* L, string varName, T defaultVal) nothrow 
+T luaGetGlobal(T)(lua_State* L, string varName, T defaultVal) nothrow
         if (isLuaScalar!T)
 {
     lua_getglobal(L, toStringz(varName));
@@ -238,35 +239,34 @@ string[] luaReadStringArray(lua_State* L, int ind) nothrow
 
 // some debugging functions
 
-void luaPrintStack(lua_State* L)
+void luaPrintStack(lua_State* L, File output)
 {
-    import std.stdio : writef, writefln, writeln;
     import std.string : fromStringz;
 
     const n = lua_gettop(L);
-    writefln("Stack has %s elements", n);
+    output.writefln("Stack has %s elements", n);
 
     foreach (i; 1 .. n + 1)
     {
         const s = luaL_typename(L, i).fromStringz.idup;
-        writef("%s = %s", i, s);
+        output.writef("%s = %s", i, s);
         switch (lua_type(L, i))
         {
         case LUA_TNUMBER:
-            writefln(" %g", lua_tonumber(L, i));
+            output.writefln(" %g", lua_tonumber(L, i));
             break;
         case LUA_TSTRING:
-            writefln(" %s", fromStringz(lua_tostring(L, i)));
+            output.writefln(" %s", fromStringz(lua_tostring(L, i)));
             break;
         case LUA_TBOOLEAN:
-            writefln(" %s", (lua_toboolean(L, i) ? "true" : "false"));
+            output.writefln(" %s", (lua_toboolean(L, i) ? "true" : "false"));
             break;
         case LUA_TNIL:
-            writeln();
+            output.writeln();
             break;
         case LUA_TTABLE:
             //printTable(L, i);
-            writefln(" %X", lua_topointer(L, i));
+            output.writefln(" %X", lua_topointer(L, i));
             break;
         case LUA_TFUNCTION:
             {
@@ -274,11 +274,11 @@ void luaPrintStack(lua_State* L)
                 lua_Debug d;
                 lua_pushvalue(L, i);
                 lua_getinfo(L, ">n", &d);
-                writefln(" %X - %s", lua_topointer(L, i), d.name.fromStringz);
+                output.writefln(" %X - %s", lua_topointer(L, i), d.name.fromStringz);
                 break;
             }
         default:
-            writefln(" %X", lua_topointer(L, i));
+            output.writefln(" %X", lua_topointer(L, i));
             break;
         }
     }
