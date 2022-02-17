@@ -160,15 +160,27 @@ final class DependencyService : DepService
 
     private AvailVersion[] packAvailVersionsSystem(string packname) @safe
     {
-        import std.process : execute;
+        import std.process : execute, ProcessException;
 
-        const cmd = ["pkg-config", "--modversion", packname];
-        const result = execute(cmd);
-        if (result.status != 0)
+        try
         {
-            return [];
+            const cmd = ["pkg-config", "--modversion", packname];
+            const result = execute(cmd);
+            if (result.status != 0)
+            {
+                return [];
+            }
+            return [AvailVersion(Semver(result.output), DepLocation.system)];
         }
-        return [AvailVersion(Semver(result.output), DepLocation.system)];
+        catch (ProcessException ex)
+        {
+            logWarningH(
+                "Could not execute %s. Skipping discovery of system dependencies.",
+                info("pkg-config")
+            );
+            _system = No.system;
+        }
+        return [];
     }
 
     private AvailVersion[] packAvailVersionsCache(string packname) @trusted
