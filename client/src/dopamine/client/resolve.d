@@ -2,6 +2,7 @@ module dopamine.client.resolve;
 
 import dopamine.client.utils;
 
+import dopamine.api.transport;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
@@ -74,13 +75,25 @@ int resolveMain(string[] args)
 
     // TODO: system block-list/enable-list
 
-    auto dag = DepDAG.prepare(recipe, profile, service, heuristics);
-    dag.resolve();
+    try
+    {
+        auto dag = DepDAG.prepare(recipe, profile, service, heuristics);
+        dag.resolve();
 
-    auto json = dag.toJson();
+        auto json = dag.toJson();
 
-    import std.file : write;
-    write(dir.lockFile, json.toPrettyString());
+        import std.file : write;
+
+        write(dir.lockFile, json.toPrettyString());
+    }
+    catch (ServerDownException ex)
+    {
+        assert(network);
+        logErrorH(
+            "Server %s appears down (%s), or you might be offline. Try with %s.",
+            info(ex.host), ex.reason, info("--no-network"),
+        );
+    }
 
     return 0;
 }
@@ -91,22 +104,21 @@ private Heuristics.Mode heuristicsMode(bool preferSystem, bool preferCache, bool
     import std.range : only;
 
     int count = only(preferSystem, preferCache, preferLocal, pickHighest).map!(
-            b => cast(int) b).sum();
+        b => cast(int) b).sum();
 
     enforce(count <= 1, new ErrorLogException("Only one resolution mode must be supplied!"));
 
-    if (preferSystem) {
+    if (preferSystem)
         return Heuristics.Mode.preferSystem;
-    }
-    if (preferCache) {
+
+    if (preferCache)
         return Heuristics.Mode.preferCache;
-    }
-    if (preferLocal) {
+
+    if (preferLocal)
         return Heuristics.Mode.preferLocal;
-    }
-    if (pickHighest) {
+
+    if (pickHighest)
         return Heuristics.Mode.pickHighest;
-    }
 
     return Heuristics.Mode.preferSystem;
 }
