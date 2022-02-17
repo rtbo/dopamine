@@ -10,7 +10,7 @@ e2e_env = [
 e2e_tests = [
     'profile',
     'profile-describe',
-    'resolve',
+    'resolve-light',
 ]
 
 foreach e2e_test : e2e_tests

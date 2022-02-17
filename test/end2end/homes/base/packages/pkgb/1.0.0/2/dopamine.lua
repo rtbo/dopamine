@@ -4,6 +4,10 @@ return {
     langs = {'d'},
     revision = '2',
 
+    dependencies = {
+        pkga = '>=1.0.0'
+    },
+
     build = function(self, dirs, config)
         local profile = config.profile
         local meson = dop.Meson:new(profile)
