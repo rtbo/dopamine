@@ -112,10 +112,7 @@ struct PackageDir
 
     @property bool hasRecipeFile() const
     {
-        import std.file : exists, isFile;
-
-        const rf = recipeFile;
-        return rf.exists && rf.isFile;
+        return hasFile(recipeFile);
     }
 
     @property string recipeFile() const
@@ -123,12 +120,19 @@ struct PackageDir
         return _path("dopamine.lua");
     }
 
+    @property bool hasProfileFile() const
+    {
+        return hasFile(profileFile);
+    }
+
+    @property string profileFile() const
+    {
+        return _dopPath("profile.ini");
+    }
+
     @property bool hasLockFile() const
     {
-        import std.file : exists, isFile;
-
-        const lf = lockFile;
-        return lf.exists && lf.isFile;
+        return hasFile(lockFile);
     }
 
     @property string lockFile() const
@@ -136,14 +140,16 @@ struct PackageDir
         return _path("dop.lock");
     }
 
+    private static bool hasFile(string path)
+    {
+        import std.file : exists, isFile;
+
+        return exists(path) && isFile(path);
+    }
+
     @property string dopDir() const
     {
         return _dopDir;
-    }
-
-    @property string profileFile() const
-    {
-        return _dopPath("profile.ini");
     }
 
     @property ProfileDirs profileDirs(const(Profile) profile) const
