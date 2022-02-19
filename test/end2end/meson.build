@@ -1,4 +1,10 @@
 
+
+e2e_registry_exe = executable('e2e-registry', 'e2e_registry.d',
+    install: false,
+    dependencies: vibed_deps,
+)
+
 e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
     install: false,
 )
