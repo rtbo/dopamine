@@ -2,11 +2,12 @@
 
 e2e_registry_exe = executable('e2e-registry', 'e2e_registry.d',
     install: false,
-    dependencies: vibed_deps,
+    dependencies: vibed_deps + dop_dep,
 )
 
 e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
     install: false,
+    dependencies: vibed_deps,
 )
 
 e2e_env = [
@@ -17,7 +18,8 @@ e2e_env = [
 e2e_tests = [
     'profile',
     'profile-describe',
-    'resolve-light',
+    'resolve-light-cache',
+    'resolve-light-highest',
 ]
 
 foreach e2e_test : e2e_tests

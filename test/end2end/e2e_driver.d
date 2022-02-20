@@ -52,24 +52,16 @@ class ExpectMatch : Expect
         this.rexp = rexp;
     }
 
-    bool hasMatch(File file)
+    bool hasMatch(string file)
     {
-
-        auto re = regex(rexp);
-
-        foreach (line; file.byLine(No.keepTerminator))
-        {
-            if (line.matchFirst(re))
-            {
-                return true;
-            }
-        }
-        return false;
+        const content = cast(string) read(file);
+        auto re = regex(rexp, "m");
+        return cast(bool) content.matchFirst(re);
     }
 
     override string expect(ref RunResult res)
     {
-        if (hasMatch(res.file(filename)))
+        if (hasMatch(res.filepath(filename)))
         {
             return null;
         }
@@ -87,7 +79,7 @@ class ExpectNotMatch : ExpectMatch
 
     override string expect(ref RunResult res)
     {
-        if (!hasMatch(res.file(filename)))
+        if (!hasMatch(res.filepath(filename)))
         {
             return null;
         }
@@ -267,7 +259,7 @@ struct Test
 
         if (registry)
         {
-            defs["registry"][registry].array
+            defs["registries"][registry].array
                 .map!(jv => jv.str)
                 .each!((p) {
                     const src = e2ePath("registry", p);
@@ -304,7 +296,7 @@ struct Test
     // to obtain a unique port for each instance
     Tuple!(File, int) acquireRegistryPort()
     {
-        int port = 3010;
+        int port = 3002;
         while (1)
         {
             auto fn = e2ePath("sandbox", format("%d.lock", port));
@@ -367,7 +359,7 @@ struct Test
 
         if (reg)
         {
-            reg.stop();
+            assert(reg.stop() == 0, "registry did not close normally");
         }
 
         auto result = RunResult(
@@ -391,18 +383,33 @@ struct Test
                     stderr.writefln("SANDBOX:  %s", sbDir);
                     stderr.writefln("COMMAND:  %s", cmd);
                     stderr.writefln("STATUS:   %s", status);
-                    stderr.writeln("STDOUT ------");
+                    stderr.writeln("STDOUT ---------------");
                     foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
                     {
                         stderr.write(l);
                     }
-                    stderr.writeln("-------------");
-                    stderr.writeln("STDERR ------");
+                    stderr.writeln("----------------------");
+                    stderr.writeln("STDERR ---------------");
                     foreach (l; File(errPath, "r").byLine(Yes.keepTerminator))
                     {
                         stderr.write(l);
                     }
-                    stderr.writeln("-------------");
+                    stderr.writeln("----------------------");
+                    if (reg)
+                    {
+                        stderr.writeln("REGISTRY STDOUT ------");
+                        foreach (l; File(reg.outPath, "r").byLine(Yes.keepTerminator))
+                        {
+                            stderr.write(l);
+                        }
+                        stderr.writeln("----------------------");
+                        stderr.writeln("REGISTRY STDERR ------");
+                        foreach (l; File(reg.errPath, "r").byLine(Yes.keepTerminator))
+                        {
+                            stderr.write(l);
+                        }
+                        stderr.writeln("----------------------");
+                    }
                     outputShown = true;
                 }
                 stderr.writeln("ASSERTION FAILED: ", failMsg);
@@ -453,30 +460,62 @@ struct RunResult
 class Registry
 {
     Pid pid;
+    string outPath;
+    string errPath;
     File outFile;
     File errFile;
+    string url;
+    int port;
 
     this(string exe, int port, string[string] env, string testName)
     {
         import std.conv : to;
 
-        const outPath = e2ePath("sandbox", testName, "registry.stdout");
-        const errPath = e2ePath("sandbox", testName, "registry.stderr");
+        outPath = e2ePath("sandbox", testName, "registry.stdout");
+        errPath = e2ePath("sandbox", testName, "registry.stderr");
 
         outFile = File(outPath, "w");
         errFile = File(errPath, "w");
+
+        this.port = port;
 
         const cmd = [
             exe, port.to!string
         ];
         pid = spawnProcess(cmd, stdin, outFile, errFile, env, Config.none, e2ePath("sandbox", testName, "registry"));
+        url = env["DOP_REGISTRY"];
     }
 
-    void stop()
+    int stop()
     {
-        pid.kill();
+        import core.time : msecs;
+        import vibe.http.client : HTTPClientSettings, HTTPMethod, requestHTTP;
+
+        // check if still running (otherwise it probably crashed)
+        auto res = pid.tryWait();
+        if (res.terminated)
+        {
+            writeln("registry terminated with code ", res.status);
+            return res.status;
+        }
+
+        const stopUrl = url ~ "/api/v1/stop";
+        auto settings = new HTTPClientSettings;
+        settings.defaultKeepAliveTimeout = 0.msecs;
+
+        requestHTTP(
+            stopUrl,
+            (scope req) { req.method = HTTPMethod.POST; },
+            (scope res) {},
+            settings
+        );
+
+        int ret = pid.wait();
+
         outFile.close();
         errFile.close();
+
+        return ret;
     }
 }
 
