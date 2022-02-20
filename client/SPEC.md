@@ -154,23 +154,23 @@ For example:
 Resolve and lock dependencies.<br>
 _Prerequisite_: A profile must be chosen (dependencies can depend on profile)
 
-- `dop resolve` :x:
+- `dop resolve` :heavy_check_mark:
   - Resolve dependencies and creates a dependency lockfile for the current package.
   - If one exists already, exits without alteration.
-- `dop resolve -f|--force` :x:
+- `dop resolve -f|--force` :white_check_mark:
   - Resolve dependencies and overwrite the dependency lockfile
-- `dop resolve --prefer-system` :x:
+- `dop resolve --prefer-system` :white_check_mark:
   - Creates/reset a dependency lockfile using the `preferSystem` heuristic mode.
   - This is the default heuristic and therefore equivalent to `--force`.
-- `dop resolve --prefer-cached` :x:
+- `dop resolve --prefer-cached` :white_check_mark:
   - Creates/reset a dependency lockfile using the `preferCached` heuristic mode.
-- `dop resolve --prefer-local` :x:
+- `dop resolve --prefer-local` :white_check_mark:
   - Creates/reset a dependency lockfile using the `preferLocal` heuristic mode.
-- `dop resolve --pick-highest` :x:
+- `dop resolve --pick-highest` :white_check_mark:
   - Creates/reset a dependency lockfile using the `pickHighest` heuristic mode.
-- `dop resolve --no-network` :x:
+- `dop resolve --no-network` :white_check_mark:
   - Disable access to network for the resolution of dependencies
-- `dop resolve --no-system` :x:
+- `dop resolve --no-system` :white_check_mark:
   - Disable access to system installation for the resolution of dependencies.
 - `dop resolve --use [dependency] [version]` :x:
   - Use the specified version of dependency package in the lock file.
