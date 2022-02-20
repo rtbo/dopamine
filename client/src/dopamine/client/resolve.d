@@ -2,7 +2,7 @@ module dopamine.client.resolve;
 
 import dopamine.client.utils;
 
-import dopamine.api.transport;
+import dopamine.api;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
@@ -93,6 +93,7 @@ int resolveMain(string[] args)
             "Server %s appears down (%s), or you might be offline. Try with %s.",
             info(ex.host), ex.reason, info("--no-network"),
         );
+        return 1;
     }
 
     return 0;

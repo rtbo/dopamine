@@ -88,13 +88,14 @@ template mapResp(alias pred)
     }
 }
 
-struct ApiTransport
+package struct ApiTransport
 {
     import dopamine.login : LoginKey;
+    import std.process : environment;
 
-    string host = "http://localhost:3000";
-    string ver = "v1";
+    string host;
     LoginKey login;
+    int apiVersion;
 
     /// build a resource url
     /// Parameters formatting:
@@ -103,6 +104,7 @@ struct ApiTransport
     /// If the last argument is a `string[string]` associative array, it is used to format a GET query
     /// e.g. path?param1=value1&param2=value2
     string resource(Args...)(string path, Args args)
+    in (host.length)
     in (path.length == 0 || path[0] == '/')
     {
         import std.algorithm : map;
@@ -129,7 +131,7 @@ struct ApiTransport
             enum query = "";
         }
 
-        return format("%s/api/%s%s%s", host, ver, path, query);
+        return format("%s/api/v%s%s%s", host, apiVersion, path, query);
     }
 
     Response!JSONValue jsonGet(string url)
@@ -233,7 +235,7 @@ unittest
 {
     ApiTransport transport;
     transport.host = "http://api.net";
-    transport.ver = "v2";
+    transport.apiVersion = 2;
 
     assert(transport.resource("/resource") == "http://api.net/api/v2/resource");
     assert(transport.resource("/resource/%s/field",

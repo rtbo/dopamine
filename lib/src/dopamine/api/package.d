@@ -1,17 +1,44 @@
 module dopamine.api;
 
 public import dopamine.api.defs;
-import dopamine.api.transport;
+public import dopamine.api.transport;
 import dopamine.login;
 
 import std.json;
+
+/// The URL of default registry the client connects to.
+enum defaultRegistry = "http://localhost:3000";
+
+/// The latest version of the remote API implemented by the client
+enum latestApiVersion = 1;
+
+API api(LoginKey key = LoginKey.init, int apiVersion=latestApiVersion)
+{
+    import std.process : environment;
+
+    const host = environment.get("DOP_REGISTRY", defaultRegistry);
+    return api(host, key, apiVersion);
+}
+
+API api(string host, LoginKey key = LoginKey.init, int apiVersion=latestApiVersion)
+{
+    auto transport = ApiTransport(host, key, apiVersion);
+    return API(transport);
+}
 
 struct API
 {
     private
     {
         ApiTransport transport;
+
+        this(ApiTransport transport)
+        {
+            this.transport = transport;
+        }
     }
+
+    @disable this();
 
     @property string host() const
     {
@@ -23,14 +50,14 @@ struct API
         transport.host = host;
     }
 
-    @property string ver() const
+    @property int ver() const
     {
-        return transport.ver;
+        return transport.apiVersion;
     }
 
-    @property void ver(string ver)
+    @property void ver(int ver)
     {
-        transport.ver = ver;
+        transport.apiVersion = ver;
     }
 
     bool readLogin()

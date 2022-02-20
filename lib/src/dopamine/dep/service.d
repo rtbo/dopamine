@@ -210,7 +210,7 @@ final class DependencyService : DepService
         import std.exception : enforce;
 
         auto pack = packagePayload(packname);
-        auto resp = API().getPackageVersions(pack.id, false);
+        auto resp = api().getPackageVersions(pack.id, false);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         return resp.payload.map!(v => AvailVersion(Semver(v), DepLocation.network)).array;
     }
@@ -331,7 +331,7 @@ final class DependencyService : DepService
         import std.stdio : File;
 
         auto pack = packagePayload(packname);
-        auto resp = API().getRecipe(PackageRecipeGet(pack.id, ver.toString(), revision));
+        auto resp = api().getRecipe(PackageRecipeGet(pack.id, ver.toString(), revision));
         enforce(resp.code != 404, verOrRevException(packname, ver, revision));
 
         if (revision)
@@ -376,7 +376,7 @@ final class DependencyService : DepService
         if (auto p = packname in _packMem)
             return *p;
 
-        auto resp = API().getPackageByName(packname);
+        auto resp = api().getPackageByName(packname);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         auto pack = resp.payload;
         _packMem[packname] = pack;
