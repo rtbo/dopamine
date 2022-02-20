@@ -12,6 +12,7 @@ import std.process;
 import std.regex;
 import std.stdio;
 import std.string;
+import std.typecons;
 
 interface Expect
 {
@@ -53,7 +54,6 @@ class ExpectMatch : Expect
 
     bool hasMatch(File file)
     {
-        import std.typecons : No;
 
         auto re = regex(rexp);
 
@@ -263,7 +263,7 @@ struct Test
     {
         import std.algorithm : each, map;
 
-        auto defs = parseJSON(cast(string)read(e2ePath("definitions.json")));
+        auto defs = parseJSON(cast(string) read(e2ePath("definitions.json")));
 
         if (registry)
         {
@@ -300,19 +300,52 @@ struct Test
         return env;
     }
 
-    int perform(string dopExe)
+    // with all end-to-end tests run in //, it is necessary
+    // to obtain a unique port for each instance
+    Tuple!(File, int) acquireRegistryPort()
+    {
+        int port = 3010;
+        while (1)
+        {
+            auto fn = e2ePath("sandbox", format("%d.lock", port));
+            auto f = File(fn, "w");
+            if (f.tryLock())
+            {
+                return tuple(f, port);
+            }
+            port += 1;
+        }
+    }
+
+    int perform(string dopExe, string regExe)
     {
         // we delete previous sandbox if any
         const sbDir = sandboxPath();
         if (exists(sbDir) && isDir(sbDir))
             rmdirRecurse(sbDir);
 
-        auto env = makeSandboxEnv(dopExe);
-
         // create the sandbox dir
         mkdirRecurse(sbDir);
 
         prepareSandbox();
+
+        auto env = makeSandboxEnv(dopExe);
+
+        File portLock;
+        Registry reg;
+
+        if (registry)
+        {
+            import std.conv : to;
+
+            auto res = acquireRegistryPort();
+            portLock = res[0];
+            const port = res[1];
+
+            env["E2E_REGISTRY_PORT"] = port.to!string;
+            env["DOP_REGISTRY"] = format("http://localhost:%s", port);
+            reg = new Registry(regExe, port, env, name);
+        }
 
         const cmd = expandEnvVars(command, env);
 
@@ -332,6 +365,11 @@ struct Test
 
         int status = pid.wait();
 
+        if (reg)
+        {
+            reg.stop();
+        }
+
         auto result = RunResult(
             name, status, outPath, errPath, sandboxRecipePath, env
         );
@@ -346,8 +384,6 @@ struct Test
             {
                 if (!outputShown)
                 {
-                    import std.typecons : Yes;
-
                     stderr.writefln("TEST:     %s", name);
                     stderr.writefln("RECIPE:   %s", recipe);
                     stderr.writefln("CACHE:    %s", cache);
@@ -414,6 +450,36 @@ struct RunResult
     }
 }
 
+class Registry
+{
+    Pid pid;
+    File outFile;
+    File errFile;
+
+    this(string exe, int port, string[string] env, string testName)
+    {
+        import std.conv : to;
+
+        const outPath = e2ePath("sandbox", testName, "registry.stdout");
+        const errPath = e2ePath("sandbox", testName, "registry.stderr");
+
+        outFile = File(outPath, "w");
+        errFile = File(errPath, "w");
+
+        const cmd = [
+            exe, port.to!string
+        ];
+        pid = spawnProcess(cmd, stdin, outFile, errFile, env, Config.none, e2ePath("sandbox", testName, "registry"));
+    }
+
+    void stop()
+    {
+        pid.kill();
+        outFile.close();
+        errFile.close();
+    }
+}
+
 string e2ePath(Args...)(Args args)
 {
     return buildNormalizedPath(dirName(__FILE_FULL_PATH__), args);
@@ -425,7 +491,7 @@ in (!exists(dest) || !isFile(dest))
 {
     mkdirRecurse(dest);
 
-    foreach(e; dirEntries(src, SpanMode.breadth))
+    foreach (e; dirEntries(src, SpanMode.breadth))
     {
         const relative = relativePath(e.name, src);
         const path = buildPath(dest, relative);
@@ -522,12 +588,13 @@ int main(string[] args)
     const dopExe = absolutePath(
         environment["DOP"]);
 
+    const regExe = absolutePath(environment["DOP_E2E_REG"]);
+
     try
     {
-        auto test = Test.parseFile(
-            args[1]);
+        auto test = Test.parseFile(args[1]);
         test.check();
-        return test.perform(dopExe);
+        return test.perform(dopExe, regExe);
     }
     catch (Exception ex)
     {

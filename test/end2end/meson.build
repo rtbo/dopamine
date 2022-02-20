@@ -11,6 +11,7 @@ e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
 
 e2e_env = [
     'DOP='+dop_client_exe.full_path(),
+    'DOP_E2E_REG='+e2e_registry_exe.full_path(),
 ]
 
 e2e_tests = [
