@@ -14,20 +14,53 @@ import std.stdio;
 
 void packages(HTTPServerRequest req, HTTPServerResponse res)
 {
+    if (auto n = "name" in req.query)
+    {
+        auto name = *n;
+        auto path = buildPath(".", name);
+        if (exists(path) && isDir(path))
+        {
+            res.writeJsonBody(Json([
+                "id": Json(name),
+                "name": Json(name),
+                "maintainerId": Json("e2e"),
+            ]));
+        }
+        else {
+            res.statusCode = 404;
+        }
+    }
+
+    Json[] packs;
+    foreach (pe; dirEntries(".", SpanMode.shallow))
+    {
+        if (pe.isDir)
+        {
+            const p = baseName(pe.name);
+            packs ~= [
+                Json([
+                    "id": Json(p),
+                    "name": Json(p),
+                    "maintainerId": Json("e2e"),
+                ])
+            ];
+        }
+    }
+    res.writeJsonBody(packs);
 }
 
 void packageVersions(HTTPServerRequest req, HTTPServerResponse res)
 {
     writeln("in packages versions");
     Json[] versions;
-    const pack = req.params["pack"];
+    const packId = req.params["pack"];
     foreach(pe; dirEntries(".", SpanMode.shallow))
     {
-        if (isDir(pe.name) && baseName(pe.name) == pack)
+        if (pe.isDir && baseName(pe.name) == packId)
         {
             foreach(ve; dirEntries(pe.name, SpanMode.shallow))
             {
-                if (isDir(ve.name)) {
+                if (ve.isDir) {
                     const ver = baseName(ve.name);
                     assert(Semver.isValid(ver));
                     versions ~= Json(ver);
