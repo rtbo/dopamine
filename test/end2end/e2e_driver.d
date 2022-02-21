@@ -41,6 +41,48 @@ class StatusExpect : Expect
     }
 }
 
+class ExpectFile : Expect
+{
+    string filename;
+
+    this(string filename)
+    {
+        this.filename = filename;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        const path = res.filepath(filename);
+        if (exists(path) && isFile(path))
+        {
+            return null;
+        }
+
+        return "No such file: " ~ path;
+    }
+}
+
+class ExpectDir : Expect
+{
+    string filename;
+
+    this(string filename)
+    {
+        this.filename = filename;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        const path = res.filepath(filename);
+        if (exists(path) && isDir(path))
+        {
+            return null;
+        }
+
+        return "No such directory: " ~ path;
+    }
+}
+
 class ExpectMatch : Expect
 {
     string filename;
@@ -88,45 +130,45 @@ class ExpectNotMatch : ExpectMatch
     }
 }
 
-class ExpectFile : Expect
+class ExpectVersion : Expect
 {
-    string filename;
+    string pkgname;
+    string ver;
 
-    this(string filename)
+    this(string pkgname, string ver)
     {
-        this.filename = filename;
+        this.pkgname = pkgname;
+        this.ver = ver;
     }
 
     override string expect(ref RunResult res)
     {
-        const path = res.filepath(filename);
-        if (exists(path) && isFile(path))
+        import vibe.data.json : parseJsonString;
+
+        auto lockpath = res.filepath("dop.lock");
+        auto jsonStr = cast(string)read(lockpath);
+        auto json = parseJsonString(jsonStr);
+        foreach(jpack; json["packages"])
         {
-            return null;
+            if (jpack["name"] != pkgname)
+                continue;
+
+            foreach (jver; jpack["versions"])
+            {
+                if (jver["status"] == "resolved") {
+                    if (jver["version"] == ver)
+                    {
+                        return null;
+                    }
+                    else
+                    {
+                        return format("%s was resolved to v%s (expected v%s)", pkgname, jver["version"].get!string, ver);
+                    }
+                }
+            }
+            return "could not find a resolved version for " ~ pkgname;
         }
-
-        return "No such file: " ~ path;
-    }
-}
-
-class ExpectDir : Expect
-{
-    string filename;
-
-    this(string filename)
-    {
-        this.filename = filename;
-    }
-
-    override string expect(ref RunResult res)
-    {
-        const path = res.filepath(filename);
-        if (exists(path) && isDir(path))
-        {
-            return null;
-        }
-
-        return "No such directory: " ~ path;
+        return "could not find package " ~ pkgname ~ " in dop.lock";
     }
 }
 
@@ -188,7 +230,7 @@ struct Test
                 enforce(!m.empty, format("%s: Unrecognized entry: %s", test.name, line));
 
                 const type = m[1];
-                const file = m[3];
+                const arg = m[3];
                 const data = m[5];
 
                 switch (type)
@@ -196,19 +238,23 @@ struct Test
                 case "FAIL":
                     statusExpect.expectFail = true;
                     break;
-                case "MATCH":
-                    auto exp = new ExpectMatch(file, data);
-                    test.expectations ~= exp;
-                    break;
-                case "NOT_MATCH":
-                    auto exp = new ExpectNotMatch(file, data);
-                    test.expectations ~= exp;
-                    break;
                 case "FILE":
                     test.expectations ~= new ExpectFile(data);
                     break;
                 case "DIR":
                     test.expectations ~= new ExpectDir(data);
+                    break;
+                case "MATCH":
+                    auto exp = new ExpectMatch(arg, data);
+                    test.expectations ~= exp;
+                    break;
+                case "NOT_MATCH":
+                    auto exp = new ExpectNotMatch(arg, data);
+                    test.expectations ~= exp;
+                    break;
+                case "VERSION":
+                    auto exp = new ExpectVersion(arg, data);
+                    test.expectations ~= exp;
                     break;
                 default:
                     throw new Exception("Unknown assertion: " ~ type);
