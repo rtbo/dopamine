@@ -21,5 +21,15 @@ discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 
 subdir('lua')
 subdir('lib')
-subdir('client')
-subdir('test')
+
+if get_option('enable_client')
+    subdir('client')
+endif
+
+if get_option('enable_server')
+    subdir('server')
+endif
+
+if get_option('enable_test')
+    subdir('test')
+endif

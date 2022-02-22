@@ -1,10 +1,17 @@
-option('lua_bindings',
-    type: 'combo',
-    choices: ['static', 'dynamic'],
-    value: 'static',
+option('enable_client',
+    type: 'boolean',
+    value: true,
+    description: 'Whether to build the client application',
 )
-option('lua_version',
-    type: 'combo',
-    choices: ['51', '52', '53'],
-    value: '53',
+
+option('enable_server',
+    type: 'boolean',
+    value: false,
+    description: 'Whether to build the server application',
+)
+
+option('enable_test',
+    type: 'boolean',
+    value: false,
+    description: 'Whether to build the tests',
 )
