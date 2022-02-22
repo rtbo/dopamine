@@ -2,12 +2,12 @@ module dopamine.client.resolve;
 
 import dopamine.client.utils;
 
-import dopamine.api;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
+import dopamine.registry;
 
 import std.exception;
 import std.getopt;
@@ -65,10 +65,10 @@ int resolveMain(string[] args)
         );
     }
 
-    const network = noNetwork ? No.network : Yes.network;
+    auto registry = noNetwork ? null : new Registry();
     const system = noSystem ? No.system : Yes.system;
 
-    auto service = new DependencyService(network, system);
+    auto service = new DependencyService(registry, system);
 
     Heuristics heuristics;
     heuristics.mode = heuristicsMode(preferSystem, preferCache, preferLocal, pickHighest);
@@ -88,7 +88,7 @@ int resolveMain(string[] args)
     }
     catch (ServerDownException ex)
     {
-        assert(network);
+        assert(registry);
         logErrorH(
             "Server %s appears down (%s), or you might be offline. Try with %s.",
             info(ex.host), ex.reason, info("--no-network"),

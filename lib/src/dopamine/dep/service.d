@@ -1,11 +1,11 @@
 module dopamine.dep.service;
 
-import dopamine.api;
 import dopamine.dep.resolved;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.registry;
 import dopamine.semver;
 
 import std.typecons;
@@ -131,14 +131,14 @@ final class DependencyService : DepService
     private PackagePayload[string] _packMem;
     private Recipe[string] _recipeMem;
 
-    private Flag!"network" _network;
+    private Registry _registry;
     private Flag!"system" _system;
 
     private alias RecipeAndId = Tuple!(Recipe, string);
 
-    this(Flag!"network" network, Flag!"system" system)
+    this(Registry registry, Flag!"system" system)
     {
-        _network = network;
+        _registry = registry;
         _system = system;
     }
 
@@ -151,8 +151,8 @@ final class DependencyService : DepService
         if (_system)
             vers ~= packAvailVersionsSystem(packname);
 
-        if (_network)
-            vers ~= packAvailVersionsNetwork(packname);
+        if (_registry)
+            vers ~= packAvailVersionsRegistry(packname);
 
         sort(vers);
         return vers;
@@ -203,20 +203,21 @@ final class DependencyService : DepService
         return vers;
     }
 
-    private AvailVersion[] packAvailVersionsNetwork(string packname) @trusted
+    private AvailVersion[] packAvailVersionsRegistry(string packname) @trusted
+    in (_registry)
     {
         import std.algorithm : map;
         import std.array : array;
         import std.exception : enforce;
 
         auto pack = packagePayload(packname);
-        auto resp = api().getPackageVersions(pack.id, false);
+        auto resp = _registry.getPackageVersions(pack.id, false);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         return resp.payload.map!(v => AvailVersion(Semver(v), DepLocation.network)).array;
     }
 
     Recipe packRecipe(string packname, const(AvailVersion) aver, string revision = null) @system
-    in (_network || aver.location != DepLocation.network, "Network access is disabled")
+    in (_registry || aver.location != DepLocation.network, "Network access is disabled")
     {
         if (revision)
         {
@@ -235,7 +236,7 @@ final class DependencyService : DepService
             recipe = packRecipeCache(packname, aver.ver, revision);
             break;
         case DepLocation.network:
-            recipe = packRecipeNetwork(packname, aver.ver, revision);
+            recipe = packRecipeRegistry(packname, aver.ver, revision);
             break;
         case DepLocation.system:
             assert(false);
@@ -323,7 +324,8 @@ final class DependencyService : DepService
         return Recipe.init;
     }
 
-    private Recipe packRecipeNetwork(string packname, const ref Semver ver, string revision = null)
+    private Recipe packRecipeRegistry(string packname, const ref Semver ver, string revision = null)
+    in (_registry)
     {
         import std.exception : enforce;
         import std.file : mkdirRecurse, write;
@@ -331,7 +333,7 @@ final class DependencyService : DepService
         import std.stdio : File;
 
         auto pack = packagePayload(packname);
-        auto resp = api().getRecipe(PackageRecipeGet(pack.id, ver.toString(), revision));
+        auto resp = _registry.getRecipe(PackageRecipeGet(pack.id, ver.toString(), revision));
         enforce(resp.code != 404, verOrRevException(packname, ver, revision));
 
         if (revision)
@@ -369,14 +371,14 @@ final class DependencyService : DepService
     }
 
     private PackagePayload packagePayload(string packname) @trusted
-    in (_network)
+    in (_registry)
     {
         import std.exception : enforce;
 
         if (auto p = packname in _packMem)
             return *p;
 
-        auto resp = api().getPackageByName(packname);
+        auto resp = _registry.getPackageByName(packname);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         auto pack = resp.payload;
         _packMem[packname] = pack;

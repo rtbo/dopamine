@@ -1,8 +1,8 @@
-module dopamine.api;
+module dopamine.registry;
 
-public import dopamine.api.defs;
-public import dopamine.api.transport;
 import dopamine.login;
+public import dopamine.registry.defs;
+public import dopamine.registry.transport;
 
 import std.json;
 
@@ -10,54 +10,33 @@ import std.json;
 enum defaultRegistry = "http://localhost:3000";
 
 /// The latest version of the remote API implemented by the client
-enum latestApiVersion = 1;
+enum latestApiLevel = 1;
 
-API api(LoginKey key = LoginKey.init, int apiVersion=latestApiVersion)
+class Registry
 {
-    import std.process : environment;
+    private Transport transport;
 
-    const host = environment.get("DOP_REGISTRY", defaultRegistry);
-    return api(host, key, apiVersion);
-}
-
-API api(string host, LoginKey key = LoginKey.init, int apiVersion=latestApiVersion)
-{
-    auto transport = ApiTransport(host, key, apiVersion);
-    return API(transport);
-}
-
-struct API
-{
-    private
+    this(LoginKey key = LoginKey.init, int apiLevel = latestApiLevel)
     {
-        ApiTransport transport;
+        import std.process : environment;
 
-        this(ApiTransport transport)
-        {
-            this.transport = transport;
-        }
+        const host = environment.get("DOP_REGISTRY", defaultRegistry);
+        transport = Transport(host, key, apiLevel);
     }
 
-    @disable this();
+    this(string host, LoginKey key = LoginKey.init, int apiLevel = latestApiLevel)
+    {
+        transport = Transport(host, key, apiLevel);
+    }
 
     @property string host() const
     {
         return transport.host;
     }
 
-    @property void host(string host)
+    @property int apiLevel() const
     {
-        transport.host = host;
-    }
-
-    @property int ver() const
-    {
-        return transport.apiVersion;
-    }
-
-    @property void ver(int ver)
-    {
-        transport.apiVersion = ver;
+        return transport.apiLevel;
     }
 
     bool readLogin()

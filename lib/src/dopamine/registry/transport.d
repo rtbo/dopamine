@@ -1,4 +1,4 @@
-module dopamine.api.transport;
+module dopamine.registry.transport;
 
 import std.json;
 import std.net.curl;
@@ -43,7 +43,7 @@ class ServerDownException : Exception
     }
 }
 
-/// Response returned by the API
+/// Response returned by the Registry
 struct Response(T)
 {
     /// The data returned in the response
@@ -88,14 +88,14 @@ template mapResp(alias pred)
     }
 }
 
-package struct ApiTransport
+package struct Transport
 {
     import dopamine.login : LoginKey;
     import std.process : environment;
 
     string host;
     LoginKey login;
-    int apiVersion;
+    int apiLevel;
 
     /// build a resource url
     /// Parameters formatting:
@@ -131,7 +131,7 @@ package struct ApiTransport
             enum query = "";
         }
 
-        return format("%s/api/v%s%s%s", host, apiVersion, path, query);
+        return format("%s/api/v%s%s%s", host, apiLevel, path, query);
     }
 
     Response!JSONValue jsonGet(string url)
@@ -233,9 +233,9 @@ package struct ApiTransport
 @("ApiTransport.resource")
 unittest
 {
-    ApiTransport transport;
+    Transport transport;
     transport.host = "http://api.net";
-    transport.apiVersion = 2;
+    transport.apiLevel = 2;
 
     assert(transport.resource("/resource") == "http://api.net/api/v2/resource");
     assert(transport.resource("/resource/%s/field",

@@ -1,4 +1,4 @@
-module dopamine.api.defs;
+module dopamine.registry.defs;
 
 import dopamine.semver;
 
@@ -54,6 +54,14 @@ struct PackageRecipeGet
     string rev;
 }
 
+struct RecipeFile
+{
+    string id;
+    string name;
+    size_t size;
+    string sha1;
+}
+
 struct PackageRecipePayload
 {
     string packageId;
@@ -62,10 +70,14 @@ struct PackageRecipePayload
     string recipe;
     string maintainerId;
     string created;
+    RecipeFile[] fileList;
 }
 
 package PackageRecipePayload packageRecipeFromJson(const(JSONValue) json)
 {
+    import std.algorithm : map;
+    import std.array : array;
+
     PackageRecipePayload pr;
     pr.packageId = json["packageId"].str;
     pr.ver = json["version"].str;
@@ -73,5 +85,9 @@ package PackageRecipePayload packageRecipeFromJson(const(JSONValue) json)
     pr.recipe = json["recipe"].str;
     pr.maintainerId = json["maintainerId"].str;
     pr.created = json["created"].str;
+    pr.fileList = json["fileList"].array.map!(
+        jv => RecipeFile(jv["id"].str, jv["name"].str, jv["size"].integer, jv["sha1"].str)
+    ).array;
+
     return pr;
 }
