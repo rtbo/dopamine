@@ -1,6 +1,6 @@
 module dopamine.dep.service;
 
-import dopamine.dep.resolved;
+import dopamine.cache;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
@@ -131,13 +131,16 @@ final class DependencyService : DepService
     private PackagePayload[string] _packMem;
     private Recipe[string] _recipeMem;
 
+    private PackageCache _cache;
     private Registry _registry;
     private Flag!"system" _system;
 
     private alias RecipeAndId = Tuple!(Recipe, string);
 
-    this(Registry registry, Flag!"system" system)
+    this(PackageCache cache, Registry registry, Flag!"system" system)
+    in (cache)
     {
+        _cache = cache;
         _registry = registry;
         _system = system;
     }
@@ -185,19 +188,15 @@ final class DependencyService : DepService
 
     private AvailVersion[] packAvailVersionsCache(string packname) @trusted
     {
-        import std.algorithm : map, filter, sort;
+        import std.algorithm : map, sort;
         import std.array : array;
-        import std.file : dirEntries, exists, isDir, SpanMode;
-        import std.path : baseName;
 
-        auto dir = cachePackDir(packname);
-        if (!exists(dir) || !isDir(dir))
+        auto pdir = _cache.packageDir(packname);
+        if (!pdir)
             return [];
 
-        auto vers = dirEntries(dir, SpanMode.shallow)
-            .map!(e => baseName(e.name))
-            .filter!(s => Semver.isValid(s))
-            .map!(v => AvailVersion(Semver(v), DepLocation.cache))
+        auto vers = pdir.versionDirs()
+            .map!(vd => AvailVersion(Semver(vd.ver), DepLocation.cache))
             .array;
         vers.sort!((a, b) => a > b);
         return vers;
@@ -272,11 +271,21 @@ final class DependencyService : DepService
         if (!revision)
             return findRecipeCache(packname, ver);
 
-        const dir = cacheRevDir(packname, ver, revision);
-        if (dir.hasRecipeFile)
-            return Recipe.parseFile(dir.recipeFile, revision);
+        const dir = _cache.packageDir(packname)
+                .versionDir(ver)
+                .revisionDir(revision);
 
-        return Recipe.init;
+        if (!dir)
+            return Recipe.init;
+
+        const pdir = cast(RecipeDir)dir;
+        if (!pdir.hasRecipeFile)
+        {
+            logWarningH("Cached package revision %s has no recipe!", info(pdir.dir));
+            return Recipe.init;
+        }
+
+        return Recipe.parseFile(pdir.recipeFile, revision);
     }
 
     private Recipe findRecipeCache(string packname, const ref Semver ver)
@@ -285,26 +294,18 @@ final class DependencyService : DepService
         import std.path : baseName;
         import std.stdio : File, LockType;
 
-        const verDir = cacheVerDir(packname, ver);
+        const vDir = _cache.packageDir(packname)
+            .versionDir(ver);
 
-        if (!exists(verDir))
+        if (!vDir)
             return Recipe.init;
 
-        // FIXME: there is a tight coupling between this algorithm
-        // and dopamine.paths.
-        // Logic of discovery of revisions and associated lock file
-        // should be moved to dopamine.paths.
-        // (but actual file interaction left here)
-        foreach (entry; dirEntries(verDir, SpanMode.shallow))
+        foreach (revDir; vDir.revisionDirs())
         {
-            if (!entry.isDir)
-                continue;
-
-            const revDir = PackageDir(entry.name);
-
-            if (revDir.hasRecipeFile)
+            const recDir = cast(RecipeDir)revDir;
+            if (recDir.hasRecipeFile)
             {
-                const revLock = revDir.dir ~ ".lock";
+                const revLock = revDir.lockFile;
                 if (!exists(revLock))
                 {
                     logWarning(
@@ -318,41 +319,22 @@ final class DependencyService : DepService
                 auto lock = File(revLock, "r");
                 lock.lock(LockType.read);
 
-                return Recipe.parseFile(revDir.recipeFile);
+                return Recipe.parseFile(recDir.recipeFile);
             }
         }
+
         return Recipe.init;
     }
 
     private Recipe packRecipeRegistry(string packname, const ref Semver ver, string revision = null)
     in (_registry)
     {
-        import std.exception : enforce;
-        import std.file : mkdirRecurse, write;
-        import std.path : dirName;
-        import std.stdio : File;
-
         auto pack = packagePayload(packname);
-        auto resp = _registry.getRecipe(PackageRecipeGet(pack.id, ver.toString(), revision));
-        enforce(resp.code != 404, verOrRevException(packname, ver, revision));
+        auto revDir = _cache.cacheRecipe(_registry, pack, ver.toString(), revision);
 
-        if (revision)
-            enforce(revision == resp.payload.rev);
-        else
-            revision = resp.payload.rev;
+        auto recDir = cast(RecipeDir)revDir;
 
-        const dir = cacheRevDir(packname, ver, revision);
-        const lockF = cacheRevLock(packname, ver, revision);
-
-        mkdirRecurse(dirName(lockF));
-
-        auto lock = File(lockF, "w");
-        lock.lock();
-
-        mkdirRecurse(dir.dir);
-        write(dir.recipeFile, resp.payload.recipe);
-
-        return Recipe.parseFile(dir.recipeFile, revision);
+        return Recipe.parseFile(recDir.recipeFile, revDir.revision);
     }
 
     private string depId(string packname, Semver ver, string revision) @safe

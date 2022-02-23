@@ -4,7 +4,7 @@ import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
 
-Recipe parseRecipe(PackageDir dir)
+Recipe parseRecipe(RecipeDir dir)
 {
     import std.format : format;
 

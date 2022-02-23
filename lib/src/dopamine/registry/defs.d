@@ -65,6 +65,7 @@ struct RecipeFile
 struct PackageRecipePayload
 {
     string packageId;
+    string name;
     string ver;
     string rev;
     string recipe;
@@ -80,6 +81,7 @@ package PackageRecipePayload packageRecipeFromJson(const(JSONValue) json)
 
     PackageRecipePayload pr;
     pr.packageId = json["packageId"].str;
+    pr.name = json["name"].str;
     pr.ver = json["version"].str;
     pr.rev = json["revision"].str;
     pr.recipe = json["recipe"].str;

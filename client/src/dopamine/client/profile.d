@@ -240,7 +240,7 @@ int profileMain(string[] args)
         return usage(0);
     }
 
-    auto dir = PackageDir(".");
+    auto dir = RecipeDir(".");
 
     // Recipe is needed only in a few situations,
     // so we load it only if available.

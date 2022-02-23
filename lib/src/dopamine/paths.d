@@ -53,42 +53,12 @@ string userLoginFile()
     return buildPath(homeDopDir(), "login.json");
 }
 
-string cacheDir()
+string homeCacheDir()
 {
     return buildPath(homeDopDir(), "cache");
 }
 
-string cachePackDir(string packname)
-{
-    return buildPath(homeDopDir(), "cache", packname);
-}
-
-string cacheVerDir(string packname, Semver ver)
-{
-    return buildPath(homeDopDir(), "cache", packname, ver.toString());
-}
-
-PackageDir cacheRevDir(string packname, Semver ver, string revision)
-{
-    return PackageDir(buildPath(homeDopDir(), "cache", packname, ver.toString(), revision));
-}
-
-PackageDir cacheRevDir(Recipe recipe) @system
-{
-    return cacheRevDir(recipe.name, recipe.ver, recipe.revision());
-}
-
-string cacheRevLock(string packname, Semver ver, string revision)
-{
-    return buildPath(homeDopDir(), "cache", packname, ver.toString(), revision~".lock");
-}
-
-string cacheRevLock(Recipe recipe) @system
-{
-    return cacheRevLock(recipe.name, recipe.ver, recipe.revision());
-}
-
-struct PackageDir
+struct RecipeDir
 {
     this(string dir, string dopDir = null)
     {
@@ -187,12 +157,12 @@ struct PackageDir
         return _dopPath(dirName, filename);
     }
 
-    static PackageDir enforced(string dir, lazy string msg = null)
+    static RecipeDir enforced(string dir, lazy string msg = null)
     {
         import std.exception : enforce;
         import std.format : format;
 
-        const pdir = PackageDir(dir);
+        const pdir = RecipeDir(dir);
         enforce(pdir.hasRecipeFile, msg.length ? msg
                 : format("%s is not a Dopamine package directory", pdir.dir));
         return pdir;
@@ -237,9 +207,9 @@ struct ProfileDirs
     }
 }
 
-@("PackageDir.recipeFile")
+@("RecipeDir.recipeFile")
 unittest
 {
-    const dir = PackageDir(".");
+    const dir = RecipeDir(".");
     assert(dir.recipeFile == buildPath(".", "dopamine.lua"));
 }

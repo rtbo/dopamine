@@ -12,9 +12,9 @@ dop_src = files([
     'src/bindbc/lua/v53/types.d',
 
     'src/dopamine/archive.d',
+    'src/dopamine/cache.d',
     'src/dopamine/dep/dag.d',
     'src/dopamine/dep/lock.d',
-    'src/dopamine/dep/resolved.d',
     'src/dopamine/dep/service.d',
     'src/dopamine/dep/spec.d',
     'src/dopamine/ini.d',
@@ -25,7 +25,6 @@ dop_src = files([
     'src/dopamine/lua/profile.d',
     'src/dopamine/lua/util.d',
     'src/dopamine/msvc.d',
-    'src/dopamine/pack.d',
     'src/dopamine/paths.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',

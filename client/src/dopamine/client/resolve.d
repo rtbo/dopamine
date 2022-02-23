@@ -2,6 +2,7 @@ module dopamine.client.resolve;
 
 import dopamine.client.utils;
 
+import dopamine.cache;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
@@ -40,7 +41,7 @@ int resolveMain(string[] args)
         return 0;
     }
 
-    auto dir = PackageDir.enforced(".");
+    auto dir = RecipeDir.enforced(".");
     auto recipe = parseRecipe(dir);
 
     if (!recipe.hasDependencies)
@@ -65,10 +66,11 @@ int resolveMain(string[] args)
         );
     }
 
+    auto cache = new PackageCache(homeCacheDir);
     auto registry = noNetwork ? null : new Registry();
     const system = noSystem ? No.system : Yes.system;
 
-    auto service = new DependencyService(registry, system);
+    auto service = new DependencyService(cache, registry, system);
 
     Heuristics heuristics;
     heuristics.mode = heuristicsMode(preferSystem, preferCache, preferLocal, pickHighest);
