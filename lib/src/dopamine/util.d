@@ -43,14 +43,6 @@ bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
     return false;
 }
 
-size_t indexOrLast(string s, char c) pure
-{
-    import std.string : indexOf;
-
-    const ind = s.indexOf(c);
-    return ind >= 0 ? ind : s.length;
-}
-
 /// Generate a unique name for temporary path (either dir or file)
 /// Params:
 ///     location = some directory to place the file in. If omitted, std.file.tempDir is used

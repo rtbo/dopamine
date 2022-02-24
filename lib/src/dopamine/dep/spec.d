@@ -104,7 +104,7 @@ struct VersionSpec
             }
             else if (spec.startsWith(">"))
             {
-                import dopamine.util : indexOrLast;
+                import dopamine.semver : indexOrLast;
 
                 enforce(spec.length > 1, new InvalidVersionSpecException(spec, "Empty version"));
 

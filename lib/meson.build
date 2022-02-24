@@ -54,3 +54,20 @@ dop_dep = declare_dependency(
     dependencies: dop_deps,
     link_with: [dop_lib],
 )
+
+dop_mini_src = files([
+    'src/dopamine/cache.d',
+    'src/dopamine/registry/defs.d',
+    'src/dopamine/semver.d',
+])
+
+dop_mini_lib = library('dopamine-mini', dop_mini_src,
+    install: false,
+    include_directories: dop_inc,
+    d_module_versions: ['DopMiniLib'],
+)
+
+dop_mini_dep = declare_dependency(
+    include_directories: dop_inc,
+    link_with: [dop_mini_lib],
+)

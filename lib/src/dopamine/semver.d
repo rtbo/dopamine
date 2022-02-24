@@ -21,6 +21,14 @@ class InvalidSemverException : Exception
     }
 }
 
+package size_t indexOrLast(string s, char c) pure
+{
+    import std.string : indexOf;
+
+    const ind = s.indexOf(c);
+    return ind >= 0 ? ind : s.length;
+}
+
 /// Semantic version representation
 struct Semver
 {
@@ -67,8 +75,6 @@ struct Semver
     /// Initialize from string representation
     this(string semver) pure
     {
-        import dopamine.util : indexOrLast;
-
         import std.algorithm : min, canFind;
         import std.conv : ConvException, to;
         import std.format : format;
