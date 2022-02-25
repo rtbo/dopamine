@@ -4,7 +4,7 @@ import dopamine.login;
 public import dopamine.registry.defs;
 public import dopamine.registry.transport;
 
-import std.json;
+import vibe.data.json;
 
 /// The URL of default registry the client connects to.
 enum defaultRegistry = "http://localhost:3000";
@@ -61,27 +61,30 @@ class Registry
     Response!PackagePayload postPackage(string name)
     {
         const uri = resource("/packages");
-        JSONValue json;
+        Json json = Json.emptyObject;
         json["name"] = name;
         return transport.jsonPost(uri, json).mapResp!(jv => packageFromJson(jv));
     }
 
     Response!(string[]) getPackageVersions(string packageId, bool latestOnly)
     {
+        import std.algorithm : map;
+        import std.array : array;
+
         string[string] params;
         if (latestOnly)
         {
             params["latest"] = "true";
         }
         const uri = resource("/packages/%s/versions", packageId, params);
-        return transport.jsonGet(uri).mapResp!(jv => jv.jsonStringArray);
+        return transport.jsonGet(uri).mapResp!(jv => jv[].map!(j => j.to!string).array);
     }
 
     /// POST a new package recipe
     Response!PackageRecipePayload postRecipe(PackageRecipePost prp)
     {
         const uri = resource("/packages/%s/recipes", prp.packageId);
-        JSONValue json;
+        Json json = Json.emptyObject;
         json["version"] = prp.ver;
         json["revision"] = prp.rev;
         json["recipe"] = prp.recipe;

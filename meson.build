@@ -3,12 +3,16 @@ project('dopamine', ['c', 'd'],
     version: '0.1.0-alpha.1',
 )
 
-vibed_deps = [
-    dependency('vibe-d:http',
-        version: '0.9.4',
-        method: 'dub',
-    ),
-]
+vibed_data_dep = dependency('vibe-d:data',
+    version: '0.9.4',
+    method: 'dub',
+)
+
+vibed_http_dep = dependency('vibe-d:http',
+    version: '0.9.4',
+    method: 'dub',
+)
+
 if host_machine.system() == 'windows'
     vibed_deps += declare_dependency(
         link_args: [

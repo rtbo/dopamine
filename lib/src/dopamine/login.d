@@ -1,8 +1,10 @@
 module dopamine.login;
 
 import dopamine.paths;
+import dopamine.util;
 
-import std.json;
+import vibe.data.json;
+
 import std.exception;
 import std.file;
 import std.string;
@@ -29,27 +31,27 @@ struct LoginKey
 LoginKey readLoginKey() @trusted
 in (isLoggedIn)
 {
-    const json = parseJSON(cast(char[]) read(userLoginFile()));
-    return LoginKey(json["userId"].str, json["keyName"].str, json["key"].str);
+    const chars = cast(string)read(userLoginFile);
+    const json = parseJsonString(chars);
+    return LoginKey(json["userId"].to!string, json["keyName"].to!string, json["key"].to!string);
 }
 
 void writeLoginKey(LoginKey lk)
 {
-    JSONValue jv = ["userId": lk.userId, "keyName": lk.keyName, "key": lk.key];
-    const str = jv.toPrettyString();
-    write(userLoginFile(), cast(const(void)[]) str);
+    const jv = Json(["userId": Json(lk.userId), "keyName": Json(lk.keyName), "key": Json(lk.key)]);
+    write(userLoginFile(), cast(const(void)[])jv.toPrettyString());
 }
 
-LoginKey decodeLoginKey(string key)
+LoginKey decodeLoginKey(string key) @trusted
 {
     import std.base64 : Base64URLNoPadding;
 
     const parts = key.split('.');
     enforce(parts.length == 3, "Ill-formed login key: should be a 3 parts JWT");
     const payload = parts[1];
-    const str = cast(char[]) Base64URLNoPadding.decode(payload);
-    const json = parseJSON(str);
-    return LoginKey(json["sub"].str, json["name"].str, key);
+    const str = cast(string) Base64URLNoPadding.decode(payload);
+    const json = parseJsonString(str);
+    return LoginKey(json["sub"].to!string, json["name"].to!string, key);
 }
 
 unittest

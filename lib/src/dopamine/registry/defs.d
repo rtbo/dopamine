@@ -2,7 +2,7 @@ module dopamine.registry.defs;
 
 import dopamine.semver;
 
-import std.json;
+import vibe.data.json;
 
 /// A Package root object as retrieved with GET /packages
 struct PackagePayload
@@ -12,23 +12,15 @@ struct PackagePayload
     string maintainerId;
 }
 
-string[] jsonStringArray(const(JSONValue) jv)
-{
-    import std.algorithm : map;
-    import std.array : array;
-
-    return jv.arrayNoRef.map!(v => v.str).array;
-}
-
-package PackagePayload packageFromJson(const(JSONValue) json)
+package PackagePayload packageFromJson(const(Json) json)
 {
     import std.algorithm : map;
     import std.array : array;
 
     PackagePayload p;
-    p.id = json["id"].str;
-    p.name = json["name"].str;
-    p.maintainerId = json["maintainerId"].str;
+    p.id = json["id"].to!string;
+    p.name = json["name"].to!string;
+    p.maintainerId = json["maintainerId"].to!string;
     return p;
 }
 
@@ -74,21 +66,21 @@ struct PackageRecipePayload
     RecipeFile[] fileList;
 }
 
-package PackageRecipePayload packageRecipeFromJson(const(JSONValue) json)
+package PackageRecipePayload packageRecipeFromJson(const(Json) json)
 {
     import std.algorithm : map;
     import std.array : array;
 
     PackageRecipePayload pr;
-    pr.packageId = json["packageId"].str;
-    pr.name = json["name"].str;
-    pr.ver = json["version"].str;
-    pr.rev = json["revision"].str;
-    pr.recipe = json["recipe"].str;
-    pr.maintainerId = json["maintainerId"].str;
-    pr.created = json["created"].str;
-    pr.fileList = json["fileList"].array.map!(
-        jv => RecipeFile(jv["id"].str, jv["name"].str, jv["size"].integer, jv["sha1"].str)
+    pr.packageId = json["packageId"].to!string;
+    pr.name = json["name"].to!string;
+    pr.ver = json["version"].to!string;
+    pr.rev = json["revision"].to!string;
+    pr.recipe = json["recipe"].to!string;
+    pr.maintainerId = json["maintainerId"].to!string;
+    pr.created = json["created"].to!string;
+    pr.fileList = json["fileList"][].map!(
+        jv => deserializeJson!RecipeFile(jv)
     ).array;
 
     return pr;

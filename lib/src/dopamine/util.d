@@ -43,6 +43,84 @@ bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
     return false;
 }
 
+// /// Obtain an InputRange of `char` over the file
+// auto fileChars(File file)
+// {
+//     return FileCharRange(file);
+// }
+
+// /// Obtain an InputRange of `dchar` over the file
+// auto fileDChars(File file)
+// {
+//     return DCharRange(fileChars(file));
+// }
+
+// private struct FileCharRange
+// {
+//     private File f;
+//     private char[4096] buf;
+//     private char[] slc;
+//     bool last;
+
+//     this(File f)
+//     {
+//         this.f = f;
+//         slc = this.f.rawRead(buf[]);
+//         last = slc.length < buf.length;
+//     }
+
+//     @property bool empty()
+//     {
+//         return !slc.length;
+//     }
+
+//     @property char front()
+//     {
+//         return slc[0];
+//     }
+
+//     void popFront()
+//     {
+//         slc = slc[1 .. $];
+//         if (!slc.length && !last)
+//         {
+//             slc = this.f.rawRead(buf[]);
+//             last = slc.length < buf.length;
+//         }
+//     }
+// }
+
+// private struct DCharRange(R)
+// if (isInputRange!R && is(ElementType!R == char))
+// {
+//     import std.utf : decodeFront;
+
+//     private R chars;
+//     private dchar c;
+
+//     this(R chars)
+//     {
+//         this.chars = chars;
+//         if (!this.chars.empty)
+//             c = decodeFront(this.chars);
+//     }
+
+//     @property bool empty()
+//     {
+//         return chars.empty;
+//     }
+
+//     @property dchar front()
+//     {
+//         return c;
+//     }
+
+//     @property void popFront()
+//     {
+//         c = decodeFront(this.chars);
+//     }
+// }
+
 /// Generate a unique name for temporary path (either dir or file)
 /// Params:
 ///     location = some directory to place the file in. If omitted, std.file.tempDir is used

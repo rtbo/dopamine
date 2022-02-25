@@ -2,13 +2,13 @@
 
 e2e_registry_exe = executable('e2e-registry', 'e2e_registry.d',
     install: false,
-    dependencies: vibed_deps + dop_mini_dep,
+    dependencies: [ vibed_http_dep, dop_mini_dep ],
     d_module_versions: ['DopMiniLib'],
 )
 
 e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
     install: false,
-    dependencies: vibed_deps,
+    dependencies: vibed_http_dep,
 )
 
 e2e_env = [

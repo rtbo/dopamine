@@ -1,6 +1,7 @@
 module dopamine.registry.transport;
 
-import std.json;
+import vibe.data.json;
+
 import std.net.curl;
 import std.traits;
 
@@ -134,12 +135,12 @@ package struct Transport
         return format("%s/api/v%s%s%s", host, apiLevel, path, query);
     }
 
-    Response!JSONValue jsonGet(string url)
+    Response!Json jsonGet(string url)
     {
         return rawGet(url).mapResp!(raw => toJson(raw));
     }
 
-    Response!JSONValue jsonPost(string url, const ref JSONValue bodi)
+    Response!Json jsonPost(string url, const ref Json bodi)
     {
         const rawbody = fromJson(bodi);
         return rawPost(url, cast(const(ubyte)[]) rawbody, "application/json").mapResp!(
@@ -252,25 +253,24 @@ unittest
 private enum isStringDict(T) = isAssociativeArray!T && is(KeyType!T == string)
     && is(ValueType!T == string);
 
-private JSONValue toJson(ubyte[] raw) @trusted
+private Json toJson(ubyte[] raw) @trusted
 {
     import std.exception : assumeUnique;
 
     const str = cast(string) assumeUnique(raw);
-    return parseJSON(str);
+    return parseJsonString(str);
 }
 
-private string fromJson(const ref JSONValue json)
+private string fromJson(const ref Json json)
 {
     debug
     {
-        enum pretty = true;
+        return json.toPrettyString();
     }
     else
     {
-        enum pretty = false;
+        return json.toString();
     }
-    return toJSON(json, pretty);
 }
 
 private string methodString(HTTP.Method method)
