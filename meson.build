@@ -24,6 +24,13 @@ if get_option('enable_server')
     endif
 endif
 
+if get_option('enable_test')
+    ut_assertions_dep = dependency('unit-threaded:assertions',
+        method: 'dub',
+        version: '2.0.3',
+    )
+endif
+
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 
 subdir('lua')

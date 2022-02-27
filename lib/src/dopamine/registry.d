@@ -446,3 +446,24 @@ private Response!(ubyte[]) rawReq(Method method, string loginKey, string host, s
 
     return Response!(ubyte[])(data, status.code, status.reason, error);
 }
+
+version (unittest)
+{
+    import dopamine.api.v1;
+    import unit_threaded.assertions;
+}
+
+@("requestResource")
+unittest
+{
+    requestResource(GetPackage("thispkg"))
+        .shouldEqual("/api/v1/packages?name=thispkg");
+    requestResource(GetPackageVersions("pkgid"))
+        .shouldEqual("/api/v1/packages/pkgid/versions");
+    requestResource(GetPackageVersions("pkgid", true))
+        .shouldEqual("/api/v1/packages/pkgid/versions?latest");
+    requestResource(GetPackageRecipe("pkgid", "1.0.0"))
+        .shouldEqual("/api/v1/packages/pkgid/recipes/1.0.0");
+    requestResource(GetPackageRecipe("pkgid", "1.0.0", "abcdef"))
+        .shouldEqual("/api/v1/packages/pkgid/recipes/1.0.0?revision=abcdef");
+}
