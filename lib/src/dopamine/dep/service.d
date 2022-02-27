@@ -6,6 +6,7 @@ import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.registry;
+import dopamine.registry.api1;
 import dopamine.semver;
 
 import std.typecons;
@@ -210,7 +211,8 @@ final class DependencyService : DepService
         import std.exception : enforce;
 
         auto pack = packagePayload(packname);
-        auto resp = _registry.getPackageVersions(pack.id, false);
+        auto req = GetPackageVersions(pack.id, false);
+        auto resp = _registry.sendRequest(req);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         return resp.payload.map!(v => AvailVersion(Semver(v), DepLocation.network)).array;
     }
@@ -360,7 +362,8 @@ final class DependencyService : DepService
         if (auto p = packname in _packMem)
             return *p;
 
-        auto resp = _registry.getPackageByName(packname);
+        auto req = GetPackage(packname);
+        auto resp = _registry.sendRequest(req);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         auto pack = resp.payload;
         _packMem[packname] = pack;

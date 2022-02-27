@@ -2,7 +2,7 @@ module e2e_registry;
 
 import dopamine.semver;
 import dopamine.cache;
-import dopamine.registry.defs;
+import dopamine.registry.api1;
 
 import vibe.core.core;
 import vibe.data.json;
@@ -102,7 +102,27 @@ void packageRecipe(HTTPServerRequest req, HTTPServerResponse res)
 
 void serveRecipe(CacheRevisionDir revDir, HTTPServerResponse res)
 {
+    import std.digest : toHexString;
+    import std.digest.sha : sha1Of;
 
+    PackageRecipePayload payload;
+    payload.packageId = revDir.packageDir.name;
+    payload.name = revDir.packageDir.name;
+    payload.ver = revDir.versionDir.ver;
+    payload.rev = revDir.revision;
+    payload.recipe = cast(string)read(revDir.recipeFile);
+    payload.maintainerId = "e2e";
+    payload.created = "Mon. April 1st 2543";
+    payload.fileList = [RecipeFile(
+        "id",
+        "dopamine.lua",
+        getSize(revDir.recipeFile),
+        toHexString(sha1Of(payload.recipe)).idup,
+    )];
+
+    writeln(serializeToJsonString(payload));
+
+    res.writeJsonBody(serializeToJson(payload));
 }
 
 void stop(HTTPServerRequest req, HTTPServerResponse res)

@@ -4,13 +4,13 @@ project('dopamine', ['c', 'd'],
 )
 
 vibed_data_dep = dependency('vibe-d:data',
-    version: '0.9.4',
     method: 'dub',
+    version: '0.9.4',
 )
 
 vibed_http_dep = dependency('vibe-d:http',
-    version: '0.9.4',
     method: 'dub',
+    version: '0.9.4',
 )
 
 if host_machine.system() == 'windows'

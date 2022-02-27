@@ -13,6 +13,7 @@ else
 {
     import dopamine.log;
     import dopamine.registry;
+    import dopamine.registry.api1;
     import dopamine.paths;
 
     version = DopFull;
@@ -56,6 +57,7 @@ class PackageCache
         {
             import std.algorithm : canFind, map;
             import std.conv : to;
+            import std.format : format;
             import std.stdio : File;
 
             if (revision)
@@ -74,7 +76,8 @@ class PackageCache
                 logInfo("Fetching recipe %s/%s from registry", info(pack.name), info(ver));
             }
 
-            auto resp = registry.getRecipe(PackageRecipeGet(pack.id, ver, revision));
+            auto req = GetPackageRecipe(pack.id, ver, revision);
+            auto resp = registry.sendRequest(req);
             enforce(resp.code < 400, new ErrorLogException(
                     "Could not fetch %s/%s%s%s: registry returned %s",
                     info(pack.name), info(ver), revision ? "/" : "", info(revision ? revision : ""),
@@ -86,7 +89,9 @@ class PackageCache
             ));
 
             enforce(resp.payload.ver == ver, new Exception(
-                    "Registry returned a package version that do not match request"
+                    "Registry returned a package version that do not match request:\n" ~
+                    format("  - requested %s/%s\n", pack.name, ver) ~
+                    format("  - obtained %s/%s", resp.payload.name, resp.payload.ver)
             ));
 
             if (revision)
@@ -245,7 +250,7 @@ struct CacheRevisionDir
 
     @property bool exists() const
     {
-        return stdExists(buildPath(_dir, "dopamine.lua"));
+        return stdExists(recipeFile);
     }
 
     bool opCast(T : bool)() const
@@ -264,6 +269,11 @@ struct CacheRevisionDir
         {
             return this.recipeDir;
         }
+    }
+
+    @property string recipeFile() const
+    {
+        return buildPath(_dir, "dopamine.lua");
     }
 
     @property string lockFile() const

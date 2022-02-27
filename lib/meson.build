@@ -28,9 +28,9 @@ dop_src = files([
     'src/dopamine/paths.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',
-    'src/dopamine/registry/defs.d',
+    'src/dopamine/registry/api1.d',
+    'src/dopamine/registry/attrs.d',
     'src/dopamine/registry/package.d',
-    'src/dopamine/registry/transport.d',
     'src/dopamine/semver.d',
     'src/dopamine/util.d',
 ])
@@ -58,7 +58,8 @@ dop_dep = declare_dependency(
 if get_option('enable_server') or get_option('enable_test')
     dop_mini_src = files([
         'src/dopamine/cache.d',
-        'src/dopamine/registry/defs.d',
+        'src/dopamine/registry/api1.d',
+        'src/dopamine/registry/attrs.d',
         'src/dopamine/semver.d',
     ])
 
