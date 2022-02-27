@@ -8,17 +8,20 @@ vibed_data_dep = dependency('vibe-d:data',
     version: '0.9.4',
 )
 
-vibed_http_dep = dependency('vibe-d:http',
-    method: 'dub',
-    version: '0.9.4',
-)
-
-if host_machine.system() == 'windows'
-    vibed_deps += declare_dependency(
-        link_args: [
-            'user32.lib'
-        ],
-    )
+if get_option('enable_server')
+    vibed_http_deps = [
+        dependency('vibe-d:http',
+            method: 'dub',
+            version: '0.9.4',
+        )
+    ]
+    if host_machine.system() == 'windows'
+        vibed_http_deps += declare_dependency(
+            link_args: [
+                'user32.lib'
+            ],
+        )
+    endif
 endif
 
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
