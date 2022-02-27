@@ -1,8 +1,6 @@
-module dopamine.registry.api1;
+module dopamine.api.v1;
 
-import dopamine.registry.attrs;
-
-import vibe.data.serialization;
+import dopamine.api.attrs;
 
 @Request(Method.GET, "/packages", 1)
 @Response!PackagePayload

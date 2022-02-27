@@ -1,12 +1,12 @@
 module dopamine.dep.service;
 
+import dopamine.api.v1;
 import dopamine.cache;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.registry;
-import dopamine.registry.api1;
 import dopamine.semver;
 
 import std.typecons;

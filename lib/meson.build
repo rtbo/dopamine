@@ -11,6 +11,8 @@ dop_src = files([
     'src/bindbc/lua/v53/package.d',
     'src/bindbc/lua/v53/types.d',
 
+    'src/dopamine/api/v1.d',
+    'src/dopamine/api/attrs.d',
     'src/dopamine/archive.d',
     'src/dopamine/cache.d',
     'src/dopamine/dep/dag.d',
@@ -28,9 +30,7 @@ dop_src = files([
     'src/dopamine/paths.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',
-    'src/dopamine/registry/api1.d',
-    'src/dopamine/registry/attrs.d',
-    'src/dopamine/registry/package.d',
+    'src/dopamine/registry.d',
     'src/dopamine/semver.d',
     'src/dopamine/util.d',
 ])
@@ -57,9 +57,9 @@ dop_dep = declare_dependency(
 
 if get_option('enable_server') or get_option('enable_test')
     dop_mini_src = files([
+        'src/dopamine/api/v1.d',
+        'src/dopamine/api/attrs.d',
         'src/dopamine/cache.d',
-        'src/dopamine/registry/api1.d',
-        'src/dopamine/registry/attrs.d',
         'src/dopamine/semver.d',
     ])
 

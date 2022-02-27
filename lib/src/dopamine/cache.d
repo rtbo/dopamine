@@ -11,9 +11,9 @@ version (DopMiniLib)
 }
 else
 {
+    import dopamine.api.v1;
     import dopamine.log;
     import dopamine.registry;
-    import dopamine.registry.api1;
     import dopamine.paths;
 
     version = DopFull;

@@ -1,8 +1,8 @@
 module e2e_registry;
 
-import dopamine.semver;
+import dopamine.api.v1;
 import dopamine.cache;
-import dopamine.registry.api1;
+import dopamine.semver;
 
 import vibe.core.core;
 import vibe.data.json;

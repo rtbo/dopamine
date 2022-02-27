@@ -1,7 +1,7 @@
 module dopamine.registry;
 
+import dopamine.api.attrs;
 import dopamine.login;
-import dopamine.registry.attrs;
 
 import vibe.data.json;
 
@@ -148,6 +148,7 @@ private template mapResp(alias pred)
 /// The URL of default registry the client connects to.
 enum defaultRegistry = "http://localhost:3000";
 
+/// Client interface to the registry.
 class Registry
 {
     string _host;
@@ -182,8 +183,6 @@ class Registry
         import std.conv : to;
         import std.traits : hasUDA;
 
-        alias ResT = ResponseType!ReqT;
-        enum hasRes = hasResponse!ReqT;
         enum reqAttr = RequestAttr!ReqT;
         enum method = reqAttr.method;
         enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
@@ -196,13 +195,17 @@ class Registry
         static assert(reqAttr.apiLevel >= 1, "Invalid API Level: " ~ reqAttr.apiLevel.to!string);
 
         const resource = requestResource(req);
-
         auto res = rawReq(method, _key.key, host, resource, null, null);
 
-        static if (hasRes)
+        static if (hasResponse!ReqT)
+        {
+            alias ResT = ResponseType!ReqT;
             return res.mapResp!(raw => toJson(raw).deserializeJson!(ResT)());
+        }
         else
+        {
             return res.toVoid;
+        }
     }
 }
 
