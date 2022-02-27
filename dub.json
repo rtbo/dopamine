@@ -6,6 +6,8 @@
   "sourcePaths": ["lib/src", "client/src", "test/unit"],
   "importPaths": ["lib/src", "client/src", "test/unit"],
   "dependencies": {
-    "vibe-d:http": "0.9.4"
+    "vibe-d:http": "0.9.4",
+    "vibe-d:data": "0.9.4",
+    "unit-threaded:assertions": "2.0.3"
   }
 }
