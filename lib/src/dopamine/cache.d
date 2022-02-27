@@ -95,11 +95,11 @@ class PackageCache
             ));
 
             if (revision)
-                enforce(resp.payload.rev == revision, new Exception(
+                enforce(resp.payload.revision == revision, new Exception(
                         "Registry returned a revision that do not match request"
                 ));
             else
-                revision = resp.payload.rev;
+                revision = resp.payload.revision;
 
             enforce(resp.payload.fileList.length >= 1, new Exception(
                     "Registry returned a recipe without file"
@@ -110,7 +110,7 @@ class PackageCache
 
             auto revDir = packageDir(resp.payload.name)
                 .versionDir(resp.payload.ver)
-                .revisionDir(resp.payload.rev);
+                .revisionDir(resp.payload.revision);
 
             mkdirRecurse(revDir.versionDir.dir);
 

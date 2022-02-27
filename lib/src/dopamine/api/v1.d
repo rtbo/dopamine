@@ -41,7 +41,7 @@ struct PackageRecipePayload
     string packageId;
     string name;
     @Name("version") string ver;
-    string rev;
+    string revision;
     string recipe;
     string maintainerId;
     string created;

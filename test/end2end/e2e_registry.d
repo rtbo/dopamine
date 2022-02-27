@@ -109,7 +109,7 @@ void serveRecipe(CacheRevisionDir revDir, HTTPServerResponse res)
     payload.packageId = revDir.packageDir.name;
     payload.name = revDir.packageDir.name;
     payload.ver = revDir.versionDir.ver;
-    payload.rev = revDir.revision;
+    payload.revision = revDir.revision;
     payload.recipe = cast(string)read(revDir.recipeFile);
     payload.maintainerId = "e2e";
     payload.created = "Mon. April 1st 2543";
