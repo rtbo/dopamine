@@ -18,38 +18,28 @@ import std.format;
 import std.path;
 import std.stdio;
 
-void packages(HTTPServerRequest req, HTTPServerResponse res)
-{
-    auto cache = new PackageCache(".");
-
-    const name = req.query["name"];
-    enforceHTTP(cache.packageDir(name), HTTPStatus.notFound, "No such package: " ~ name);
-
-    auto payload = PackagePayload(name, name, "e2e");
-    res.writeJsonBody(serializeToJson(payload));
-}
-
-void packageVersions(HTTPServerRequest req, HTTPServerResponse res)
+void getPackage(HTTPServerRequest req, HTTPServerResponse res)
 {
     import std.algorithm : map;
     import std.array : array;
 
     auto cache = new PackageCache(".");
 
-    const pkgId = req.params["pack"];
+    string name = req.params["name"];
+    const pkgDir = enforceHTTP(cache.packageDir(name), HTTPStatus.notFound, "No such package: " ~ name);
 
-    const pkgDir = enforceHTTP(cache.packageDir(pkgId), HTTPStatus.notFound, "No such package: " ~ pkgId);
+    string[] versions = pkgDir.versionDirs().map!(vd => vd.ver).array;
 
-    string[] payload = pkgDir.versionDirs().map!(vd => vd.ver).array;
+    auto payload = PackagePayload(name, name, versions);
 
     res.writeJsonBody(serializeToJson(payload));
 }
 
-void packageRecipe(HTTPServerRequest req, HTTPServerResponse res)
+void getPackageRecipe(HTTPServerRequest req, HTTPServerResponse res)
 {
     auto cache = new PackageCache(".");
 
-    const pkgId = req.params["pack"];
+    const pkgId = req.params["id"];
     const ver = req.params["version"];
 
     const verDir = enforceHTTP(
@@ -123,9 +113,9 @@ void main(string[] args)
     settings.keepAliveTimeout = 0.msecs;
 
     auto router = new URLRouter("/api/v1");
-    router.get("/packages", &packages);
-    router.get("/packages/:pack/versions", &packageVersions);
-    router.get("/packages/:pack/recipes/:version", &packageRecipe);
+    router.get("/packages/:name", &getPackage); // for end-to-end, id and name have the same value
+    router.get("/packages/by-name/:name", &getPackage);
+    router.get("/packages/:id/recipes/:version", &getPackageRecipe);
     router.post("/stop", &stop);
 
     auto listener = listenHTTP(settings, router);

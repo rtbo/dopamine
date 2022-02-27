@@ -255,7 +255,7 @@ private string requestResource(ReqT)(ReqT req) if (isRequest!ReqT)
 
         static if (isParam)
         {
-            alias syms = getSymbolsByUDA!(ReqT, Param(leftover));
+            alias syms = getSymbolsByUDA!(ReqT, leftover);
             static if (syms.length)
             {
                 const value = __traits(getMember, req, __traits(identifier, syms[0]));
@@ -456,12 +456,10 @@ version (unittest)
 @("requestResource")
 unittest
 {
-    requestResource(GetPackage("thispkg"))
-        .shouldEqual("/api/v1/packages?name=thispkg");
-    requestResource(GetPackageVersions("pkgid"))
-        .shouldEqual("/api/v1/packages/pkgid/versions");
-    requestResource(GetPackageVersions("pkgid", true))
-        .shouldEqual("/api/v1/packages/pkgid/versions?latest");
+    requestResource(GetPackage("pkgid"))
+        .shouldEqual("/api/v1/packages/pkgid");
+    requestResource(GetPackageByName("pkgname"))
+        .shouldEqual("/api/v1/packages/by-name/pkgname");
     requestResource(GetPackageRecipe("pkgid", "1.0.0"))
         .shouldEqual("/api/v1/packages/pkgid/recipes/1.0.0");
     requestResource(GetPackageRecipe("pkgid", "1.0.0", "abcdef"))

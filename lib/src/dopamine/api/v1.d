@@ -2,31 +2,13 @@ module dopamine.api.v1;
 
 import dopamine.api.attrs;
 
-@Request(Method.GET, "/packages", 1)
-@Response!PackagePayload
-struct GetPackage
-{
-    @Query
-    string name;
-}
-
 struct PackagePayload
 {
     string id;
     string name;
-    string maintainerId;
+    string[] versions;
 }
 
-@Request(Method.GET, "/packages/:id/versions", 1)
-@Response!(string[])
-struct GetPackageVersions
-{
-    @Param("id")
-    string packageId;
-
-    @Query
-    bool latest;
-}
 
 struct RecipeFile
 {
@@ -48,14 +30,27 @@ struct PackageRecipePayload
     RecipeFile[] fileList;
 }
 
+@Request(Method.GET, "/packages/:id", 1)
+@Response!PackagePayload
+struct GetPackage
+{
+    string id;
+}
+
+@Request(Method.GET, "/packages/by-name/:name", 1)
+@Response!PackagePayload
+struct GetPackageByName
+{
+    string name;
+}
+
 @Request(Method.GET, "/packages/:id/recipes/:version", 1)
 @Response!PackageRecipePayload
 struct GetPackageRecipe
 {
-    @Param("id")
-    string packageId;
+    string id;
 
-    @Param("version")
+    @("version")
     string ver;
 
     @Query

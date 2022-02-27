@@ -211,10 +211,7 @@ final class DependencyService : DepService
         import std.exception : enforce;
 
         auto pack = packagePayload(packname);
-        auto req = GetPackageVersions(pack.id, false);
-        auto resp = _registry.sendRequest(req);
-        enforce(resp.code != 404, new NoSuchPackageException(packname));
-        return resp.payload.map!(v => AvailVersion(Semver(v), DepLocation.network)).array;
+        return pack.versions.map!(v => AvailVersion(Semver(v), DepLocation.network)).array;
     }
 
     Recipe packRecipe(string packname, const(AvailVersion) aver, string revision = null) @system
@@ -362,7 +359,7 @@ final class DependencyService : DepService
         if (auto p = packname in _packMem)
             return *p;
 
-        auto req = GetPackage(packname);
+        auto req = GetPackageByName(packname);
         auto resp = _registry.sendRequest(req);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         auto pack = resp.payload;

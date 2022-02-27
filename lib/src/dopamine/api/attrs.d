@@ -22,12 +22,6 @@ struct Request
 /// Decorator for a request type that requires authentification
 enum RequiresAuth;
 
-/// Decorator for a request parameter field
-struct Param
-{
-    string name;
-}
-
 /// Decorator for request query parameter fields.
 /// Query parameters are stated in the URL after a '?'.
 /// Such parameters are only allowed in GET requests.
