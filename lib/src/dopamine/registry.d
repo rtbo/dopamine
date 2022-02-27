@@ -178,7 +178,7 @@ class Registry
         return _key;
     }
 
-    Response!(ResponseType!ReqT) sendRequest(ReqT)(ReqT req) if (isRequest!ReqT)
+    Response!(ResponseType!ReqT) sendRequest(ReqT)(auto ref const ReqT req) if (isRequest!ReqT)
     {
         import std.conv : to;
         import std.traits : hasUDA;
@@ -225,7 +225,7 @@ private string checkHost(string host)
     return host;
 }
 
-private string requestResource(ReqT)(ReqT req) if (isRequest!ReqT)
+private string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT)
 {
     import std.array : split;
     import std.conv : to;

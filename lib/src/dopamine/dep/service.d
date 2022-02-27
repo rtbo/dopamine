@@ -129,7 +129,7 @@ interface DepService
 /// Actual implementation of [DepService]
 final class DependencyService : DepService
 {
-    private PackagePayload[string] _packMem;
+    private PackageResource[string] _packMem;
     private Recipe[string] _recipeMem;
 
     private PackageCache _cache;
@@ -351,7 +351,7 @@ final class DependencyService : DepService
             new NoSuchRevisionException(packname, ver, revision) : new NoSuchVersionException(packname, ver);
     }
 
-    private PackagePayload packagePayload(string packname) @trusted
+    private PackageResource packagePayload(string packname) @trusted
     in (_registry)
     {
         import std.exception : enforce;

@@ -30,7 +30,7 @@ void getPackage(HTTPServerRequest req, HTTPServerResponse res)
 
     string[] versions = pkgDir.versionDirs().map!(vd => vd.ver).array;
 
-    auto payload = PackagePayload(name, name, versions);
+    auto payload = PackageResource(name, name, versions);
 
     res.writeJsonBody(serializeToJson(payload));
 }
@@ -72,7 +72,7 @@ void serveRecipe(CacheRevisionDir revDir, HTTPServerResponse res)
     import std.digest : toHexString;
     import std.digest.sha : sha1Of;
 
-    PackageRecipePayload payload;
+    PackageRecipeResource payload;
     payload.packageId = revDir.packageDir.name;
     payload.name = revDir.packageDir.name;
     payload.ver = revDir.versionDir.ver;

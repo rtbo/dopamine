@@ -50,7 +50,7 @@ class PackageCache
     version (DopFull)
     {
         CacheRevisionDir cacheRecipe(Registry registry,
-            const ref PackagePayload pack,
+            const ref PackageResource pack,
             string ver,
             string revision = null)
         out (res; res.exists)

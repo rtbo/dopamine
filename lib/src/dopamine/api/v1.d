@@ -2,7 +2,7 @@ module dopamine.api.v1;
 
 import dopamine.api.attrs;
 
-struct PackagePayload
+struct PackageResource
 {
     string id;
     string name;
@@ -18,7 +18,7 @@ struct RecipeFile
     string sha1;
 }
 
-struct PackageRecipePayload
+struct PackageRecipeResource
 {
     string packageId;
     string name;
@@ -30,22 +30,24 @@ struct PackageRecipePayload
     RecipeFile[] fileList;
 }
 
-@Request(Method.GET, "/packages/:id", 1)
-@Response!PackagePayload
+enum level = 1;
+
+@Request(Method.GET, "/packages/:id", level)
+@Response!PackageResource
 struct GetPackage
 {
     string id;
 }
 
-@Request(Method.GET, "/packages/by-name/:name", 1)
-@Response!PackagePayload
+@Request(Method.GET, "/packages/by-name/:name", level)
+@Response!PackageResource
 struct GetPackageByName
 {
     string name;
 }
 
-@Request(Method.GET, "/packages/:id/recipes/:version", 1)
-@Response!PackageRecipePayload
+@Request(Method.GET, "/packages/:id/recipes/:version", level)
+@Response!PackageRecipeResource
 struct GetPackageRecipe
 {
     string id;
