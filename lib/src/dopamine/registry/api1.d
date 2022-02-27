@@ -8,7 +8,7 @@ import vibe.data.serialization;
 @Response!PackagePayload
 struct GetPackage
 {
-    @Query("name")
+    @Query
     string name;
 }
 
@@ -26,7 +26,7 @@ struct GetPackageVersions
     @Param("id")
     string packageId;
 
-    @Query("latest")
+    @Query
     bool latest;
 }
 
@@ -59,6 +59,6 @@ struct GetPackageRecipe {
     @Param("version")
     string ver;
 
-    @Query("revision")
+    @Query
     string revision;
 }

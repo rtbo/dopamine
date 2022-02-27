@@ -283,7 +283,17 @@ private string requestResource(ReqT)(ReqT req) if (isRequest!ReqT)
         // dfmt off
         static foreach (alias sym; queryParams)
         {{
-            enum symName = (getUDAs!(sym, Query)[0]).name;
+            // determine if @Query is used instead of @Query() or @Query("name")
+            // (@Query misses this to get name)
+            static if (is(getUDAs!(sym, Query)[0] == Query))
+            {
+                enum string symName = null;
+            }
+            else
+            {
+                enum symName = getUDAs!(sym, Query)[0].name;
+            }
+
             enum paramName = encodeComponent(symName ? symName : __traits(identifier, sym));
             const value = __traits(getMember, req, __traits(identifier,  sym));
 
