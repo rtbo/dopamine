@@ -9,6 +9,7 @@ import vibe.data.json;
 import vibe.http.common;
 import vibe.http.router;
 import vibe.http.server;
+import vibe.http.status;
 
 import std.conv;
 import std.exception;
@@ -19,71 +20,43 @@ import std.stdio;
 
 void packages(HTTPServerRequest req, HTTPServerResponse res)
 {
-    if (auto n = "name" in req.query)
-    {
-        auto name = *n;
-        auto path = buildPath(".", name);
-        if (exists(path) && isDir(path))
-        {
-            res.writeJsonBody(Json([
-                "id": Json(name),
-                "name": Json(name),
-                "maintainerId": Json("e2e"),
-            ]));
-        }
-        else {
-            res.statusCode = 404;
-        }
-    }
+    auto cache = new PackageCache(".");
 
-    Json[] packs;
-    foreach (pe; dirEntries(".", SpanMode.shallow))
-    {
-        if (pe.isDir)
-        {
-            const p = baseName(pe.name);
-            packs ~= [
-                Json([
-                    "id": Json(p),
-                    "name": Json(p),
-                    "maintainerId": Json("e2e"),
-                ])
-            ];
-        }
-    }
-    res.writeJsonBody(packs);
+    const name = req.query["name"];
+    enforceHTTP(cache.packageDir(name), HTTPStatus.notFound, "No such package: " ~ name);
+
+    auto payload = PackagePayload(name, name, "e2e");
+    res.writeJsonBody(serializeToJson(payload));
 }
 
 void packageVersions(HTTPServerRequest req, HTTPServerResponse res)
 {
-    Json[] versions;
-    const packId = req.params["pack"];
-    foreach(pe; dirEntries(".", SpanMode.shallow))
-    {
-        if (pe.isDir && baseName(pe.name) == packId)
-        {
-            foreach(ve; dirEntries(pe.name, SpanMode.shallow))
-            {
-                if (ve.isDir) {
-                    const ver = baseName(ve.name);
-                    assert(Semver.isValid(ver));
-                    versions ~= Json(ver);
-                }
-            }
-        }
-    }
-    res.writeJsonBody(Json(versions));
+    import std.algorithm : map;
+    import std.array : array;
+
+    auto cache = new PackageCache(".");
+
+    const pkgId = req.params["pack"];
+
+    const pkgDir = enforceHTTP(cache.packageDir(pkgId), HTTPStatus.notFound, "No such package: " ~ pkgId);
+
+    string[] payload = pkgDir.versionDirs().map!(vd => vd.ver).array;
+
+    res.writeJsonBody(serializeToJson(payload));
 }
 
 void packageRecipe(HTTPServerRequest req, HTTPServerResponse res)
 {
     auto cache = new PackageCache(".");
 
-    const packId = req.params["pack"];
+    const pkgId = req.params["pack"];
     const ver = req.params["version"];
 
-    const verDir = cache.packageDir(packId).versionDir(ver);
-    enforce(verDir, new HTTPStatusException(404, format("No such package: %s@%s", packId, ver)));
+    const verDir = enforceHTTP(
+        cache.packageDir(pkgId).versionDir(ver),
+        HTTPStatus.notFound,
+        format("No such package: %s/%s", pkgId, ver),
+    );
 
     const rev = req.query.get("revision");
     if (rev)
@@ -95,7 +68,11 @@ void packageRecipe(HTTPServerRequest req, HTTPServerResponse res)
     {
         auto revDirRange = verDir.revisionDirs();
 
-        enforce(!revDirRange.empty, new HTTPStatusException(404, format("No such package: %s@%s", packId, ver)));
+        enforceHTTP(
+            !revDirRange.empty,
+            HTTPStatus.notFound,
+            format("No such package: %s/%s", pkgId, ver)
+        );
         serveRecipe(revDirRange.front, res);
     }
 }
@@ -119,8 +96,6 @@ void serveRecipe(CacheRevisionDir revDir, HTTPServerResponse res)
         getSize(revDir.recipeFile),
         toHexString(sha1Of(payload.recipe)).idup,
     )];
-
-    writeln(serializeToJsonString(payload));
 
     res.writeJsonBody(serializeToJson(payload));
 }
