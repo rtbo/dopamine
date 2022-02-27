@@ -40,7 +40,7 @@ struct PackageRecipePayload
 {
     string packageId;
     string name;
-    string ver;
+    @Name("version") string ver;
     string rev;
     string recipe;
     string maintainerId;
@@ -50,7 +50,8 @@ struct PackageRecipePayload
 
 @Request(Method.GET, "/packages/:id/recipes/:version", 1)
 @Response!PackageRecipePayload
-struct GetPackageRecipe {
+struct GetPackageRecipe
+{
     @Param("id")
     string packageId;
 

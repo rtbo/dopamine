@@ -1,5 +1,7 @@
 module dopamine.api.attrs;
 
+static import vibe.data.serialization;
+
 import std.traits : hasUDA, getUDAs;
 
 /// HTTP method for API requests
@@ -16,6 +18,9 @@ struct Request
     string resource;
     int apiLevel;
 }
+
+/// Decorator for a request type that requires authentification
+enum RequiresAuth;
 
 /// Decorator for a request parameter field
 struct Param
@@ -34,8 +39,8 @@ struct Query
 /// Decorator for a request Json body
 enum JsonBody;
 
-/// Decorator for a request type that requires authentification
-enum RequiresAuth;
+/// A Decorator to change the name of a Json field
+alias Name = vibe.data.serialization.name;
 
 /// Decorator to specify the type of response expected by a request
 struct Response(T=ubyte[])
