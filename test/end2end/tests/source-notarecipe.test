@@ -1,0 +1,5 @@
+CMD=$DOP source
+RECIPE=notarecipe
+
+EXPECT_FAIL
+EXPECT_MATCH[stderr]=Error: .+notarecipe.* is not a Dopamine package directory

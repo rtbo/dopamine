@@ -21,6 +21,8 @@ e2e_tests = [
     'profile-describe',
     'resolve-light-cache',
     'resolve-light-highest',
+    'resolve-notarecipe',
+    'source-notarecipe',
 ]
 
 foreach e2e_test : e2e_tests
