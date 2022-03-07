@@ -43,6 +43,56 @@ bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
     return false;
 }
 
+private struct LockFileImpl
+{
+    import std.stdio : File;
+
+    private File f;
+    private bool acq;
+
+    bool opCast(T : bool)() const
+    {
+        return acq;
+    }
+}
+
+/// Acquire a lock file.
+/// The file is created if it doesn't exist.
+/// If the file is locked by another process, the current thread
+/// is blocked until the lock is released and acquired by this process.
+/// The lock is released when the result goes out of scope.
+auto acquireLockFile(string path) @trusted
+{
+    import std.algorithm : move;
+    import std.stdio : File;
+
+    auto f = File(path, "w");
+    f.lock();
+    return LockFileImpl(move(f), true);
+}
+
+/// Try to acquire a lock file.
+/// The file is created if it doesn't exist.
+/// If the file is locked by another process, the function returns immediately
+/// and the result yields false in boolean context.
+/// Otherwise a lock is acquired and the result yields true in boolean context.
+/// The lock is released when the result goes out of scope.
+auto tryAcquireLockFile(string path) @trusted
+{
+    import std.algorithm : move;
+    import std.stdio : File;
+
+    auto f = File(path, "w");
+    const locked = f.tryLock();
+    if (locked)
+    {
+        return LockFileImpl(move(f), true);
+    }
+    else
+    {
+        return LockFileImpl.init;
+    }
+}
 // /// Obtain an InputRange of `char` over the file
 // auto fileChars(File file)
 // {
