@@ -22,6 +22,7 @@ e2e_tests = [
     'resolve-light-cache',
     'resolve-light-highest',
     'resolve-notarecipe',
+    'source-in-tree',
     'source-notarecipe',
 ]
 
