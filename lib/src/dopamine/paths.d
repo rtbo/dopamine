@@ -164,7 +164,7 @@ struct RecipeDir
 
         const pdir = RecipeDir(dir);
         enforce(pdir.hasRecipeFile, msg.length ? msg
-                : format("%s is not a Dopamine package directory", pdir.dir));
+                : format("%s is not a Dopamine package directory", absolutePath(pdir.dir)));
         return pdir;
     }
 
