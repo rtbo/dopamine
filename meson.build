@@ -3,16 +3,18 @@ project('dopamine', ['c', 'd'],
     version: '0.1.0-alpha.1',
 )
 
+vibed_version = '0.9.4'
+
 vibed_data_dep = dependency('vibe-d:data',
     method: 'dub',
-    version: '0.9.4',
+    version: vibed_version,
 )
 
 if get_option('enable_server')
     vibed_http_deps = [
         dependency('vibe-d:http',
             method: 'dub',
-            version: '0.9.4',
+            version: vibed_version,
         )
     ]
     if host_machine.system() == 'windows'
