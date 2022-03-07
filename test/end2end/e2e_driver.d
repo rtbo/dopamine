@@ -146,23 +146,27 @@ class ExpectVersion : Expect
         import vibe.data.json : parseJsonString;
 
         auto lockpath = res.filepath("dop.lock");
-        auto jsonStr = cast(string)read(lockpath);
+        auto jsonStr = cast(string) read(lockpath);
         auto json = parseJsonString(jsonStr);
-        foreach(jpack; json["packages"])
+        foreach (jpack; json["packages"])
         {
             if (jpack["name"] != pkgname)
                 continue;
 
             foreach (jver; jpack["versions"])
             {
-                if (jver["status"] == "resolved") {
+                if (jver["status"] == "resolved")
+                {
                     if (jver["version"] == ver)
                     {
                         return null;
                     }
                     else
                     {
-                        return format("%s was resolved to v%s (expected v%s)", pkgname, jver["version"].get!string, ver);
+                        return format(
+                            "%s was resolved to v%s (expected v%s)",
+                            pkgname, jver["version"].get!string, ver
+                        );
                     }
                 }
             }
