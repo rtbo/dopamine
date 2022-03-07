@@ -24,6 +24,7 @@ e2e_tests = [
     'resolve-notarecipe',
     'source-in-tree',
     'source-notarecipe',
+    'source-out-of-tree',
 ]
 
 foreach e2e_test : e2e_tests
