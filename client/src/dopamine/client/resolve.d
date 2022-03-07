@@ -59,10 +59,10 @@ int resolveMain(string[] args)
 
     // FIXME: add options to modify existing lock file
 
-    if (dir.hasLockFile && !force)
+    if (dir.hasDepsLockFile && !force)
     {
         throw new ErrorLogException(
-            "%s already exist, use %s to overwrite", dir.lockFile, info("--force")
+            "%s already exist, use %s to overwrite", dir.depsLockFile, info("--force")
         );
     }
 
@@ -86,7 +86,7 @@ int resolveMain(string[] args)
 
         import std.file : write;
 
-        write(dir.lockFile, json.toPrettyString());
+        write(dir.depsLockFile, json.toPrettyString());
     }
     catch (ServerDownException ex)
     {

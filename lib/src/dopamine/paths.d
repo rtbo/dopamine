@@ -100,14 +100,29 @@ struct RecipeDir
         return _dopPath("profile.ini");
     }
 
-    @property bool hasLockFile() const
+    @property bool hasDepsLockFile() const
     {
-        return hasFile(lockFile);
+        return hasFile(depsLockFile);
+    }
+
+    @property string depsLockFile() const
+    {
+        return _path("dop.lock");
     }
 
     @property string lockFile() const
     {
-        return _path("dop.lock");
+        return _dopPath("lock");
+    }
+
+    @property string dopDir() const
+    {
+        return _dopDir;
+    }
+
+    @property PkgStateFile stateFile() const
+    {
+        return PkgStateFile(_dopPath("state.json"));
     }
 
     private static bool hasFile(string path)
@@ -115,11 +130,6 @@ struct RecipeDir
         import std.file : exists, isFile;
 
         return exists(path) && isFile(path);
-    }
-
-    @property string dopDir() const
-    {
-        return _dopDir;
     }
 
     @property ProfileDirs profileDirs(const(Profile) profile) const
@@ -185,6 +195,14 @@ struct RecipeDir
 
     private string _dir;
     private string _dopDir;
+}
+
+alias PkgStateFile = JsonStateFile!PkgState;
+
+/// Content of the main state for the package dir state
+struct PkgState
+{
+    string srcDir;
 }
 
 /// Structure gathering directories needed during a build
