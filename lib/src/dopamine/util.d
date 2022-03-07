@@ -6,6 +6,7 @@ import std.digest;
 import std.file;
 import std.string;
 import std.traits;
+import std.typecons;
 
 @safe:
 
@@ -93,6 +94,109 @@ auto tryAcquireLockFile(string path) @trusted
         return LockFileImpl.init;
     }
 }
+
+struct JsonStateFile(T)
+{
+    import std.stdio : File;
+
+    File f;
+
+    this(string filename)
+    {
+        const mode = exists(filename) ? "r+b" : "w+b";
+        f = File(filename, mode);
+    }
+
+    T read() @trusted
+    {
+        import vibe.data.json : deserializeJson;
+        import std.exception : assumeUnique, enforce;
+
+        const sz = f.size;
+
+        if (sz == 0)
+            return T.init;
+
+        f.seek(0);
+
+        auto bytes = new ubyte[sz];
+        auto read = f.rawRead(bytes);
+
+        enforce(read.length == bytes.length, "Could not read content of " ~ f.name);
+
+        string json = cast(string) assumeUnique(read);
+        return deserializeJson!T(json);
+    }
+
+    void write(const T val) @trusted
+    {
+        import vibe.data.json : serializeToJson, serializeToPrettyJson;
+
+        f.seek(0);
+        debug
+        {
+            serializeToPrettyJson(f.lockingTextWriter, val);
+        }
+        else
+        {
+            serializeToJson(f.lockingTextWriter, val);
+        }
+
+        version (Windows)
+        {
+            import core.sys.windows.winbase : SetEndOfFile;
+            import std.windows.syserror : wenforce;
+
+            wenforce(SetEndOfFile(f.windowsHandle), "Could not truncate " ~ f.name);
+        }
+        else version (Posix)
+        {
+            import core.sys.posix.unistd : ftruncate;
+            import std.exception : errnoEnforce;
+
+            errnoEnforce(!ftruncate(f.fileno, f.tell()), "Could not truncate " ~ f.name);
+        }
+    }
+}
+
+@("JsonStateFile")
+unittest
+{
+    string deleteMe = tempPath(null, "statefile", ".json");
+    scope (exit)
+        remove(deleteMe);
+
+    static struct TestStruct
+    {
+        string s;
+        string[] ss;
+    }
+
+    alias TestStateFile = JsonStateFile!TestStruct;
+
+    {
+        auto tsf = TestStateFile(deleteMe);
+        auto ts = tsf.read();
+        static assert(is(typeof(ts) == TestStruct));
+        assert(ts.s.length == 0);
+        assert(ts.ss.length == 0);
+        tsf.write(TestStruct("blah", ["foo", "bar", "baz"]));
+    }
+    {
+        auto tsf = TestStateFile(deleteMe);
+        auto ts = tsf.read();
+        assert(ts.s == "blah");
+        assert(ts.ss == ["foo", "bar", "baz"]);
+        tsf.write(TestStruct("ç ç", ["é", "è"]));
+    }
+    {
+        auto tsf = TestStateFile(deleteMe);
+        auto ts = tsf.read();
+        assert(ts.s == "ç ç");
+        assert(ts.ss == ["é", "è"]);
+    }
+}
+
 // /// Obtain an InputRange of `char` over the file
 // auto fileChars(File file)
 // {
