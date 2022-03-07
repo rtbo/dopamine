@@ -22,4 +22,6 @@ dop_ut_exe = executable('unit-tests', dop_ut_src,
     d_unittest: true,
 )
 
-test('unit', dop_ut_exe)
+test('all unit tests', dop_ut_exe,
+    suite: 'unit',
+)
