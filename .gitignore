@@ -13,3 +13,4 @@ dub.selections.json
 *.a
 *.lib
 *.exe
+*.dll
