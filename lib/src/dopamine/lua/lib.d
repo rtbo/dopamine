@@ -94,6 +94,7 @@ int luaDopNativeModule(lua_State* L) nothrow
         "os": os, "dir_sep": dirSeparator, "path_sep": pathSeparator,
     ];
     const boolconsts = ["posix": posix];
+    // dfmt off
     const funcs = [
         "trim": &luaTrim,
         "path": &luaPath,
@@ -114,6 +115,7 @@ int luaDopNativeModule(lua_State* L) nothrow
         "create_archive": &luaCreateArchive,
         "extract_archive": &luaExtractArchive,
     ];
+    // dfmt on
 
     lua_createtable(L, 0, cast(int)(strconsts.length + boolconsts.length + funcs.length));
     const libInd = lua_gettop(L);
