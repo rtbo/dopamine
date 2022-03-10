@@ -90,11 +90,13 @@ int luaDopNativeModule(lua_State* L) nothrow
     }
     enum posix = os != "Windows";
 
+    // dfmt off
     const strconsts = [
-        "os": os, "dir_sep": dirSeparator, "path_sep": pathSeparator,
+        "os": os,
+        "dir_sep": dirSeparator,
+        "path_sep": pathSeparator,
     ];
     const boolconsts = ["posix": posix];
-    // dfmt off
     const funcs = [
         "trim": &luaTrim,
         "path": &luaPath,
