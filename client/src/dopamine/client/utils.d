@@ -18,18 +18,27 @@ Recipe parseRecipe(RecipeDir dir)
     return recipe;
 }
 
-auto acquireRecipeLockFile(RecipeDir dir)
+private auto acquireSomeLockFile(string path, string desc)
 {
     import dopamine.util : acquireLockFile, tryAcquireLockFile;
     import std.file : mkdirRecurse;
-    import std.path : baseName, dirName;
+    import std.path : dirName;
 
-    const path = dir.lockFile;
     mkdirRecurse(dirName(path));
     auto lock = tryAcquireLockFile(path);
     if (lock)
         return lock;
 
-    logInfo("Waiting to acquire recipe lock ", info(path));
+    logInfo("Waiting to acquire %s lock %s", desc, info(path));
     return acquireLockFile(path);
+}
+
+auto acquireRecipeLockFile(RecipeDir dir)
+{
+    return acquireSomeLockFile(dir.lockFile, "recipe");
+}
+
+auto acquireConfigLockFile(ConfigDir dir)
+{
+    return acquireSomeLockFile(dir.lockFile, "config build");
 }
