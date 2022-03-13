@@ -60,6 +60,8 @@ string homeCacheDir()
 
 struct RecipeDir
 {
+    import std.datetime.systime : SysTime;
+
     this(string dir, string dopDir = null)
     {
         import std.path : buildPath;
@@ -88,6 +90,16 @@ struct RecipeDir
     @property string recipeFile() const
     {
         return _path("dopamine.lua");
+    }
+
+    @property SysTime recipeLastModified() const
+    {
+        import std.file : timeLastModified;
+
+        if (!hasRecipeFile)
+            return SysTime.max;
+
+        return timeLastModified(recipeFile);
     }
 
     @property bool hasProfileFile() const
@@ -125,46 +137,16 @@ struct RecipeDir
         return PkgStateFile(_dopPath("state.json"));
     }
 
+    ConfigDir configDir(const(Profile) profile) const
+    {
+        return ConfigDir(_dopPath(_configDirName(profile)));
+    }
+
     private static bool hasFile(string path)
     {
         import std.file : exists, isFile;
 
         return exists(path) && isFile(path);
-    }
-
-    @property ProfileDirs profileDirs(const(Profile) profile) const
-    {
-        const dirName = _configDirName(profile);
-
-        ProfileDirs cdir;
-        cdir.work = _dopPath(dirName);
-        cdir.build = _dopPath(dirName, "build");
-        cdir.install = _dopPath(dirName, "install");
-        return cdir;
-    }
-
-    /// Get the path to the packed archive
-    /// Must be called from the package dir
-    string archiveFile(const(Profile) profile, const(Recipe) recipe) const
-    in (profile && recipe)
-    {
-        import dopamine.archive : ArchiveBackend;
-
-        import std.algorithm : findAmong;
-        import std.exception : enforce;
-        import std.format : format;
-
-        const supportedFormats = ArchiveBackend.get.supportedExts;
-        const preferredFormats = [".tar.xz", ".tar.bz2", ".tar.gz"];
-
-        const archiveFormat = findAmong(preferredFormats, supportedFormats);
-
-        enforce(archiveFormat.length, "No archive capability");
-
-        const dirName = _configDirName(profile);
-        const filename = format("%s-%s.%s%s", recipe.name, recipe.ver,
-            profile.digestHash[0 .. 10], archiveFormat[0]);
-        return _dopPath(dirName, filename);
     }
 
     static RecipeDir enforced(string dir, lazy string msg = null)
@@ -205,24 +187,38 @@ struct PkgState
     string srcDir;
 }
 
-/// Structure gathering directories needed during a build
-struct ProfileDirs
+/// Directory of a build configuration
+struct ConfigDir
 {
-    /// dop working directory
-    string work;
-    /// Directory recommendation for the build
-    string build;
-    /// directory into which files are installed
-    string install;
+    private string _dir;
 
-    /// Return a BuildDirs object to pass to the recipe for building and packaging
-    BuildDirs buildDirs(in string src, in string base = getcwd()) const
+    @property string dir() const
     {
-        import std.path : absolutePath;
-
-        return BuildDirs(src.absolutePath(base), work.absolutePath(base),
-            build.absolutePath(base), install.absolutePath(base));
+        return _dir;
     }
+
+    @property string lockFile() const
+    {
+        return _path("lock");
+    }
+
+    @property ConfigStateFile stateFile() const
+    {
+        return ConfigStateFile(_path("state.json"));
+    }
+
+    private string _path(C...)(C comps) const
+    {
+        return buildPath(_dir, comps);
+    }
+}
+
+alias ConfigStateFile = JsonStateFile!ConfigState;
+
+/// Content of the state relative to a build configuration
+struct ConfigState
+{
+    string build;
 }
 
 @("RecipeDir.recipeFile")
