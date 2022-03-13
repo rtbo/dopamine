@@ -95,67 +95,50 @@ auto tryAcquireLockFile(string path) @trusted
     }
 }
 
+/// An helper struct to serialize/deserialize objects of type `T`
+/// in a file. No atomic lock is provided, so it is advised to use
+/// external locking (e.g. with `acquireLockFile`) to avoid inter-process
+/// racing.
 struct JsonStateFile(T)
 {
-    import std.stdio : File;
+    import std.datetime.systime : SysTime;
 
-    File f;
+    string filename;
 
     this(string filename)
     {
-        const mode = exists(filename) ? "r+b" : "w+b";
-        f = File(filename, mode);
+        this.filename = filename;
     }
 
     T read() @trusted
     {
         import vibe.data.json : deserializeJson;
-        import std.exception : assumeUnique, enforce;
 
-        const sz = f.size;
-
-        if (sz == 0)
+        if (!exists(filename))
             return T.init;
 
-        f.seek(0);
-
-        auto bytes = new ubyte[sz];
-        auto read = f.rawRead(bytes);
-
-        enforce(read.length == bytes.length, "Could not read content of " ~ f.name);
-
-        string json = cast(string) assumeUnique(read);
+        string json = readText(filename);
         return deserializeJson!T(json);
     }
 
     void write(const T val) @trusted
     {
-        import vibe.data.json : serializeToJson, serializeToPrettyJson;
+        import vibe.data.json : serializeToPrettyJson;
 
-        f.seek(0);
-        debug
-        {
-            serializeToPrettyJson(f.lockingTextWriter, val);
-        }
-        else
-        {
-            serializeToJson(f.lockingTextWriter, val);
-        }
+        string json = serializeToPrettyJson(val);
+        write(filename, json);
+    }
 
-        version (Windows)
-        {
-            import core.sys.windows.winbase : SetEndOfFile;
-            import std.windows.syserror : wenforce;
+    bool opCast(T : bool)()
+    {
+        return exists(filename);
+    }
 
-            wenforce(SetEndOfFile(f.windowsHandle), "Could not truncate " ~ f.name);
-        }
-        else version (Posix)
-        {
-            import core.sys.posix.unistd : ftruncate;
-            import std.exception : errnoEnforce;
-
-            errnoEnforce(!ftruncate(f.fileno, f.tell()), "Could not truncate " ~ f.name);
-        }
+    SysTime timeLastModified() const
+    {
+        if (!exists(filename))
+            return SysTime.max;
+        return std.file.timeLastModified(filename);
     }
 }
 
