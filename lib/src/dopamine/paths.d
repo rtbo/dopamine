@@ -139,7 +139,7 @@ struct RecipeDir
 
     ConfigDir configDir(const(Profile) profile) const
     {
-        return ConfigDir(_dopPath(_configDirName(profile)));
+        return ConfigDir(_dopPath(_configDirName(profile)), this);
     }
 
     private static bool hasFile(string path)
@@ -191,25 +191,26 @@ struct PkgState
 struct ConfigDir
 {
     private string _dir;
+    private RecipeDir _recipeDir;
 
     @property string dir() const
     {
         return _dir;
     }
 
+    @property RecipeDir recipeDir() const
+    {
+        return _recipeDir;
+    }
+
     @property string lockFile() const
     {
-        return _path("lock");
+        return _dir ~ ".lock";
     }
 
     @property ConfigStateFile stateFile() const
     {
-        return ConfigStateFile(_path("state.json"));
-    }
-
-    private string _path(C...)(C comps) const
-    {
-        return buildPath(_dir, comps);
+        return ConfigStateFile(_dir ~ ".json");
     }
 }
 
