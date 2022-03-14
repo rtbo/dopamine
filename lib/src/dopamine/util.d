@@ -102,11 +102,16 @@ auto tryAcquireLockFile(string path) @trusted
 struct JsonStateFile(T)
 {
     import std.datetime.systime : SysTime;
+    import std.exception : enforce;
 
     string filename;
 
     this(string filename)
     {
+        enforce(
+            !std.file.exists(filename) || isFile(filename),
+            filename ~ ": must not be a directory!"
+        );
         this.filename = filename;
     }
 
@@ -114,7 +119,7 @@ struct JsonStateFile(T)
     {
         import vibe.data.json : deserializeJson;
 
-        if (!exists(filename))
+        if (!std.file.exists(filename))
             return T.init;
 
         string json = readText(filename);
@@ -126,19 +131,41 @@ struct JsonStateFile(T)
         import vibe.data.json : serializeToPrettyJson;
 
         string json = serializeToPrettyJson(val);
-        write(filename, json);
+        std.file.write(filename, json);
     }
 
     bool opCast(T : bool)()
     {
-        return exists(filename);
+        return std.file.exists(filename);
+    }
+
+    bool exists() const
+    {
+        return std.file.exists(filename);
     }
 
     SysTime timeLastModified() const
     {
-        if (!exists(filename))
+        if (!std.file.exists(filename))
             return SysTime.max;
         return std.file.timeLastModified(filename);
+    }
+
+    void touch()
+    {
+        if (!std.file.exists(filename))
+        {
+            import std.stdio : File;
+
+            File(filename, "w");
+        }
+        else
+        {
+            import std.datetime.systime : Clock;
+            const now = Clock.currTime;
+
+            setTimes(filename, now, now);
+        }
     }
 }
 
