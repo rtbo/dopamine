@@ -244,6 +244,9 @@ function Meson:setup(params)
     end
 
     local cmd = {'meson', 'setup', self.build_dir}
+    if params.src_dir then
+        table.insert(cmd, params.src_dir)
+    end
 
     for k, v in pairs(self.options) do
         table.insert(cmd, k .. '=' .. v)
