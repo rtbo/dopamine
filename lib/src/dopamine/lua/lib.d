@@ -355,9 +355,13 @@ int luaIsDir(lua_State* L) nothrow
     return 1;
 }
 
+/// Create a directory and return the absolute path of created dir
+/// Argument is a table containing a single array entry
+/// and optionally a "recurse" named entry
 int luaMkdir(lua_State* L) nothrow
 {
     import std.file : mkdir, mkdirRecurse;
+    import std.path : absolutePath;
 
     if (lua_type(L, 1) == LUA_TSTRING)
     {
@@ -369,15 +373,18 @@ int luaMkdir(lua_State* L) nothrow
 
     return L.catchAll!({
         const dirs = luaReadStringArray(L, 1);
+        enforce(dirs.length == 1, "dop.mkdir can only create a single directory");
+        const dir = dirs[0];
+
         const recurse = luaGetTable!bool(L, 1, "recurse", false);
-        foreach (d; dirs)
-        {
-            if (recurse)
-                mkdirRecurse(d);
-            else
-                mkdir(d);
-        }
-        return 0;
+
+        if (recurse)
+            mkdirRecurse(dir);
+        else
+            mkdir(dir);
+
+        luaPush(L, absolutePath(dir));
+        return 1;
     });
 }
 
