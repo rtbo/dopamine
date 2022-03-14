@@ -4,11 +4,44 @@ import dopamine.client.utils;
 
 import dopamine.log;
 import dopamine.paths;
+import dopamine.recipe;
 import dopamine.util;
 
 import std.getopt;
 import std.file;
 import std.path;
+
+string enforceSourceReady(RecipeDir dir, Recipe recipe)
+{
+    if (recipe.inTreeSrc)
+    {
+        const srcDir = recipe.source();
+        auto state = dir.stateFile.read();
+        state.srcDir = srcDir;
+        dir.stateFile.write(state);
+        return srcDir;
+    }
+
+    auto sf = dir.stateFile;
+    auto state = sf.read();
+    if (!sf || !state.srcDir)
+    {
+        throw new ErrorLogException(
+            "Source directory is not ready. Run %s.",
+            info("dop source"),
+        );
+    }
+
+    if (sf.timeLastModified > dir.recipeLastModified)
+    {
+        throw new ErrorLogException(
+            "Source directory is not up-to-date. Run %s.",
+            info("dop source"),
+        );
+    }
+
+    return state.srcDir;
+}
 
 int sourceMain(string[] args)
 {
@@ -27,7 +60,8 @@ int sourceMain(string[] args)
 
     if (recipe.inTreeSrc)
     {
-        logInfo("%s: in-tree at %s - nothing to do", info("Source"), info(absolutePath(recipe.source())));
+        logInfo("%s: in-tree at %s - nothing to do", info("Source"), info(
+                absolutePath(recipe.source())));
     }
 
     auto lock = acquireRecipeLockFile(dir);
