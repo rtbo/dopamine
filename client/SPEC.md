@@ -25,6 +25,21 @@ $ dop [global options] [command] [command options]
 - `--help` :white_check_mark:
   - Print help and exit
 
+## Paths and Files
+
+The following table contains paths, that may be referred to in the next sections.
+
+| Symbol        | Path                  | Description                                 |
+| ------------- | ----------------      | -------------------------------             |
+| `$USR_DIR`    | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine |
+|               | `$USR_DIR/profiles`   | Local cache for profiles                    |
+|               | `$USR_DIR/packages`   | Local package cache                         |
+| `$PKG`        |                       | Refer to a package directory (aka. recipe directory) |
+|               | `$PKG/dopamine.lua`   | Package recipe file.
+| `$DOP`        | `$PKG/.dop`           | Package working directory for `dop`         |
+|               | `$PKG/dop.lock`       | Dependency lock file                        |
+| `$CONFIG`     | `$DOP/[config hash]`  | Working directory for a config              |
+
 ## Recipe file
 
 Each package is decribed by a recipe file, which is a Lua script named `dopamine.lua` located at the package root.
@@ -45,7 +60,12 @@ There can be 2 sorts of recipe:
         - TBD
     - When a recipe function is executed, it receives the recipe table as first argument
 
-When a recipe function is executed, the current directory is always the package root directory.
+Depending on the execution context, the current directory is not always the same.
+| Execution context | Current directory |
+| ----------------- | ----------------- |
+| Recipe evaluation | $PKG              |
+| `source` function | $PKG              |
+| `build`  function | $CONFIG           |
 
 ### dop Lua library
 In order to help packaging, a `dop` Lua library is provided by the client.
@@ -56,24 +76,6 @@ local dop = require('dop')
 Recipes may import other libraries, but the `dop` library is the only one that is guaranteed to be always available.
 It contains functions to run commands, concatenate paths, perform various file system operations, compute checksums...<br>
 Documentation TBD, see `lib/src/dopamine/lua` source folder.
-
-## Paths and Files
-
-The following table contains paths, that may be referred to in the next sections.
-
-| Symbol        | Path                  | Description                                 |
-| ------------- | ----------------      | -------------------------------             |
-| `$USR_DIR`    | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine    |
-|               | `$USR_DIR/profiles`   | Local cache for profiles                    |
-|               | `$USR_DIR/packages`   | Local package cache                         |
-| `$PKG`        |                       | Refer to a package directory                |
-|               | `$PKG/dopamine.lua`   | Package recipe file.
-| `$DOP`        | `$PKG/.dop`           | Package working directory for `dop`         |
-|               | `$PKG/dop.lock`       | Dependency lock file                        |
-| `$PROF`       | `$DOP/[profile hash]` | Working directory for a profile             |
-| `$INST`       | `$PROF/install`       | Install directory for a profile (optional)  |
-| `$PKG_LCK`    | `$DOP/.lock`          | Lock file for the complete package          |
-| `$BLD_LCK`    | `$PROF/.lock`         | Lock file for a profile                     |
 
 ### Lock files
 
@@ -215,7 +217,7 @@ _Requirements_:
 
 _Command options_:
 
-- `dop source` :x:
+- `dop source` :heavy_check_mark:
   - Execute the `source` function of the recipe file.
   - If `source` symbol is a string, the source code is expected
     local with the package, `source` being the relative path to the source directory.
@@ -234,13 +236,12 @@ _Prerequisites_:
 _Requirements_:
 
 - The `build` function of the Lua recipe must effectively compile the package using the build system provided by the package source code.
-- The build must happen in a directory within the package that is unique for the build configuration. `dirs.build` is provided as a possible build directory, but other directory can be used if deemed necessary.
-- The `build` function accepts three arguments in addition to `self` (the recipe table):
-  1. `dirs`: a table containing paths:
-     - `dirs.src` to the source directory
-     - `dirs.config` is a working directory unique for the (profile + options) configuration
-     - `dirs.build` is a recommended location to build
-     - `dirs.install` is where to install (which is optional)
+- The build must happen in a directory within the package that is unique for the build configuration. Such a directory
+is created and made current before the function is executed.
+- The `build` function accepts two arguments in addition to `self` (the recipe table):
+  1. `dirs`: a table containing several paths:
+     - `dirs.root`: path of package root directory containing the recipe file
+     - `dirs.src`: the path to the source code
   2. `config`: the compilation config table:
      - `config.profile`: the compilation profile
      - `config.options`: the compilation options
