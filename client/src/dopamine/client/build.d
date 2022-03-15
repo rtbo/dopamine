@@ -6,10 +6,12 @@ import dopamine.client.utils;
 
 import dopamine.log;
 import dopamine.paths;
+import dopamine.recipe;
 
 import std.exception;
+import std.file;
 import std.getopt;
-
+import std.path;
 
 int buildMain(string[] args)
 {
@@ -35,7 +37,7 @@ int buildMain(string[] args)
 
     auto recipe = parseRecipe(dir);
 
-    const srcDir = enforceSourceReady(dir, recipe);
+    const srcDir = enforceSourceReady(dir, recipe).absolutePath();
 
     auto profile = enforceProfileReady(dir, recipe, profileName);
 
@@ -55,6 +57,15 @@ int buildMain(string[] args)
     }
 
     destroy(lock);
+
+    const cwd = getcwd();
+
+    const bdirs = BuildDirs(absolutePath(".", cwd), absolutePath(srcDir, cwd));
+
+    mkdirRecurse(cDir.dir);
+    chdir(cDir.dir);
+
+    recipe.build(bdirs, BuildConfig(profile), null);
 
     return 0;
 }

@@ -1,5 +1,6 @@
 module dopamine.client.app;
 
+import dopamine.client.build;
 import dopamine.client.login;
 import dopamine.client.profile;
 import dopamine.client.resolve;
@@ -36,6 +37,7 @@ int main(string[] args)
         Command("profile", &profileMain, "Manage compilation profile"),
         Command("resolve", &resolveMain, "Resolve and lock dependencies versions"),
         Command("source", &sourceMain, "Download and prepare the source code"),
+        Command("build", &buildMain, "Bulid the package"),
     ];
     const commandNames = commands.map!(c => c.name).array;
 

@@ -16,28 +16,22 @@ import std.stdio;
 import std.variant;
 
 /// A recipe dependency specification
-struct DepSpec {
+struct DepSpec
+{
     string name;
     VersionSpec spec;
 }
 
-enum BuildOptionType
+/// The build configuration
+struct BuildConfig
 {
-    boolean,
-    str,
-    choice,
-    number,
+    // at the moment only the profile, but build options are to be added
+    // as well as some dependencies options or checksum
+    // TODO: put this in another header
+    Profile profile;
 }
 
-alias BuildOptionVal = Algebraic!(string, bool, int);
-
-struct BuildOptionDef
-{
-    BuildOptionType type;
-    string[] choices;
-    BuildOptionVal def;
-}
-
+/// Directories passed to the `build` recipe function
 struct BuildDirs
 {
     string root;
@@ -281,18 +275,18 @@ struct Recipe
         luaSetTable(L, ind, "root", dirs.root);
     }
 
-    private void pushConfig(lua_State* L, Profile profile) @trusted
+    private void pushConfig(lua_State* L, BuildConfig config) @trusted
     {
         lua_createtable(L, 0, 4);
         const ind = lua_gettop(L);
 
         lua_pushliteral(L, "profile");
-        luaPushProfile(L, profile);
+        luaPushProfile(L, config.profile);
         lua_settable(L, ind);
 
         // TODO options
 
-        const hash = profile.digestHash;
+        const hash = config.profile.digestHash;
         const shortHash = hash[0 .. 10];
         luaSetTable(L, ind, "hash", hash);
         luaSetTable(L, ind, "short_hash", shortHash);
@@ -320,7 +314,7 @@ struct Recipe
     }
 
     /// Execute the `build` function of this recipe
-    bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null) @system
+    bool build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
     in (isPackage, "Light recipes do not build")
     {
         auto L = d.L;
@@ -330,7 +324,7 @@ struct Recipe
 
         lua_pushvalue(L, 1); // push self
         pushBuildDirs(L, dirs);
-        pushConfig(L, profile);
+        pushConfig(L, config);
         pushDepInfos(L, depInfos);
 
         if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 1, 0) != LUA_OK)
