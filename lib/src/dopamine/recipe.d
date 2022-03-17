@@ -1,5 +1,6 @@
 module dopamine.recipe;
 
+import dopamine.build_id;
 import dopamine.dep.spec;
 import dopamine.lua.lib;
 import dopamine.lua.profile;
@@ -20,15 +21,6 @@ struct DepSpec
 {
     string name;
     VersionSpec spec;
-}
-
-/// The build configuration
-struct BuildConfig
-{
-    // at the moment only the profile, but build options are to be added
-    // as well as some dependencies options or checksum
-    // TODO: put this in another header
-    Profile profile;
 }
 
 /// Directories passed to the `build` recipe function
@@ -286,7 +278,7 @@ struct Recipe
 
         // TODO options
 
-        const hash = config.profile.digestHash;
+        const hash = config.digestHash;
         const shortHash = hash[0 .. 10];
         luaSetTable(L, ind, "hash", hash);
         luaSetTable(L, ind, "short_hash", shortHash);

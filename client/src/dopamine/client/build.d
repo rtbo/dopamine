@@ -4,6 +4,7 @@ import dopamine.client.profile;
 import dopamine.client.source;
 import dopamine.client.utils;
 
+import dopamine.build_id;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
