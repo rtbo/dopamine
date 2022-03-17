@@ -42,7 +42,8 @@ int buildMain(string[] args)
 
     auto profile = enforceProfileReady(dir, recipe, profileName);
 
-    const cDir = dir.configDir(profile);
+    auto config = BuildConfig(profile);
+    const cDir = dir.configDir(config);
     auto cLock = acquireConfigLockFile(cDir);
 
     auto stateFile = cDir.stateFile;
@@ -66,7 +67,7 @@ int buildMain(string[] args)
     mkdirRecurse(cDir.dir);
     chdir(cDir.dir);
 
-    recipe.build(bdirs, BuildConfig(profile), null);
+    recipe.build(bdirs, config, null);
 
     return 0;
 }

@@ -4,6 +4,8 @@ import dopamine.profile;
 
 import std.digest.sha;
 
+@safe:
+
 alias DopDigest = SHA1;
 
 /// The build configuration

@@ -1,5 +1,6 @@
 module dopamine.paths;
 
+import dopamine.build_id;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
@@ -137,9 +138,9 @@ struct RecipeDir
         return PkgStateFile(_dopPath("state.json"));
     }
 
-    ConfigDir configDir(const(Profile) profile) const
+    ConfigDir configDir(const(BuildConfig) config) const
     {
-        return ConfigDir(_dopPath(_configDirName(profile)), this);
+        return ConfigDir(_dopPath(_configDirName(config)), this);
     }
 
     private static bool hasFile(string path)
@@ -170,9 +171,9 @@ struct RecipeDir
         return buildPath(_dopDir, comps);
     }
 
-    private string _configDirName(const(Profile) profile) const
+    private string _configDirName(const(BuildConfig) config) const
     {
-        return profile.digestHash[0 .. 10];
+        return config.digestHash[0 .. 10];
     }
 
     private string _dir;
