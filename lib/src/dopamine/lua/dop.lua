@@ -230,19 +230,20 @@ end
 
 function Meson:setup(params)
     assert(params, 'Meson:setup must be passed a parameter table')
+
     self.build_dir = assert(params.build_dir,
                             'build_dir is a mandatory parameter')
-    self.install_dir = assert(params.install_dir,
-                              'install_dir is a mandatory parameter')
 
-    self.options['--prefix'] = params.install_dir
+    if params.install_dir then
+        self.options['--prefix'] = params.install_dir
 
-    -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
-    -- e.g. [prefix]/lib/x86_64-linux-gnu
-    -- we don't want this with dopamine if we are not installing
-    -- to system wide location. see meson #5925
-    if dop.os == 'Linux' and not is_system_wide(params.install_dir) then
-        self.options['--libdir'] = dop.path(params.install_dir, 'lib')
+        -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
+        -- e.g. [prefix]/lib/x86_64-linux-gnu
+        -- we don't want this with dopamine if we are not installing
+        -- to system wide location. see meson #5925
+        if dop.os == 'Linux' and not is_system_wide(params.install_dir) then
+            self.options['--libdir'] = dop.path(params.install_dir, 'lib')
+        end
     end
 
     if params.options then
