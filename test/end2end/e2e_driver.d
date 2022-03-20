@@ -344,6 +344,7 @@ struct Test
         string[string] env;
         env["DOP"] = dopExe;
         env["DOP_HOME"] = sandboxHomePath();
+        env["DOP_E2E_TEST_CONFIG"] = sandboxPath("config.hash");
         return env;
     }
 
@@ -432,6 +433,14 @@ struct Test
         if (reg)
         {
             assert(reg.stop() == 0, "registry did not close normally");
+        }
+
+        if (exists(sandboxPath("config.hash")))
+        {
+            const hash = cast(string)assumeUnique(read(sandboxPath("config.hash")));
+            writeln(hash);
+            env["DOP_CONFIG_HASH"] = hash;
+            env["DOP_CONFIG"] = hash[0 .. 10];
         }
 
         auto result = RunResult(
