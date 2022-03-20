@@ -179,6 +179,7 @@ class ExpectVersion : Expect
 struct Test
 {
     string name;
+    string[] preCmds;
     string command;
 
     string recipe;
@@ -206,26 +207,30 @@ struct Test
                 continue;
             }
 
+            enum preCmdMark = "PRE_CMD=";
             enum cmdMark = "CMD=";
             enum recipeMark = "RECIPE=";
             enum cacheMark = "CACHE=";
             enum registryMark = "REGISTRY=";
 
             const mark = line.startsWith(
-                cmdMark, recipeMark, cacheMark, registryMark
+                preCmdMark, cmdMark, recipeMark, cacheMark, registryMark
             );
             switch (mark)
             {
             case 1:
-                test.command = line[cmdMark.length .. $];
+                test.preCmds ~= line[preCmdMark.length .. $];
                 break;
             case 2:
-                test.recipe = line[recipeMark.length .. $];
+                test.command = line[cmdMark.length .. $];
                 break;
             case 3:
-                test.cache = line[cacheMark.length .. $];
+                test.recipe = line[recipeMark.length .. $];
                 break;
             case 4:
+                test.cache = line[cacheMark.length .. $];
+                break;
+            case 5:
                 test.registry = line[registryMark.length .. $];
                 break;
             case 0:
@@ -387,6 +392,23 @@ struct Test
             env["E2E_REGISTRY_PORT"] = port.to!string;
             env["DOP_REGISTRY"] = format("http://localhost:%s", port);
             reg = new Registry(regExe, port, env, name);
+        }
+
+        foreach (preCmd; preCmds)
+        {
+            import std.conv : to;
+
+            const cmd = expandEnvVars(preCmd, env);
+            auto res = executeShell(cmd, env, Config.none, size_t.max, sandboxRecipePath);
+            if (res.status != 0)
+            {
+                string msg = "Pre-command failed.\n" ~ cmd ~ " returned " ~ res.status.to!string ~ ".";
+                if (res.output)
+                {
+                    msg ~= " Output:\n" ~ res.output;
+                }
+                throw new Exception(msg);
+            }
         }
 
         const cmd = expandEnvVars(command, env);
