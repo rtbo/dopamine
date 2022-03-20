@@ -19,12 +19,14 @@ e2e_env = [
 e2e_tests = [
     'profile',
     'profile-describe',
+    'profile-discover',
     'resolve-light-cache',
     'resolve-light-highest',
     'resolve-notarecipe',
     'source-in-tree',
     'source-notarecipe',
     'source-out-of-tree',
+    'build',
 ]
 
 foreach e2e_test : e2e_tests

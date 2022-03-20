@@ -5,17 +5,13 @@ return {
     revision = '1',
 
     -- called from the config directory
-    build = function(self, src_dir, config)
+    build = function(self, dirs, config)
         local meson = dop.Meson:new(config.profile)
 
         build_dir = dop.mkdir {"build", recurse = true}
 
-
-        meson:setup{build_dir = dirs.build, install_dir = dirs.install}
-        dop.from_dir(dirs.build, function()
-            meson:compile()
-            meson:install()
-        end)
+        meson:setup{build_dir = build_dir, src_dir = dirs.src}
+        dop.from_dir(build_dir, function() meson:compile() end)
 
         return true
     end,
