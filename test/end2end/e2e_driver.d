@@ -640,7 +640,7 @@ string expandEnvVars(string input, string[string] environment)
     {
         if (env && !mustach)
         {
-            if (isAlphaNum(c))
+            if (isAlphaNum(c) || c == '_')
                 var ~= c;
             else if (var.length == 0 && c == '{')
                 mustach = true;
