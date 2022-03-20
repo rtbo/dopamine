@@ -64,6 +64,19 @@ function dop.installer(src_dir, dest_dir)
     return inst
 end
 
+function dop.to_string(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dop.to_string(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
 
 local function find_libfile_posix (dir, name, libtype)
     if not libtype or libtype == 'shared' then
