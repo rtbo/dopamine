@@ -13,6 +13,7 @@ import std.exception;
 import std.file;
 import std.getopt;
 import std.path;
+import std.process;
 
 int buildMain(string[] args)
 {
@@ -43,6 +44,12 @@ int buildMain(string[] args)
     auto profile = enforceProfileReady(dir, recipe, profileName);
 
     auto config = BuildConfig(profile);
+    if (environment.get("DOP_E2E_TEST_CONFIG"))
+    {
+        // undocumented env var used to dump the config hash in a file.
+        // Used by end-to-end tests to locate build config directory
+        write(environment["DOP_E2E_TEST_CONFIG"], config.digestHash);
+    }
     const cDir = dir.configDir(config);
     auto cLock = acquireConfigLockFile(cDir);
 
