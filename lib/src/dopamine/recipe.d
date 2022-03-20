@@ -549,7 +549,6 @@ package class RecipePayload
                     break;
                 case LUA_TSTRING:
                     d.revision = luaToString(L, -1);
-                    writefln(d.revision);
                     break;
                 default:
                     throw new Exception("Invalid revision specification");
