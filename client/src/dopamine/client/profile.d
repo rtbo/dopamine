@@ -93,20 +93,30 @@ int profileMain(string[] args)
     {
         Lang[] langs = [Lang.d, Lang.cpp, Lang.c];
         auto profile = detectDefaultProfile(langs, Yes.allowMissing);
-        Appender!string app;
-        profile.describe(app);
+        const homeFile = homeProfileFile(profile.name);
+        const dirFile = dir.profileFile;
         logInfo(
-            "Discovered default profile %s:\n%s",
-            info(profile.name), app.data
+            "Discovered default profile %s",
+            info(profile.name)
         );
-        profile.saveToFile(homeProfileFile(profile.name));
+        logInfo("Saving to %s", info(homeFile));
+        profile.saveToFile(homeFile, true, true);
+        logInfo("Saving to %s", info(dirFile));
+        profile.saveToFile(dirFile, true, true);
+
+        if (opt.describe)
+        {
+            profile.describe(stdout.lockingTextWriter);
+        }
+
+        return 0;
     }
 
     if (opt.isRead)
     {
-        enforce(exists(dir.profileFile), new FormatLogException(
-                "%s No profile file to read from",
-                error("Error:")
+        enforce(exists(dir.profileFile), new ErrorLogException(
+                "No profile file to read from: %s: No such file",
+                info(dir.profileFile)
         ));
         auto profile = Profile.loadFromFile(dir.profileFile);
         if (opt.describe)
@@ -145,8 +155,6 @@ int profileMain(string[] args)
     }
 
     auto orig = profile;
-
-    bool modified;
 
     if (opt.addMissing)
     {
@@ -272,7 +280,7 @@ private struct ProfileOptions
     @property Mode mode() const
     {
         if (addMissing || setLangs.length || setDebug || setRelease ||
-            profileName.length || exportName.length)
+            profileName.length || exportName.length || discover)
         {
             return Mode.write;
         }
