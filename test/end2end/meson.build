@@ -35,6 +35,7 @@ foreach e2e_test : e2e_tests
         env: e2e_env,
         args: [files('tests/' + e2e_test + '.test')],
         suite: 'e2e',
+        timeout: 60,
     )
 
 endforeach
