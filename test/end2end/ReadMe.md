@@ -33,6 +33,11 @@ with the `$DOP_REGISTRY` environment variable. (one server instance per test)
 
 ## Assetions
 
+The following assertions are supported.
+For each entry, `EXPECT` can be replaced by `ASSERT`.
+Unlike `EXPECT`, in case of `ASSERT` failure, the execution stops right away and
+subsequent assertions are not checked.
+
 - `EXPECT_FAIL`
   - expect the command to fail
   - if not present, the command is expected to succeed

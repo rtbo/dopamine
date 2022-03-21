@@ -20,11 +20,25 @@ interface Expect
     string expect(ref RunResult res);
 }
 
+class Assert : Expect
+{
+    Expect exp;
+    this(Expect exp)
+    {
+        this.exp = exp;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        return exp.expect(res);
+    }
+}
+
 class StatusExpect : Expect
 {
     bool expectFail;
 
-    string expect(ref RunResult res)
+    override string expect(ref RunResult res)
     {
         const fail = res.status != 0;
         if (fail == expectFail)
@@ -244,7 +258,9 @@ struct Test
 
     static Test parseFile(string filename)
     {
-        const expectRe = regex(`^EXPECT_([A-Z_]+)(\[(.*?)\])?(=(.+))?$`);
+        import std.algorithm : remove;
+
+        const expectRe = regex(`^(EXPECT|ASSERT)_([A-Z_]+)(\[(.*?)\])?(=(.+))?$`);
 
         Test test;
         test.name = baseName(stripExtension(filename));
@@ -292,45 +308,54 @@ struct Test
                 auto m = matchFirst(line, expectRe);
                 enforce(!m.empty, format("%s: Unrecognized entry: %s", test.name, line));
 
-                const type = m[1];
-                const arg = m[3];
-                const data = m[5];
+                const mode = m[1];
+                const type = m[2];
+                const arg = m[4];
+                const data = m[6];
+
+                Expect expect;
 
                 switch (type)
                 {
                 case "FAIL":
                     statusExpect.expectFail = true;
+                    expect = statusExpect;
+                    test.expectations = remove!(exp => exp is statusExpect)(test.expectations);
                     break;
                 case "FILE":
-                    test.expectations ~= new ExpectFile(data);
+                    expect = new ExpectFile(data);
                     break;
                 case "DIR":
-                    test.expectations ~= new ExpectDir(data);
+                    expect = new ExpectDir(data);
                     break;
                 case "LIB":
-                    test.expectations ~= new ExpectLib(data, ExpectLib.Type.both);
+                    expect = new ExpectLib(data, ExpectLib.Type.both);
                     break;
                 case "STATIC_LIB":
-                    test.expectations ~= new ExpectLib(data, ExpectLib.Type.archive);
+                    expect = new ExpectLib(data, ExpectLib.Type.archive);
                     break;
                 case "SHARED_LIB":
-                    test.expectations ~= new ExpectLib(data, ExpectLib.Type.dynamic);
+                    expect = new ExpectLib(data, ExpectLib.Type.dynamic);
                     break;
                 case "MATCH":
-                    auto exp = new ExpectMatch(arg, data);
-                    test.expectations ~= exp;
+                    expect = new ExpectMatch(arg, data);
                     break;
                 case "NOT_MATCH":
-                    auto exp = new ExpectNotMatch(arg, data);
-                    test.expectations ~= exp;
+                    expect = new ExpectNotMatch(arg, data);
                     break;
                 case "VERSION":
-                    auto exp = new ExpectVersion(arg, data);
-                    test.expectations ~= exp;
+                    expect = new ExpectVersion(arg, data);
                     break;
                 default:
                     throw new Exception("Unknown assertion: " ~ type);
                 }
+
+                if (mode == "EXPECT")
+                    test.expectations ~= expect;
+                else if (mode == "ASSERT")
+                    test.expectations ~= new Assert(expect);
+                else assert(false, "unknown assertion mode: " ~ mode);
+
                 break;
             }
         }
@@ -557,6 +582,9 @@ struct Test
                 }
                 stderr.writeln("ASSERTION FAILED: ", failMsg);
                 numFailed++;
+
+                if (cast(Assert)exp)
+                    break;
             }
         }
 
