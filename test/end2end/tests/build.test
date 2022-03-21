@@ -4,3 +4,4 @@ CMD=$DOP build
 RECIPE=lib1
 
 EXPECT_DIR=.dop/$DOP_CONFIG/build
+EXPECT_LIB=.dop/$DOP_CONFIG/build/lib1
