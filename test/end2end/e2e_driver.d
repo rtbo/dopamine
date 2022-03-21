@@ -83,6 +83,60 @@ class ExpectDir : Expect
     }
 }
 
+class ExpectLib : Expect
+{
+    enum Type
+    {
+        archive = 1,
+        dynamic = 2,
+        both = 3,
+    }
+
+    string dirname;
+    string basename;
+    Type type;
+
+    this(string path, Type type)
+    {
+        dirname = dirName(path);
+        basename = baseName(path);
+        this.type = type;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        const prefixes = ["lib", ""];
+        string[] exts;
+        if (type & Type.archive)
+        {
+            exts ~= [".a", ".lib"];
+        }
+        if (type & Type.dynamic)
+        {
+            exts ~= [".dll", ".so"];
+        }
+        string[] tries;
+        foreach(prefix; prefixes)
+        {
+            foreach (ext; exts)
+            {
+                const filename = buildPath(dirname, prefix ~ basename ~ ext);
+                const path = res.filepath(filename);
+                if (exists(path))
+                    return null;
+                else
+                    tries ~= path;
+            }
+        }
+        auto msg = format("Could not find any library named %s in %s.\nTried:", basename, dirname);
+        foreach (tr; tries)
+        {
+            msg ~= "\n - " ~ tr;
+        }
+        return msg;
+    }
+}
+
 class ExpectMatch : Expect
 {
     string filename;
@@ -252,6 +306,15 @@ struct Test
                     break;
                 case "DIR":
                     test.expectations ~= new ExpectDir(data);
+                    break;
+                case "LIB":
+                    test.expectations ~= new ExpectLib(data, ExpectLib.Type.both);
+                    break;
+                case "STATIC_LIB":
+                    test.expectations ~= new ExpectLib(data, ExpectLib.Type.archive);
+                    break;
+                case "SHARED_LIB":
+                    test.expectations ~= new ExpectLib(data, ExpectLib.Type.dynamic);
                     break;
                 case "MATCH":
                     auto exp = new ExpectMatch(arg, data);
@@ -438,7 +501,6 @@ struct Test
         if (exists(sandboxPath("config.hash")))
         {
             const hash = cast(string)assumeUnique(read(sandboxPath("config.hash")));
-            writeln(hash);
             env["DOP_CONFIG_HASH"] = hash;
             env["DOP_CONFIG"] = hash[0 .. 10];
         }
