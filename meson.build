@@ -25,10 +25,9 @@ vibed_version = '0.9.4'
 #     )
 # endif
 # if get_option('enable_test')
-#     ut_version = '2.0.3'
-#     ut_assertions_deps = dependency('unit-threaded:assertions',
+#     ut_assertions_dep = dependency('unit-threaded:assertions',
 #         method: 'dub',
-#         version: ut_version,
+#         version: '2.0.3',
 #     )
 # endif
 
