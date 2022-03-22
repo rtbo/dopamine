@@ -105,8 +105,8 @@ if get_option('enable_server') or get_option('enable_test')
     if host_machine.system() == 'windows'
         vibed_http_deps += declare_dependency(
             link_args: [
-                join_paths(meson.source_root(), 'libs/windows-x64/libcrypto.lib'),
-                join_paths(meson.source_root(), 'libs/windows-x64/libssl.lib'),
+                join_paths(meson.source_root(), 'windows-x64/lib/libcrypto.lib'),
+                join_paths(meson.source_root(), 'windows-x64/lib/libssl.lib'),
                 'user32.lib'
             ],
         )

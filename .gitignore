@@ -10,7 +10,7 @@ install*/
 .dub/
 dub.selections.json
 #dub targets
-*.a
-*.lib
-*.exe
-*.dll
+/*.a
+/*.lib
+/*.exe
+/*.dll
