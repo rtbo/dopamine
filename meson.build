@@ -83,7 +83,7 @@ if get_option('enable_server') or get_option('enable_test')
         ),
         dependency('vibe-core',
             method: 'dub',
-            version: '1.22.0',
+            version: '1.22.1',
         ),
         dependency('eventcore',
             method: 'dub',
