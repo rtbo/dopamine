@@ -39,7 +39,7 @@ dop_src = files([
 lua_d_versions = ['LUA_53', 'BindBC_Static']
 
 dop_inc = include_directories('src')
-dop_deps = [ lua_dep, vibed_data_dep ]
+dop_deps = [ lua_dep ] + vibed_data_deps
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_src,
@@ -67,7 +67,7 @@ if get_option('enable_server') or get_option('enable_test')
     dop_mini_lib = library('dopamine-mini', dop_mini_src,
         install: false,
         include_directories: dop_inc,
-        dependencies: [vibed_data_dep],
+        dependencies: vibed_data_deps,
         d_module_versions: ['DopMiniLib'],
     )
 

@@ -16,7 +16,7 @@ dop_ut_src += all_mods
 dop_ut_exe = executable('unit-tests', dop_ut_src,
     install: false,
     include_directories: dop_ut_inc,
-    dependencies: dop_deps + ut_assertions_dep,
+    dependencies: dop_deps + ut_assertions_deps,
     d_import_dirs: dop_ut_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,
