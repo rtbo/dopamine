@@ -2,12 +2,13 @@ module dopamine.client.resolve;
 
 import dopamine.client.utils;
 
-import dopamine.api.transport;
+import dopamine.cache;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
+import dopamine.registry;
 
 import std.exception;
 import std.getopt;
@@ -40,7 +41,7 @@ int resolveMain(string[] args)
         return 0;
     }
 
-    auto dir = PackageDir.enforced(".");
+    auto dir = RecipeDir.enforced(".");
     auto recipe = parseRecipe(dir);
 
     if (!recipe.hasDependencies)
@@ -58,17 +59,18 @@ int resolveMain(string[] args)
 
     // FIXME: add options to modify existing lock file
 
-    if (dir.hasLockFile && !force)
+    if (dir.hasDepsLockFile && !force)
     {
         throw new ErrorLogException(
-            "%s already exist, use %s to overwrite", dir.lockFile, info("--force")
+            "%s already exist, use %s to overwrite", dir.depsLockFile, info("--force")
         );
     }
 
-    const network = noNetwork ? No.network : Yes.network;
+    auto cache = new PackageCache(homeCacheDir);
+    auto registry = noNetwork ? null : new Registry();
     const system = noSystem ? No.system : Yes.system;
 
-    auto service = new DependencyService(network, system);
+    auto service = new DependencyService(cache, registry, system);
 
     Heuristics heuristics;
     heuristics.mode = heuristicsMode(preferSystem, preferCache, preferLocal, pickHighest);
@@ -84,15 +86,16 @@ int resolveMain(string[] args)
 
         import std.file : write;
 
-        write(dir.lockFile, json.toPrettyString());
+        write(dir.depsLockFile, json.toPrettyString());
     }
     catch (ServerDownException ex)
     {
-        assert(network);
+        assert(registry);
         logErrorH(
             "Server %s appears down (%s), or you might be offline. Try with %s.",
             info(ex.host), ex.reason, info("--no-network"),
         );
+        return 1;
     }
 
     return 0;

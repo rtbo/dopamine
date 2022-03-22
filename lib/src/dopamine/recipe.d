@@ -1,5 +1,6 @@
 module dopamine.recipe;
 
+import dopamine.build_id;
 import dopamine.dep.spec;
 import dopamine.lua.lib;
 import dopamine.lua.profile;
@@ -16,68 +17,24 @@ import std.stdio;
 import std.variant;
 
 /// A recipe dependency specification
-struct DepSpec {
+struct DepSpec
+{
     string name;
     VersionSpec spec;
 }
 
-enum BuildOptionType
-{
-    boolean,
-    str,
-    choice,
-    number,
-}
-
-alias BuildOptionVal = Algebraic!(string, bool, int);
-
-struct BuildOptionDef
-{
-    BuildOptionType type;
-    string[] choices;
-    BuildOptionVal def;
-}
-
+/// Directories passed to the `build` recipe function
 struct BuildDirs
 {
+    string root;
     string src;
-    string config;
-    string build;
-    string install;
-
-    PackDirs toPack(string dest = null) const
-    {
-        return PackDirs(src, config, build, install, dest ? dest : install);
-    }
 
     invariant
     {
         import std.path : isAbsolute;
 
+        assert(root.isAbsolute);
         assert(src.isAbsolute);
-        assert(config.isAbsolute);
-        assert(build.isAbsolute);
-        assert(install.isAbsolute);
-    }
-}
-
-struct PackDirs
-{
-    string src;
-    string config;
-    string build;
-    string install;
-    string dest;
-
-    invariant
-    {
-        import std.path : isAbsolute;
-
-        assert(src.isAbsolute);
-        assert(config.isAbsolute);
-        assert(build.isAbsolute);
-        assert(install.isAbsolute);
-        assert(dest.isAbsolute);
     }
 }
 
@@ -307,34 +264,21 @@ struct Recipe
         lua_createtable(L, 0, 2);
         const ind = lua_gettop(L);
         luaSetTable(L, ind, "src", dirs.src);
-        luaSetTable(L, ind, "config", dirs.config);
-        luaSetTable(L, ind, "build", dirs.build);
-        luaSetTable(L, ind, "install", dirs.install);
+        luaSetTable(L, ind, "root", dirs.root);
     }
 
-    private void pushPackDirs(lua_State* L, PackDirs dirs) @trusted
-    {
-        lua_createtable(L, 0, 2);
-        const ind = lua_gettop(L);
-        luaSetTable(L, ind, "src", dirs.src);
-        luaSetTable(L, ind, "config", dirs.config);
-        luaSetTable(L, ind, "build", dirs.build);
-        luaSetTable(L, ind, "install", dirs.install);
-        luaSetTable(L, ind, "dest", dirs.dest);
-    }
-
-    private void pushConfig(lua_State* L, Profile profile) @trusted
+    private void pushConfig(lua_State* L, BuildConfig config) @trusted
     {
         lua_createtable(L, 0, 4);
         const ind = lua_gettop(L);
 
         lua_pushliteral(L, "profile");
-        luaPushProfile(L, profile);
+        luaPushProfile(L, config.profile);
         lua_settable(L, ind);
 
         // TODO options
 
-        const hash = profile.digestHash;
+        const hash = config.digestHash;
         const shortHash = hash[0 .. 10];
         luaSetTable(L, ind, "hash", hash);
         luaSetTable(L, ind, "short_hash", shortHash);
@@ -362,7 +306,7 @@ struct Recipe
     }
 
     /// Execute the `build` function of this recipe
-    bool build(BuildDirs dirs, Profile profile, DepInfo[string] depInfos = null) @system
+    bool build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
     in (isPackage, "Light recipes do not build")
     {
         auto L = d.L;
@@ -372,7 +316,7 @@ struct Recipe
 
         lua_pushvalue(L, 1); // push self
         pushBuildDirs(L, dirs);
-        pushConfig(L, profile);
+        pushConfig(L, config);
         pushDepInfos(L, depInfos);
 
         if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 1, 0) != LUA_OK)
@@ -395,64 +339,6 @@ struct Recipe
             throw new Exception("invalid return from build");
         }
         return result;
-    }
-
-    @property bool hasPackFunc() const @safe
-    {
-        return d.packFunc;
-    }
-
-    /// Execute the `package` function of this recipe
-    void pack(PackDirs dirs, Profile profile, DepInfo[string] depInfos) @system
-    in (isPackage, "Light recipes do not package")
-    in (d.packFunc, "Recipe has no 'package' function")
-    {
-        auto L = d.L;
-
-        lua_getfield(L, 1, "package");
-        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a 'package' function");
-
-        lua_pushvalue(L, 1); // push self
-        pushPackDirs(L, dirs);
-        pushConfig(L, profile);
-        pushDepInfos(L, depInfos);
-
-        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 0, 0) != LUA_OK)
-        {
-            throw new Exception("Cannot create package: " ~ luaPop!string(L));
-        }
-    }
-
-    /// Execute the `patch_install` function of this recipe
-    void patchInstall(PackDirs dirs, Profile profile, DepInfo[string] depInfos) @system
-    in (isPackage, "Light recipes do not patch")
-    {
-        auto L = d.L;
-
-        lua_getfield(L, 1, "patch_install");
-
-        switch (lua_type(L, -1))
-        {
-        case LUA_TFUNCTION:
-            break;
-        case LUA_TNIL:
-            lua_pop(L, 1);
-            return;
-        default:
-            const typ = luaL_typename(L, -1).fromStringz.idup;
-            throw new Exception(
-                    "invalid patch_install symbol: expected a function or nil, got " ~ typ);
-        }
-
-        lua_pushvalue(L, 1); // push self
-        pushPackDirs(L, dirs);
-        pushConfig(L, profile);
-        pushDepInfos(L, depInfos);
-
-        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 0, 0) != LUA_OK)
-        {
-            throw new Exception("Cannot patch installation: " ~ luaPop!string(L));
-        }
     }
 
     static Recipe parseFile(string path, string revision = null) @system
@@ -493,9 +379,6 @@ package class RecipePayload
     bool depFunc;
 
     string inTreeSrc;
-
-    bool packFunc;
-    bool patchInstallFunc;
 
     string filename;
     string revision;
@@ -646,24 +529,6 @@ package class RecipePayload
                     throw new Exception("Invalid 'build' field: expected a function");
                 }
             }
-            {
-                lua_getfield(L, 1, "package");
-                scope (exit)
-                    lua_pop(L, 1);
-
-                switch (lua_type(L, -1))
-                {
-                case LUA_TFUNCTION:
-                    d.packFunc = true;
-                    break;
-                case LUA_TNIL:
-                    break;
-                default:
-                    const typ = luaL_typename(L, -1).fromStringz.idup;
-                    throw new Exception(
-                            "invalid 'package' field: expected a function or nil, got " ~ typ);
-                }
-            }
             if (revision)
             {
                 d.revision = revision;
@@ -684,7 +549,6 @@ package class RecipePayload
                     break;
                 case LUA_TSTRING:
                     d.revision = luaToString(L, -1);
-                    writefln(d.revision);
                     break;
                 default:
                     throw new Exception("Invalid revision specification");

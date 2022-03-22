@@ -64,6 +64,19 @@ function dop.installer(src_dir, dest_dir)
     return inst
 end
 
+function dop.to_string(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dop.to_string(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
 
 local function find_libfile_posix (dir, name, libtype)
     if not libtype or libtype == 'shared' then
@@ -217,19 +230,20 @@ end
 
 function Meson:setup(params)
     assert(params, 'Meson:setup must be passed a parameter table')
+
     self.build_dir = assert(params.build_dir,
                             'build_dir is a mandatory parameter')
-    self.install_dir = assert(params.install_dir,
-                              'install_dir is a mandatory parameter')
 
-    self.options['--prefix'] = params.install_dir
+    if params.install_dir then
+        self.options['--prefix'] = params.install_dir
 
-    -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
-    -- e.g. [prefix]/lib/x86_64-linux-gnu
-    -- we don't want this with dopamine if we are not installing
-    -- to system wide location. see meson #5925
-    if dop.os == 'Linux' and not is_system_wide(params.install_dir) then
-        self.options['--libdir'] = dop.path(params.install_dir, 'lib')
+        -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
+        -- e.g. [prefix]/lib/x86_64-linux-gnu
+        -- we don't want this with dopamine if we are not installing
+        -- to system wide location. see meson #5925
+        if dop.os == 'Linux' and not is_system_wide(params.install_dir) then
+            self.options['--libdir'] = dop.path(params.install_dir, 'lib')
+        end
     end
 
     if params.options then
@@ -244,6 +258,9 @@ function Meson:setup(params)
     end
 
     local cmd = {'meson', 'setup', self.build_dir}
+    if params.src_dir then
+        table.insert(cmd, params.src_dir)
+    end
 
     for k, v in pairs(self.options) do
         table.insert(cmd, k .. '=' .. v)

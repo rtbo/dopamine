@@ -295,8 +295,16 @@ struct DepDAG
     import std.json;
     import std.typecons : Flag, No, Yes;
 
+    @disable this();
+
+    package this(DagPack root, const Heuristics heuristics)
+    {
+        _root = root;
+        _heuristics = heuristics;
+    }
+
     private DagPack _root;
-    private Heuristics _heuristics;
+    private const(Heuristics) _heuristics;
 
     /// Prepare a Dependency DAG for the given parameters.
     /// The recipe is the one of the root package.
@@ -407,7 +415,7 @@ struct DepDAG
 
         doPackVersion(recipe, root, aver);
 
-        return DepDAG(root);
+        return DepDAG(root, heuristics);
     }
 
     /// Final phase of resolution to eliminate incompatible versions and
@@ -534,7 +542,7 @@ struct DepDAG
     }
 
     /// The heuristics used to resolve this graph
-    @property inout(Heuristics) heuristics() inout @safe
+    @property const(Heuristics) heuristics() const @safe
     {
         return _heuristics;
     }

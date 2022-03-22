@@ -7,7 +7,7 @@ import dopamine.msvc;
 import std.algorithm;
 import std.array;
 import std.conv;
-import std.digest.sha;
+import std.digest;
 import std.exception;
 import std.format;
 import std.range;
@@ -200,8 +200,6 @@ BuildType fromConfig(T : BuildType)(string val)
     }
 }
 
-alias DopDigest = SHA1;
-
 /// Profile host information
 struct HostInfo
 {
@@ -224,7 +222,8 @@ struct HostInfo
         return _os;
     }
 
-    private void feedDigest(ref DopDigest digest) const
+    private void feedDigest(D)(ref D digest) const
+    if (isDigest!D)
     {
         feedDigestData(digest, _arch);
         feedDigestData(digest, _os);
@@ -275,7 +274,7 @@ struct Compiler
         _vsvc = vsvc;
     }
 
-    static Compiler detect(Lang lang, string compiler=null)
+    static Compiler detect(Lang lang, string compiler = null)
     {
         if (compiler)
         {
@@ -365,7 +364,8 @@ struct Compiler
         output.put(format("%sdisplay: %s\n", ind, displayName));
     }
 
-    private void feedDigest(ref DopDigest digest) const
+    private void feedDigest(D)(ref D digest) const
+    if (isDigest!D)
     {
         feedDigestData(digest, lang);
         feedDigestData(digest, name);
@@ -405,6 +405,8 @@ final class Profile
 
     this(string basename, HostInfo hostInfo, BuildType buildType, Compiler[] compilers)
     {
+        import std.digest.sha : SHA1;
+
         _basename = enforce(basename, "A profile must have a name");
         _hostInfo = hostInfo;
         _buildType = buildType;
@@ -416,7 +418,7 @@ final class Profile
 
         _name = _basename ~ "-" ~ _langs.map!(l => l.toConfig()).join('.');
 
-        DopDigest digest;
+        SHA1 digest;
         feedDigest(digest);
         _digestHash = toHexString!(LetterCase.lower)(digest.finish()).idup;
     }
@@ -515,7 +517,8 @@ final class Profile
         }
     }
 
-    void feedDigest(ref DopDigest digest) const
+    void feedDigest(D)(ref D digest) const
+    if (isDigest!D)
     {
         _hostInfo.feedDigest(digest);
         feedDigestData(digest, _buildType);
@@ -764,7 +767,8 @@ Profile detectDefaultProfile(Lang[] langs, Flag!"allowMissing" allowMissing)
     Compiler[] compilers;
     foreach (lang; langs)
     {
-        try {
+        try
+        {
             compilers ~= detectDefaultCompiler(lang);
         }
         catch (CompilerVersionParseException ex)
@@ -773,26 +777,28 @@ Profile detectDefaultProfile(Lang[] langs, Flag!"allowMissing" allowMissing)
         }
         catch (Exception ex)
         {
-            if (!allowMissing) {
+            if (!allowMissing)
+            {
                 throw ex;
             }
         }
     }
 
-    if (!compilers.length) throw new Exception("No compiler found, cannot initialize profile");
+    if (!compilers.length)
+        throw new Exception("No compiler found, cannot initialize profile");
 
     return new Profile("default", hostInfo, BuildType.debug_, compilers);
 }
 
 class CompilerVersionParseException : Exception
 {
-    this (string clName, string[] cmd, string output, string file = __FILE__, size_t line = __LINE__)
+    this(string clName, string[] cmd, string output, string file = __FILE__, size_t line = __LINE__)
     {
         import std.process : escapeShellCommand;
 
         super(format(
-            "Could not parse version of %s from \"%s\" output:\n",
-            clName, escapeShellCommand(cmd), output,
+                "Could not parse version of %s from \"%s\" output:\n",
+                clName, escapeShellCommand(cmd), output,
         ), file, line);
     }
 }
@@ -934,7 +940,7 @@ in (command.length >= 1)
         const ver = extractCompilerVersion(result.output, re);
         return Compiler(lang, name, ver, path);
     }
-    catch(Exception ex)
+    catch (Exception ex)
     {
         throw new CompilerVersionParseException(
             name, command, result.output

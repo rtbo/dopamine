@@ -47,7 +47,7 @@ void luaLoadDopLib(lua_State* L)
     lua_pop(L, 2);
 
     // push the dop module on the stack
-    luaDopModule(L);
+    cast(void)luaDopModule(L);
     // assign it to the 'dop' global
     lua_setglobal(L, "dop");
 
@@ -90,20 +90,34 @@ int luaDopNativeModule(lua_State* L) nothrow
     }
     enum posix = os != "Windows";
 
+    // dfmt off
     const strconsts = [
-        "os": os, "dir_sep": dirSeparator, "path_sep": pathSeparator,
+        "os": os,
+        "dir_sep": dirSeparator,
+        "path_sep": pathSeparator,
     ];
     const boolconsts = ["posix": posix];
     const funcs = [
-        "trim": &luaTrim, "path": &luaPath, "dir_name": &luaDirName,
-        "base_name": &luaBaseName, "cwd": &luaCwd, "chdir": &luaChangeDir,
-        "is_file": &luaIsFile, "is_dir": &luaIsDir, "mkdir": &luaMkdir,
-        "install_file": &luaInstallFile, "install_dir": &luaInstallDir,
-        "run_cmd": &luaRunCmd, "profile_environment": &luaProfileEnvironment,
-        "download": &luaDownload, "checksum": &luaChecksum,
+        "trim": &luaTrim,
+        "path": &luaPath,
+        "dir_name": &luaDirName,
+        "base_name": &luaBaseName,
+        "cwd": &luaCwd,
+        "chdir": &luaChangeDir,
+        "is_file": &luaIsFile,
+        "is_dir": &luaIsDir,
+        "mkdir": &luaMkdir,
+        "copy": &luaCopy,
+        "install_file": &luaInstallFile,
+        "install_dir": &luaInstallDir,
+        "run_cmd": &luaRunCmd,
+        "profile_environment": &luaProfileEnvironment,
+        "download": &luaDownload,
+        "checksum": &luaChecksum,
         "create_archive": &luaCreateArchive,
         "extract_archive": &luaExtractArchive,
     ];
+    // dfmt on
 
     lua_createtable(L, 0, cast(int)(strconsts.length + boolconsts.length + funcs.length));
     const libInd = lua_gettop(L);
@@ -341,9 +355,13 @@ int luaIsDir(lua_State* L) nothrow
     return 1;
 }
 
+/// Create a directory and return the absolute path of created dir
+/// Argument is a table containing a single array entry
+/// and optionally a "recurse" named entry
 int luaMkdir(lua_State* L) nothrow
 {
     import std.file : mkdir, mkdirRecurse;
+    import std.path : absolutePath;
 
     if (lua_type(L, 1) == LUA_TSTRING)
     {
@@ -355,16 +373,42 @@ int luaMkdir(lua_State* L) nothrow
 
     return L.catchAll!({
         const dirs = luaReadStringArray(L, 1);
+        enforce(dirs.length == 1, "dop.mkdir can only create a single directory");
+        const dir = dirs[0];
+
         const recurse = luaGetTable!bool(L, 1, "recurse", false);
-        foreach (d; dirs)
-        {
-            if (recurse)
-                mkdirRecurse(d);
-            else
-                mkdir(d);
-        }
-        return 0;
+
+        if (recurse)
+            mkdirRecurse(dir);
+        else
+            mkdir(dir);
+
+        luaPush(L, absolutePath(dir));
+        return 1;
     });
+}
+
+int luaCopy(lua_State* L) nothrow
+{
+    import std.file : copy, exists, isDir, isFile;
+    import std.path : baseName, buildPath;
+
+    const src = checkString(L, 1);
+    auto dest = checkString(L, 2);
+
+    L.catchAll!({
+        enforce(
+            exists(src) && isFile(src),
+            format("dop.copy can only copy files (attempt to copy directory %s)", src)
+        );
+        if (exists(dest) && isDir(dest))
+        {
+            dest = buildPath(dest, baseName(src));
+        }
+        copy(src, dest);
+    });
+
+    return 0;
 }
 
 int luaInstallFile(lua_State* L) nothrow

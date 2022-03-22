@@ -1,0 +1,13 @@
+# Resolve and lock dependencies of a light recipe
+
+CMD=$DOP resolve --prefer-cache
+RECIPE=app1
+CACHE=base
+REGISTRY=base
+
+# light recipes have no name printed by the client
+EXPECT_MATCH=^Recipe: OK$
+ASSERT_FILE=dop.lock
+EXPECT_MATCH[dop.lock]="preferCache"
+EXPECT_VERSION[pkga]=1.0.0
+EXPECT_VERSION[pkgb]=1.0.0

@@ -6,6 +6,7 @@ import std.digest;
 import std.file;
 import std.string;
 import std.traits;
+import std.typecons;
 
 @safe:
 
@@ -43,13 +44,246 @@ bool hasDuplicates(T)(const(T)[] arr) if (!is(T == class))
     return false;
 }
 
-size_t indexOrLast(string s, char c) pure
+private struct LockFileImpl
 {
-    import std.string : indexOf;
+    import std.stdio : File;
 
-    const ind = s.indexOf(c);
-    return ind >= 0 ? ind : s.length;
+    private File f;
+    private bool acq;
+
+    bool opCast(T : bool)() const
+    {
+        return acq;
+    }
 }
+
+/// Acquire a lock file.
+/// The file is created if it doesn't exist.
+/// If the file is locked by another process, the current thread
+/// is blocked until the lock is released and acquired by this process.
+/// The lock is released when the result goes out of scope.
+auto acquireLockFile(string path) @trusted
+{
+    import std.algorithm : move;
+    import std.stdio : File;
+
+    auto f = File(path, "w");
+    f.lock();
+    return LockFileImpl(move(f), true);
+}
+
+/// Try to acquire a lock file.
+/// The file is created if it doesn't exist.
+/// If the file is locked by another process, the function returns immediately
+/// and the result yields false in boolean context.
+/// Otherwise a lock is acquired and the result yields true in boolean context.
+/// The lock is released when the result goes out of scope.
+auto tryAcquireLockFile(string path) @trusted
+{
+    import std.algorithm : move;
+    import std.stdio : File;
+
+    auto f = File(path, "w");
+    const locked = f.tryLock();
+    if (locked)
+    {
+        return LockFileImpl(move(f), true);
+    }
+    else
+    {
+        return LockFileImpl.init;
+    }
+}
+
+/// An helper struct to serialize/deserialize objects of type `T`
+/// in a file. No atomic lock is provided, so it is advised to use
+/// external locking (e.g. with `acquireLockFile`) to avoid inter-process
+/// racing.
+struct JsonStateFile(T)
+{
+    import std.datetime.systime : SysTime;
+    import std.exception : enforce;
+
+    string filename;
+
+    this(string filename)
+    {
+        enforce(
+            !std.file.exists(filename) || isFile(filename),
+            filename ~ ": must not be a directory!"
+        );
+        this.filename = filename;
+    }
+
+    T read() @trusted
+    {
+        import vibe.data.json : deserializeJson;
+
+        if (!std.file.exists(filename))
+            return T.init;
+
+        string json = readText(filename);
+        return deserializeJson!T(json);
+    }
+
+    void write(const T val) @trusted
+    {
+        import vibe.data.json : serializeToPrettyJson;
+
+        string json = serializeToPrettyJson(val);
+        std.file.write(filename, json);
+    }
+
+    bool opCast(T : bool)()
+    {
+        return std.file.exists(filename);
+    }
+
+    bool exists() const
+    {
+        return std.file.exists(filename);
+    }
+
+    SysTime timeLastModified() const
+    {
+        if (!std.file.exists(filename))
+            return SysTime.max;
+        return std.file.timeLastModified(filename);
+    }
+
+    void touch()
+    {
+        if (!std.file.exists(filename))
+        {
+            import std.stdio : File;
+
+            File(filename, "w");
+        }
+        else
+        {
+            import std.datetime.systime : Clock;
+            const now = Clock.currTime;
+
+            setTimes(filename, now, now);
+        }
+    }
+}
+
+@("JsonStateFile")
+unittest
+{
+    string deleteMe = tempPath(null, "statefile", ".json");
+    scope (exit)
+        remove(deleteMe);
+
+    static struct TestStruct
+    {
+        string s;
+        string[] ss;
+    }
+
+    alias TestStateFile = JsonStateFile!TestStruct;
+
+    {
+        auto tsf = TestStateFile(deleteMe);
+        auto ts = tsf.read();
+        static assert(is(typeof(ts) == TestStruct));
+        assert(ts.s.length == 0);
+        assert(ts.ss.length == 0);
+        tsf.write(TestStruct("blah", ["foo", "bar", "baz"]));
+    }
+    {
+        auto tsf = TestStateFile(deleteMe);
+        auto ts = tsf.read();
+        assert(ts.s == "blah");
+        assert(ts.ss == ["foo", "bar", "baz"]);
+        tsf.write(TestStruct("ç ç", ["é", "è"]));
+    }
+    {
+        auto tsf = TestStateFile(deleteMe);
+        auto ts = tsf.read();
+        assert(ts.s == "ç ç");
+        assert(ts.ss == ["é", "è"]);
+    }
+}
+
+// /// Obtain an InputRange of `char` over the file
+// auto fileChars(File file)
+// {
+//     return FileCharRange(file);
+// }
+
+// /// Obtain an InputRange of `dchar` over the file
+// auto fileDChars(File file)
+// {
+//     return DCharRange(fileChars(file));
+// }
+
+// private struct FileCharRange
+// {
+//     private File f;
+//     private char[4096] buf;
+//     private char[] slc;
+//     bool last;
+
+//     this(File f)
+//     {
+//         this.f = f;
+//         slc = this.f.rawRead(buf[]);
+//         last = slc.length < buf.length;
+//     }
+
+//     @property bool empty()
+//     {
+//         return !slc.length;
+//     }
+
+//     @property char front()
+//     {
+//         return slc[0];
+//     }
+
+//     void popFront()
+//     {
+//         slc = slc[1 .. $];
+//         if (!slc.length && !last)
+//         {
+//             slc = this.f.rawRead(buf[]);
+//             last = slc.length < buf.length;
+//         }
+//     }
+// }
+
+// private struct DCharRange(R)
+// if (isInputRange!R && is(ElementType!R == char))
+// {
+//     import std.utf : decodeFront;
+
+//     private R chars;
+//     private dchar c;
+
+//     this(R chars)
+//     {
+//         this.chars = chars;
+//         if (!this.chars.empty)
+//             c = decodeFront(this.chars);
+//     }
+
+//     @property bool empty()
+//     {
+//         return chars.empty;
+//     }
+
+//     @property dchar front()
+//     {
+//         return c;
+//     }
+
+//     @property void popFront()
+//     {
+//         c = decodeFront(this.chars);
+//     }
+// }
 
 /// Generate a unique name for temporary path (either dir or file)
 /// Params:

@@ -12,6 +12,7 @@ import std.process;
 import std.regex;
 import std.stdio;
 import std.string;
+import std.typecons;
 
 interface Expect
 {
@@ -19,11 +20,25 @@ interface Expect
     string expect(ref RunResult res);
 }
 
+class Assert : Expect
+{
+    Expect exp;
+    this(Expect exp)
+    {
+        this.exp = exp;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        return exp.expect(res);
+    }
+}
+
 class StatusExpect : Expect
 {
     bool expectFail;
 
-    string expect(ref RunResult res)
+    override string expect(ref RunResult res)
     {
         const fail = res.status != 0;
         if (fail == expectFail)
@@ -37,62 +52,6 @@ class StatusExpect : Expect
         }
 
         return format("Command failed with status %s", res.status);
-    }
-}
-
-class ExpectMatch : Expect
-{
-    string filename;
-    string rexp;
-
-    this(string filename, string rexp)
-    {
-        this.filename = filename ? filename : "stdout";
-        this.rexp = rexp;
-    }
-
-    bool hasMatch(File file)
-    {
-        import std.typecons : No;
-
-        auto re = regex(rexp);
-
-        foreach (line; file.byLine(No.keepTerminator))
-        {
-            if (line.matchFirst(re))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    override string expect(ref RunResult res)
-    {
-        if (hasMatch(res.file(filename)))
-        {
-            return null;
-        }
-
-        return format("Expected to match '%s' in '%s'", rexp, filename);
-    }
-}
-
-class ExpectNotMatch : ExpectMatch
-{
-    this(string filename, string rexp)
-    {
-        super(filename, rexp);
-    }
-
-    override string expect(ref RunResult res)
-    {
-        if (!hasMatch(res.file(filename)))
-        {
-            return null;
-        }
-
-        return format("Unexpected match '%s' in '%s'", rexp, filename);
     }
 }
 
@@ -138,9 +97,157 @@ class ExpectDir : Expect
     }
 }
 
+class ExpectLib : Expect
+{
+    enum Type
+    {
+        archive = 1,
+        dynamic = 2,
+        both = 3,
+    }
+
+    string dirname;
+    string basename;
+    Type type;
+
+    this(string path, Type type)
+    {
+        dirname = dirName(path);
+        basename = baseName(path);
+        this.type = type;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        const prefixes = ["lib", ""];
+        string[] exts;
+        if (type & Type.archive)
+        {
+            exts ~= [".a", ".lib"];
+        }
+        if (type & Type.dynamic)
+        {
+            exts ~= [".dll", ".so"];
+        }
+        string[] tries;
+        foreach(prefix; prefixes)
+        {
+            foreach (ext; exts)
+            {
+                const filename = buildPath(dirname, prefix ~ basename ~ ext);
+                const path = res.filepath(filename);
+                if (exists(path))
+                    return null;
+                else
+                    tries ~= path;
+            }
+        }
+        auto msg = format("Could not find any library named %s in %s.\nTried:", basename, dirname);
+        foreach (tr; tries)
+        {
+            msg ~= "\n - " ~ tr;
+        }
+        return msg;
+    }
+}
+
+class ExpectMatch : Expect
+{
+    string filename;
+    string rexp;
+
+    this(string filename, string rexp)
+    {
+        this.filename = filename ? filename : "stdout";
+        this.rexp = rexp;
+    }
+
+    bool hasMatch(string file)
+    {
+        const content = cast(string) read(file);
+        auto re = regex(rexp, "m");
+        return cast(bool) content.matchFirst(re);
+    }
+
+    override string expect(ref RunResult res)
+    {
+        if (hasMatch(res.filepath(filename)))
+        {
+            return null;
+        }
+
+        return format("Expected to match '%s' in '%s'", rexp, filename);
+    }
+}
+
+class ExpectNotMatch : ExpectMatch
+{
+    this(string filename, string rexp)
+    {
+        super(filename, rexp);
+    }
+
+    override string expect(ref RunResult res)
+    {
+        if (!hasMatch(res.filepath(filename)))
+        {
+            return null;
+        }
+
+        return format("Unexpected match '%s' in '%s'", rexp, filename);
+    }
+}
+
+class ExpectVersion : Expect
+{
+    string pkgname;
+    string ver;
+
+    this(string pkgname, string ver)
+    {
+        this.pkgname = pkgname;
+        this.ver = ver;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        import vibe.data.json : parseJsonString;
+
+        auto lockpath = res.filepath("dop.lock");
+        auto jsonStr = cast(string) read(lockpath);
+        auto json = parseJsonString(jsonStr);
+        foreach (jpack; json["packages"])
+        {
+            if (jpack["name"] != pkgname)
+                continue;
+
+            foreach (jver; jpack["versions"])
+            {
+                if (jver["status"] == "resolved")
+                {
+                    if (jver["version"] == ver)
+                    {
+                        return null;
+                    }
+                    else
+                    {
+                        return format(
+                            "%s was resolved to v%s (expected v%s)",
+                            pkgname, jver["version"].get!string, ver
+                        );
+                    }
+                }
+            }
+            return "could not find a resolved version for " ~ pkgname;
+        }
+        return "could not find package " ~ pkgname ~ " in dop.lock";
+    }
+}
+
 struct Test
 {
     string name;
+    string[] preCmds;
     string command;
 
     string recipe;
@@ -151,7 +258,9 @@ struct Test
 
     static Test parseFile(string filename)
     {
-        const expectRe = regex(`^EXPECT_([A-Z_]+)(\[(.*?)\])?(=(.+))?$`);
+        import std.algorithm : remove;
+
+        const expectRe = regex(`^(EXPECT|ASSERT)_([A-Z_]+)(\[(.*?)\])?(=(.+))?$`);
 
         Test test;
         test.name = baseName(stripExtension(filename));
@@ -168,26 +277,30 @@ struct Test
                 continue;
             }
 
+            enum preCmdMark = "PRE_CMD=";
             enum cmdMark = "CMD=";
             enum recipeMark = "RECIPE=";
             enum cacheMark = "CACHE=";
             enum registryMark = "REGISTRY=";
 
             const mark = line.startsWith(
-                cmdMark, recipeMark, cacheMark, registryMark
+                preCmdMark, cmdMark, recipeMark, cacheMark, registryMark
             );
             switch (mark)
             {
             case 1:
-                test.command = line[cmdMark.length .. $];
+                test.preCmds ~= line[preCmdMark.length .. $];
                 break;
             case 2:
-                test.recipe = line[recipeMark.length .. $];
+                test.command = line[cmdMark.length .. $];
                 break;
             case 3:
-                test.cache = line[cacheMark.length .. $];
+                test.recipe = line[recipeMark.length .. $];
                 break;
             case 4:
+                test.cache = line[cacheMark.length .. $];
+                break;
+            case 5:
                 test.registry = line[registryMark.length .. $];
                 break;
             case 0:
@@ -195,32 +308,54 @@ struct Test
                 auto m = matchFirst(line, expectRe);
                 enforce(!m.empty, format("%s: Unrecognized entry: %s", test.name, line));
 
-                const type = m[1];
-                const file = m[3];
-                const data = m[5];
+                const mode = m[1];
+                const type = m[2];
+                const arg = m[4];
+                const data = m[6];
+
+                Expect expect;
 
                 switch (type)
                 {
                 case "FAIL":
                     statusExpect.expectFail = true;
-                    break;
-                case "MATCH":
-                    auto exp = new ExpectMatch(file, data);
-                    test.expectations ~= exp;
-                    break;
-                case "NOT_MATCH":
-                    auto exp = new ExpectNotMatch(file, data);
-                    test.expectations ~= exp;
+                    expect = statusExpect;
+                    test.expectations = remove!(exp => exp is statusExpect)(test.expectations);
                     break;
                 case "FILE":
-                    test.expectations ~= new ExpectFile(data);
+                    expect = new ExpectFile(data);
                     break;
                 case "DIR":
-                    test.expectations ~= new ExpectDir(data);
+                    expect = new ExpectDir(data);
+                    break;
+                case "LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.both);
+                    break;
+                case "STATIC_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.archive);
+                    break;
+                case "SHARED_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.dynamic);
+                    break;
+                case "MATCH":
+                    expect = new ExpectMatch(arg, data);
+                    break;
+                case "NOT_MATCH":
+                    expect = new ExpectNotMatch(arg, data);
+                    break;
+                case "VERSION":
+                    expect = new ExpectVersion(arg, data);
                     break;
                 default:
                     throw new Exception("Unknown assertion: " ~ type);
                 }
+
+                if (mode == "EXPECT")
+                    test.expectations ~= expect;
+                else if (mode == "ASSERT")
+                    test.expectations ~= new Assert(expect);
+                else assert(false, "unknown assertion mode: " ~ mode);
+
                 break;
             }
         }
@@ -263,11 +398,11 @@ struct Test
     {
         import std.algorithm : each, map;
 
-        auto defs = parseJSON(cast(string)read(e2ePath("definitions.json")));
+        auto defs = parseJSON(cast(string) read(e2ePath("definitions.json")));
 
         if (registry)
         {
-            defs["registry"][registry].array
+            defs["registries"][registry].array
                 .map!(jv => jv.str)
                 .each!((p) {
                     const src = e2ePath("registry", p);
@@ -297,22 +432,73 @@ struct Test
         string[string] env;
         env["DOP"] = dopExe;
         env["DOP_HOME"] = sandboxHomePath();
+        env["DOP_E2E_TEST_CONFIG"] = sandboxPath("config.hash");
         return env;
     }
 
-    int perform(string dopExe)
+    // with all end-to-end tests run in //, it is necessary
+    // to obtain a unique port for each instance
+    Tuple!(File, int) acquireRegistryPort()
+    {
+        int port = 3002;
+        while (1)
+        {
+            auto fn = e2ePath("sandbox", format("%d.lock", port));
+            auto f = File(fn, "w");
+            if (f.tryLock())
+            {
+                return tuple(f, port);
+            }
+            port += 1;
+        }
+    }
+
+    int perform(string dopExe, string regExe)
     {
         // we delete previous sandbox if any
         const sbDir = sandboxPath();
         if (exists(sbDir) && isDir(sbDir))
             rmdirRecurse(sbDir);
 
-        auto env = makeSandboxEnv(dopExe);
-
         // create the sandbox dir
         mkdirRecurse(sbDir);
 
         prepareSandbox();
+
+        auto env = makeSandboxEnv(dopExe);
+
+        File portLock;
+        Registry reg;
+
+        if (registry)
+        {
+            import std.conv : to;
+
+            auto res = acquireRegistryPort();
+            portLock = res[0];
+            const port = res[1];
+
+            env["E2E_REGISTRY_PORT"] = port.to!string;
+            env["DOP_REGISTRY"] = format("http://localhost:%s", port);
+            reg = new Registry(regExe, port, env, name);
+        }
+
+        foreach (preCmd; preCmds)
+        {
+            import std.conv : to;
+
+            const cmd = expandEnvVars(preCmd, env);
+            auto res = executeShell(cmd, env, Config.none, size_t.max, sandboxRecipePath);
+            if (res.status != 0)
+            {
+                string msg = "Pre-command failed.\n" ~ cmd ~ " returned " ~ res.status.to!string ~ ".";
+                if (res.output)
+                {
+                    msg ~= " Output:\n" ~ res.output;
+                }
+                throw new Exception(msg);
+            }
+        }
 
         const cmd = expandEnvVars(command, env);
 
@@ -332,6 +518,18 @@ struct Test
 
         int status = pid.wait();
 
+        if (reg)
+        {
+            assert(reg.stop() == 0, "registry did not close normally");
+        }
+
+        if (exists(sandboxPath("config.hash")))
+        {
+            const hash = cast(string)assumeUnique(read(sandboxPath("config.hash")));
+            env["DOP_CONFIG_HASH"] = hash;
+            env["DOP_CONFIG"] = hash[0 .. 10];
+        }
+
         auto result = RunResult(
             name, status, outPath, errPath, sandboxRecipePath, env
         );
@@ -346,8 +544,6 @@ struct Test
             {
                 if (!outputShown)
                 {
-                    import std.typecons : Yes;
-
                     stderr.writefln("TEST:     %s", name);
                     stderr.writefln("RECIPE:   %s", recipe);
                     stderr.writefln("CACHE:    %s", cache);
@@ -355,22 +551,40 @@ struct Test
                     stderr.writefln("SANDBOX:  %s", sbDir);
                     stderr.writefln("COMMAND:  %s", cmd);
                     stderr.writefln("STATUS:   %s", status);
-                    stderr.writeln("STDOUT ------");
+                    stderr.writeln("STDOUT ---------------");
                     foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
                     {
                         stderr.write(l);
                     }
-                    stderr.writeln("-------------");
-                    stderr.writeln("STDERR ------");
+                    stderr.writeln("----------------------");
+                    stderr.writeln("STDERR ---------------");
                     foreach (l; File(errPath, "r").byLine(Yes.keepTerminator))
                     {
                         stderr.write(l);
                     }
-                    stderr.writeln("-------------");
+                    stderr.writeln("----------------------");
+                    if (reg)
+                    {
+                        stderr.writeln("REGISTRY STDOUT ------");
+                        foreach (l; File(reg.outPath, "r").byLine(Yes.keepTerminator))
+                        {
+                            stderr.write(l);
+                        }
+                        stderr.writeln("----------------------");
+                        stderr.writeln("REGISTRY STDERR ------");
+                        foreach (l; File(reg.errPath, "r").byLine(Yes.keepTerminator))
+                        {
+                            stderr.write(l);
+                        }
+                        stderr.writeln("----------------------");
+                    }
                     outputShown = true;
                 }
                 stderr.writeln("ASSERTION FAILED: ", failMsg);
                 numFailed++;
+
+                if (cast(Assert)exp)
+                    break;
             }
         }
 
@@ -414,6 +628,68 @@ struct RunResult
     }
 }
 
+class Registry
+{
+    Pid pid;
+    string outPath;
+    string errPath;
+    File outFile;
+    File errFile;
+    string url;
+    int port;
+
+    this(string exe, int port, string[string] env, string testName)
+    {
+        import std.conv : to;
+
+        outPath = e2ePath("sandbox", testName, "registry.stdout");
+        errPath = e2ePath("sandbox", testName, "registry.stderr");
+
+        outFile = File(outPath, "w");
+        errFile = File(errPath, "w");
+
+        this.port = port;
+
+        const cmd = [
+            exe, port.to!string
+        ];
+        pid = spawnProcess(cmd, stdin, outFile, errFile, env, Config.none, e2ePath("sandbox", testName, "registry"));
+        url = env["DOP_REGISTRY"];
+    }
+
+    int stop()
+    {
+        import core.time : msecs;
+        import vibe.http.client : HTTPClientSettings, HTTPMethod, requestHTTP;
+
+        // check if still running (otherwise it probably crashed)
+        auto res = pid.tryWait();
+        if (res.terminated)
+        {
+            writeln("registry terminated with code ", res.status);
+            return res.status;
+        }
+
+        const stopUrl = url ~ "/api/v1/stop";
+        auto settings = new HTTPClientSettings;
+        settings.defaultKeepAliveTimeout = 0.msecs;
+
+        requestHTTP(
+            stopUrl,
+            (scope req) { req.method = HTTPMethod.POST; },
+            (scope res) {},
+            settings
+        );
+
+        int ret = pid.wait();
+
+        outFile.close();
+        errFile.close();
+
+        return ret;
+    }
+}
+
 string e2ePath(Args...)(Args args)
 {
     return buildNormalizedPath(dirName(__FILE_FULL_PATH__), args);
@@ -425,7 +701,7 @@ in (!exists(dest) || !isFile(dest))
 {
     mkdirRecurse(dest);
 
-    foreach(e; dirEntries(src, SpanMode.breadth))
+    foreach (e; dirEntries(src, SpanMode.breadth))
     {
         const relative = relativePath(e.name, src);
         const path = buildPath(dest, relative);
@@ -463,7 +739,7 @@ string expandEnvVars(string input, string[string] environment)
     {
         if (env && !mustach)
         {
-            if (isAlphaNum(c))
+            if (isAlphaNum(c) || c == '_')
                 var ~= c;
             else if (var.length == 0 && c == '{')
                 mustach = true;
@@ -522,12 +798,13 @@ int main(string[] args)
     const dopExe = absolutePath(
         environment["DOP"]);
 
+    const regExe = absolutePath(environment["DOP_E2E_REG"]);
+
     try
     {
-        auto test = Test.parseFile(
-            args[1]);
+        auto test = Test.parseFile(args[1]);
         test.check();
-        return test.perform(dopExe);
+        return test.perform(dopExe, regExe);
     }
     catch (Exception ex)
     {

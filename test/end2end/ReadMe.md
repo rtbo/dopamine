@@ -33,19 +33,31 @@ with the `$DOP_REGISTRY` environment variable. (one server instance per test)
 
 ## Assetions
 
- - `EXPECT_FAIL`
-    - expect the command to fail
- - `EXPECT_MATCH[FILE]=regex`
-    - expect to match a regex in the `FILE` content
-    - `FILE` string can contain environment variable such as $DOP_HOME
-    - `FILE` string can also be `"stdout"` or `"stderr"`
- - `EXPECT_NOT_MATCH[FILE]=regex`
-    - expect to NOT match a regex in the `FILE` content
-    - same rules regarding `FILE` apply than with `EXPECT_MATCH`
- - `EXPECT_FILE=path`
-    - expect that path points to a file
- - `EXPECT_DIR=path`
-    - expect that path points to a directory
+The following assertions are supported.
+For each entry, `EXPECT` can be replaced by `ASSERT`.
+Unlike `EXPECT`, in case of `ASSERT` failure, the execution stops right away and
+subsequent assertions are not checked.
+
+- `EXPECT_FAIL`
+  - expect the command to fail
+  - if not present, the command is expected to succeed
+- `EXPECT_MATCH[FILE]=regex`
+  - expect to match a regex in the `FILE` content
+  - `FILE` string can contain environment variable such as $DOP_HOME
+  - `FILE` string can also be `"stdout"` or `"stderr"`
+- `EXPECT_NOT_MATCH[FILE]=regex`
+  - expect to NOT match a regex in the `FILE` content
+  - same rules regarding `FILE` apply than with `EXPECT_MATCH`
+- `EXPECT_FILE=path`
+  - expect that path points to a file
+- `EXPECT_DIR=path`
+  - expect that path points to a directory
+- `EXPECT_LIB=dirname/libname`
+  - expect to find a library named `libname` in the directory `dirname`
+- `EXPECT_STATIC_LIB=dirname/libname`
+  - expect to find a static library named `libname` in the directory `dirname`
+- `EXPECT_SHARED_LIB=dirname/libname`
+  - expect to find a shared library named `libname` in the directory `dirname`
 
 ## Skip rules
 

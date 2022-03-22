@@ -3,8 +3,8 @@
 *.code-workspace
 
 #meson
-build/
-install/
+build*/
+install*/
 
 #dub
 .dub/
@@ -13,7 +13,4 @@ dub.selections.json
 *.a
 *.lib
 *.exe
-client/dop
-lib/dopamine-lib-test-lua53-static
-lib/dopamine-lib-test-unittest
-lib/doptest
+*.dll

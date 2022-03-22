@@ -1,0 +1,7 @@
+CMD=$DOP source
+RECIPE=lib2
+
+EXPECT_FILE=src/lib2.h
+EXPECT_FILE=src/lib2.c
+EXPECT_FILE=src/meson.build
+EXPECT_MATCH=Source: OK - \.

@@ -1,0 +1,3 @@
+CMD=$DOP profile --discover
+RECIPE=lib1
+EXPECT_FILE=.dop/profile.ini
