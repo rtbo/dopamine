@@ -21,13 +21,6 @@ if get_option('enable_server') or get_option('enable_test')
             version: vibed_version,
         )
     ]
-    if host_machine.system() == 'windows'
-        vibed_http_deps += declare_dependency(
-            link_args: [
-                'user32.lib'
-            ],
-        )
-    endif
 endif
 
 if get_option('enable_test')
