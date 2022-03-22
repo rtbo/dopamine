@@ -3,6 +3,10 @@ project('dopamine', ['c', 'd'],
     version: '0.1.0-alpha.1',
 )
 
+if not get_option('enable_server') and not get_option('enable_client') and not get_option('enable_test')
+    error('At least one of enable_client or enable_server or enable_test options must be active')
+endif
+
 vibed_version = '0.9.4'
 
 vibed_data_dep = dependency('vibe-d:data',
@@ -10,7 +14,7 @@ vibed_data_dep = dependency('vibe-d:data',
     version: vibed_version,
 )
 
-if get_option('enable_server')
+if get_option('enable_server') or get_option('enable_test')
     vibed_http_deps = [
         dependency('vibe-d:http',
             method: 'dub',
