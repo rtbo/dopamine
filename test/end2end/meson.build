@@ -20,13 +20,17 @@ e2e_tests = [
     'profile',
     'profile-describe',
     'profile-discover',
+
+    'resolve-notarecipe',
     'resolve-light-cache',
     'resolve-light-highest',
-    'resolve-notarecipe',
-    'source-in-tree',
+
     'source-notarecipe',
-    'source-out-of-tree',
-    'build',
+    'source-in-tree',
+    'source-zlib',
+
+    'build-lib1',
+    'build-zlib',
 ]
 
 foreach e2e_test : e2e_tests
@@ -35,7 +39,7 @@ foreach e2e_test : e2e_tests
         env: e2e_env,
         args: [files('tests/' + e2e_test + '.test')],
         suite: 'e2e',
-        timeout: 60,
+        timeout: 0,
     )
 
 endforeach
