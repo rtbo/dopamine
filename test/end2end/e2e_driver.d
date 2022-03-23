@@ -119,28 +119,35 @@ class ExpectLib : Expect
 
     override string expect(ref RunResult res)
     {
+        const dirname = res.filepath(this.dirname);
+
+        string[] names;
         const prefixes = ["lib", ""];
         string[] exts;
         if (type & Type.archive)
         {
-            exts ~= [".a", ".lib"];
+            names ~= [
+                "lib" ~ basename ~ ".a",
+                basename ~ "d.lib", // debug version on windows
+                basename ~ ".lib",
+            ];
         }
         if (type & Type.dynamic)
         {
-            exts ~= [".dll", ".so"];
+            names ~= [
+                "lib" ~ basename ~ ".so",
+                basename ~ "d.dll", // debug version on windows
+                basename ~ ".dll",
+            ];
         }
         string[] tries;
-        foreach(prefix; prefixes)
+        foreach(name; names)
         {
-            foreach (ext; exts)
-            {
-                const filename = buildPath(dirname, prefix ~ basename ~ ext);
-                const path = res.filepath(filename);
-                if (exists(path))
-                    return null;
-                else
-                    tries ~= path;
-            }
+            const path = buildPath(dirname, name);
+            if (exists(path))
+                return null;
+            else
+                tries ~= path;
         }
         auto msg = format("Could not find any library named %s in %s.\nTried:", basename, dirname);
         foreach (tr; tries)
