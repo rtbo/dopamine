@@ -11,8 +11,6 @@ dop_src = files([
     'src/bindbc/lua/v53/package.d',
     'src/bindbc/lua/v53/types.d',
 
-    'src/dopamine/api/v1.d',
-    'src/dopamine/api/attrs.d',
     'src/dopamine/archive.d',
     'src/dopamine/build_id.d',
     'src/dopamine/cache.d',
@@ -32,14 +30,13 @@ dop_src = files([
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',
     'src/dopamine/registry.d',
-    'src/dopamine/semver.d',
     'src/dopamine/util.d',
 ])
 
 lua_d_versions = ['LUA_53', 'BindBC_Static']
 
 dop_inc = include_directories('src')
-dop_deps = [ lua_dep ] + vibed_data_deps
+dop_deps = [ lua_dep, dop_common_dep ] + vibed_data_deps
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_src,
@@ -55,24 +52,3 @@ dop_dep = declare_dependency(
     dependencies: dop_deps,
     link_with: [dop_lib],
 )
-
-if get_option('enable_server') or get_option('enable_test')
-    dop_mini_src = files([
-        'src/dopamine/api/v1.d',
-        'src/dopamine/api/attrs.d',
-        'src/dopamine/cache.d',
-        'src/dopamine/semver.d',
-    ])
-
-    dop_mini_lib = library('dopamine-mini', dop_mini_src,
-        install: false,
-        include_directories: dop_inc,
-        dependencies: vibed_data_deps,
-        d_module_versions: ['DopMiniLib'],
-    )
-
-    dop_mini_dep = declare_dependency(
-        include_directories: dop_inc,
-        link_with: [dop_mini_lib],
-    )
-endif
