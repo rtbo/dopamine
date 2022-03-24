@@ -1,3 +1,5 @@
+SKIP_NOPROG=cmake
+
 PRE_CMD=$DOP profile --discover
 PRE_CMD=$DOP source
 CMD=$DOP build
