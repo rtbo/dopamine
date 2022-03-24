@@ -1,4 +1,5 @@
 SKIP_NOPROG=cmake
+SKIP_NOINET
 
 PRE_CMD=$DOP profile --discover
 PRE_CMD=$DOP source

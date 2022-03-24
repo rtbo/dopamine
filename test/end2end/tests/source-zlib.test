@@ -1,3 +1,5 @@
+SKIP_NOINET
+
 CMD=$DOP source
 RECIPE=zlib
 

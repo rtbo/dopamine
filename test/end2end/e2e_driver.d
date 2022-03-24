@@ -307,6 +307,41 @@ class SkipNoProg : Skip
     }
 }
 
+class SkipNoInet : Skip
+{
+    override string skip()
+    {
+        import core.time : seconds;
+        import vibe.http.client : HTTPClientSettings, requestHTTP;
+
+        const checkUrl = "http://clients3.google.com/generate_204";
+        auto settings = new HTTPClientSettings;
+        settings.connectTimeout = 5.seconds;
+        settings.defaultKeepAliveTimeout = 0.seconds;
+
+        try
+        {
+            int statusCode;
+
+            requestHTTP(
+                checkUrl,
+                (scope req) {},
+                (scope res) { statusCode = res.statusCode; },
+                settings
+            );
+
+            if (statusCode == 204)
+                return null;
+        }
+        catch (Exception ex)
+        {
+            writeln(ex.msg);
+        }
+
+        return "Can't establish internet connection (or clients3.google.com is down)";
+    }
+}
+
 struct Test
 {
     string name;
@@ -385,6 +420,9 @@ struct Test
                     case "NOPROG":
                         test.skips ~= new SkipNoProg(data);
                         break;
+                    case "NOINET":
+                        test.skips ~= new SkipNoInet;
+                        break;
                     default:
                         throw new Exception("Unknown skip reason: " ~ type);
                     }
@@ -458,7 +496,8 @@ struct Test
         foreach (skip; skips)
         {
             string msg = skip.skip();
-            if (msg) return msg;
+            if (msg)
+                return msg;
         }
         return null;
     }
