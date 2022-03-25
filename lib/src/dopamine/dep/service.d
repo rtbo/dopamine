@@ -277,14 +277,14 @@ final class DependencyService : DepService
         if (!dir)
             return Recipe.init;
 
-        const pdir = cast(RecipeDir)dir;
-        if (!pdir.hasRecipeFile)
+        const rdir = RecipeDir(dir.dir);
+        if (!rdir.hasRecipeFile)
         {
-            logWarningH("Cached package revision %s has no recipe!", info(pdir.dir));
+            logWarningH("Cached package revision %s has no recipe!", info(rdir.dir));
             return Recipe.init;
         }
 
-        return Recipe.parseFile(pdir.recipeFile, revision);
+        return Recipe.parseFile(rdir.recipeFile, revision);
     }
 
     private Recipe findRecipeCache(string packname, const ref Semver ver)
@@ -301,7 +301,7 @@ final class DependencyService : DepService
 
         foreach (revDir; vDir.revisionDirs())
         {
-            const recDir = cast(RecipeDir)revDir;
+            const recDir = RecipeDir(revDir.dir);
             if (recDir.hasRecipeFile)
             {
                 const revLock = revDir.lockFile;
@@ -331,7 +331,7 @@ final class DependencyService : DepService
         auto pack = packagePayload(packname);
         auto revDir = _cache.cacheRecipe(_registry, pack, ver.toString(), revision);
 
-        auto recDir = cast(RecipeDir)revDir;
+        auto recDir = RecipeDir(revDir.dir);
 
         return Recipe.parseFile(recDir.recipeFile, revDir.revision);
     }

@@ -119,28 +119,35 @@ class ExpectLib : Expect
 
     override string expect(ref RunResult res)
     {
+        const dirname = res.filepath(this.dirname);
+
+        string[] names;
         const prefixes = ["lib", ""];
         string[] exts;
         if (type & Type.archive)
         {
-            exts ~= [".a", ".lib"];
+            names ~= [
+                "lib" ~ basename ~ ".a",
+                basename ~ "d.lib", // debug version on windows
+                basename ~ ".lib",
+            ];
         }
         if (type & Type.dynamic)
         {
-            exts ~= [".dll", ".so"];
+            names ~= [
+                "lib" ~ basename ~ ".so",
+                basename ~ "d.dll", // debug version on windows
+                basename ~ ".dll",
+            ];
         }
         string[] tries;
-        foreach(prefix; prefixes)
+        foreach (name; names)
         {
-            foreach (ext; exts)
-            {
-                const filename = buildPath(dirname, prefix ~ basename ~ ext);
-                const path = res.filepath(filename);
-                if (exists(path))
-                    return null;
-                else
-                    tries ~= path;
-            }
+            const path = buildPath(dirname, name);
+            if (exists(path))
+                return null;
+            else
+                tries ~= path;
         }
         auto msg = format("Could not find any library named %s in %s.\nTried:", basename, dirname);
         foreach (tr; tries)
@@ -244,6 +251,97 @@ class ExpectVersion : Expect
     }
 }
 
+interface Skip
+{
+    string skip();
+}
+
+/// environment variable path separator
+version (Posix)
+    enum envPathSep = ':';
+else version (Windows)
+    enum envPathSep = ';';
+else
+    static assert(false);
+
+/// Search for filename in the envPath variable content which can
+/// contain multiple paths separated with sep depending on platform.
+/// Returns: null if the file can't be found.
+string searchInEnvPath(in string envPath, in string filename, in char sep = envPathSep)
+{
+    import std.algorithm : splitter;
+    import std.file : exists;
+    import std.path : buildPath;
+
+    foreach (dir; splitter(envPath, sep))
+    {
+        const filePath = buildPath(dir, filename);
+        if (exists(filePath))
+            return filePath;
+    }
+    return null;
+}
+
+class SkipNoProg : Skip
+{
+    string progname;
+
+    this(string progname)
+    {
+        this.progname = progname;
+    }
+
+    override string skip()
+    {
+        string prog = progname;
+        version (Windows)
+        {
+            if (!prog.endsWith(".exe"))
+                prog ~= ".exe";
+        }
+        if (!searchInEnvPath(environment["PATH"], prog))
+        {
+            return format("%s: No such program in PATH", progname);
+        }
+        return null;
+    }
+}
+
+class SkipNoInet : Skip
+{
+    override string skip()
+    {
+        import core.time : seconds;
+        import vibe.http.client : HTTPClientSettings, requestHTTP;
+
+        const checkUrl = "http://clients3.google.com/generate_204";
+        auto settings = new HTTPClientSettings;
+        settings.connectTimeout = 5.seconds;
+        settings.defaultKeepAliveTimeout = 0.seconds;
+
+        try
+        {
+            int statusCode;
+
+            requestHTTP(
+                checkUrl,
+                (scope req) {},
+                (scope res) { statusCode = res.statusCode; },
+                settings
+            );
+
+            if (statusCode == 204)
+                return null;
+        }
+        catch (Exception ex)
+        {
+            writeln(ex.msg);
+        }
+
+        return "Can't establish internet connection (or clients3.google.com is down)";
+    }
+}
+
 struct Test
 {
     string name;
@@ -256,11 +354,13 @@ struct Test
 
     Expect[] expectations;
 
+    Skip[] skips;
+
     static Test parseFile(string filename)
     {
         import std.algorithm : remove;
 
-        const expectRe = regex(`^(EXPECT|ASSERT)_([A-Z_]+)(\[(.*?)\])?(=(.+))?$`);
+        const lineRe = regex(`^(EXPECT|ASSERT|SKIP)_([A-Z_]+)(\[(.*?)\])?(=(.+))?$`);
 
         Test test;
         test.name = baseName(stripExtension(filename));
@@ -305,13 +405,29 @@ struct Test
                 break;
             case 0:
             default:
-                auto m = matchFirst(line, expectRe);
+                auto m = matchFirst(line, lineRe);
                 enforce(!m.empty, format("%s: Unrecognized entry: %s", test.name, line));
 
                 const mode = m[1];
                 const type = m[2];
                 const arg = m[4];
                 const data = m[6];
+
+                if (mode == "SKIP")
+                {
+                    switch (type)
+                    {
+                    case "NOPROG":
+                        test.skips ~= new SkipNoProg(data);
+                        break;
+                    case "NOINET":
+                        test.skips ~= new SkipNoInet;
+                        break;
+                    default:
+                        throw new Exception("Unknown skip reason: " ~ type);
+                    }
+                    break;
+                }
 
                 Expect expect;
 
@@ -354,7 +470,8 @@ struct Test
                     test.expectations ~= expect;
                 else if (mode == "ASSERT")
                     test.expectations ~= new Assert(expect);
-                else assert(false, "unknown assertion mode: " ~ mode);
+                else
+                    assert(false, "unknown assertion mode: " ~ mode);
 
                 break;
             }
@@ -372,6 +489,17 @@ struct Test
     {
         enforce(command, format("%s: CMD must be provided", name));
         enforce(recipe, format("%s: RECIPE must be provided", name));
+    }
+
+    string checkSkipMsg()
+    {
+        foreach (skip; skips)
+        {
+            string msg = skip.skip();
+            if (msg)
+                return msg;
+        }
+        return null;
     }
 
     string sandboxPath(Args...)(Args args)
@@ -525,7 +653,7 @@ struct Test
 
         if (exists(sandboxPath("config.hash")))
         {
-            const hash = cast(string)assumeUnique(read(sandboxPath("config.hash")));
+            const hash = cast(string) assumeUnique(read(sandboxPath("config.hash")));
             env["DOP_CONFIG_HASH"] = hash;
             env["DOP_CONFIG"] = hash[0 .. 10];
         }
@@ -583,7 +711,7 @@ struct Test
                 stderr.writeln("ASSERTION FAILED: ", failMsg);
                 numFailed++;
 
-                if (cast(Assert)exp)
+                if (cast(Assert) exp)
                     break;
             }
         }
@@ -804,6 +932,14 @@ int main(string[] args)
     {
         auto test = Test.parseFile(args[1]);
         test.check();
+
+        string skipMsg = test.checkSkipMsg();
+        if (skipMsg)
+        {
+            stderr.writeln("SKIP: ", skipMsg);
+            return 77; // GNU skip return code
+        }
+
         return test.perform(dopExe, regExe);
     }
     catch (Exception ex)

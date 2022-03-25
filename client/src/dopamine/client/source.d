@@ -32,7 +32,7 @@ string enforceSourceReady(RecipeDir dir, Recipe recipe)
         );
     }
 
-    if (sf.timeLastModified > dir.recipeLastModified)
+    if (sf.timeLastModified < dir.recipeLastModified)
     {
         throw new ErrorLogException(
             "Source directory is not up-to-date. Run %s.",
@@ -40,6 +40,7 @@ string enforceSourceReady(RecipeDir dir, Recipe recipe)
         );
     }
 
+    logInfo("Source: %s - %s", success("OK"), info(state.srcDir));
     return state.srcDir;
 }
 

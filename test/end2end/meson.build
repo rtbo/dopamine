@@ -2,8 +2,7 @@
 
 e2e_registry_exe = executable('e2e-registry', 'e2e_registry.d',
     install: false,
-    dependencies: vibed_http_deps + dop_mini_dep,
-    d_module_versions: ['DopMiniLib'],
+    dependencies: vibed_http_deps + dop_common_dep,
 )
 
 e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
@@ -20,13 +19,17 @@ e2e_tests = [
     'profile',
     'profile-describe',
     'profile-discover',
+
+    'resolve-notarecipe',
     'resolve-light-cache',
     'resolve-light-highest',
-    'resolve-notarecipe',
-    'source-in-tree',
+
     'source-notarecipe',
-    'source-out-of-tree',
-    'build',
+    'source-in-tree',
+    'source-zlib',
+
+    'build-lib1',
+    'build-zlib',
 ]
 
 foreach e2e_test : e2e_tests
@@ -35,7 +38,7 @@ foreach e2e_test : e2e_tests
         env: e2e_env,
         args: [files('tests/' + e2e_test + '.test')],
         suite: 'e2e',
-        timeout: 60,
+        timeout: 0,
     )
 
 endforeach

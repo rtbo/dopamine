@@ -1,5 +1,5 @@
 @echo off
 
-set Path=%~dp0\bin\windows-x64;%Path%
+set Path=%~dp0\windows-x64\bin;%Path%
 
 call win_env_vs.bat

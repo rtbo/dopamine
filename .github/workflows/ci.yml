@@ -10,7 +10,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         dc: [dmd-latest, ldc-latest]
-        meson: ['0.62.0']
+        meson: ['0.61.0']
 
     runs-on: ${{ matrix.os }}
 
@@ -37,9 +37,14 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         uses: ilammy/msvc-dev-cmd@v1.7.0
 
+      - name: Install Dub dependencies
+        run: |
+          dub run dub-build-deep --yes -- vibe-d:http@0.9.4
+          dub run dub-build-deep --yes -- unit-threaded:assertions@2.0.3
+
       - name: Build dopamine
         run: |
-          meson setup build -Ddefault_library=static
+          meson setup build -Ddefault_library=static -Denable_server=true -Denable_test=true -Denable_client=true
           meson compile -C build
 
       - name: Run dopamine tests

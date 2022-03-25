@@ -643,10 +643,22 @@ int luaDownload(lua_State* L) nothrow
 
     luaL_checktype(L, 1, LUA_TTABLE);
 
-    return L.catchAll!({
-        const url = luaGetTable!string(L, 1, "url");
-        const dest = luaGetTable!string(L, 1, "dest");
+    const posArgs = luaReadStringArray(L, 1);
+    if (posArgs.length != 1)
+    {
+        return luaL_error(L, "dop.download expects the URL as only positional argument");
+    }
+    const url = posArgs[0];
 
+    return L.catchAll!({
+        string dest;
+        try {
+            dest = luaGetTable!string(L, 1, "dest");
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("dop.download expects dest key argument");
+        }
         download(url, dest);
         return 0;
     });
@@ -756,8 +768,14 @@ int luaExtractArchive(lua_State* L) nothrow
 
     luaL_checktype(L, 1, LUA_TTABLE);
 
+    const posArgs = luaReadStringArray(L, 1);
+    if (posArgs.length != 1)
+    {
+        return luaL_error(L, "dop.extract_archive expects the archive path as only positional argument");
+    }
+    const archive = posArgs[0];
+
     return L.catchAll!({
-        const archive = luaGetTable!string(L, 1, "archive");
         const outdir = luaGetTable!string(L, 1, "outdir");
 
         ArchiveBackend.get.extract(archive, outdir);

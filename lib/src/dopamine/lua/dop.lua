@@ -159,13 +159,12 @@ function CMake:configure(params)
     if params.src_dir == nil then
         error('CMake:configure: src_dir is a mandatory parameter', -2)
     end
-    if params.install_dir == nil then
-        error('CMake:configure: install_dir is a mandatory parameter', -2)
-    end
     self.src_dir = params.src_dir
-    self.install_dir = params.install_dir
 
-    self.defs['CMAKE_INSTALL_PREFIX'] = self.install_dir
+    if params.install_dir then
+        self.install_dir = params.install_dir
+        self.defs['CMAKE_INSTALL_PREFIX'] = self.install_dir
+    end
 
     if params.defs then
         for k, v in pairs(params.defs) do

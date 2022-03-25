@@ -1,7 +1,7 @@
 module e2e_registry;
 
 import dopamine.api.v1;
-import dopamine.cache;
+import dopamine.cache_dirs;
 import dopamine.semver;
 
 import vibe.core.core;
@@ -23,10 +23,8 @@ void getPackage(HTTPServerRequest req, HTTPServerResponse res)
     import std.algorithm : map;
     import std.array : array;
 
-    auto cache = new PackageCache(".");
-
     string name = req.params["name"];
-    const pkgDir = enforceHTTP(cache.packageDir(name), HTTPStatus.notFound, "No such package: " ~ name);
+    const pkgDir = enforceHTTP(CachePackageDir(name), HTTPStatus.notFound, "No such package: " ~ name);
 
     string[] versions = pkgDir.versionDirs().map!(vd => vd.ver).array;
 
@@ -37,13 +35,11 @@ void getPackage(HTTPServerRequest req, HTTPServerResponse res)
 
 void getPackageRecipe(HTTPServerRequest req, HTTPServerResponse res)
 {
-    auto cache = new PackageCache(".");
-
     const pkgId = req.params["id"];
     const ver = req.params["version"];
 
     const verDir = enforceHTTP(
-        cache.packageDir(pkgId).versionDir(ver),
+        CachePackageDir(pkgId).versionDir(ver),
         HTTPStatus.notFound,
         format("No such package: %s/%s", pkgId, ver),
     );

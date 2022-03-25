@@ -3,10 +3,6 @@ project('dopamine', ['c', 'd'],
     version: '0.1.0-alpha.1',
 )
 
-if not get_option('enable_server') and not get_option('enable_client') and not get_option('enable_test')
-    error('At least one of enable_client or enable_server or enable_test options must be active')
-endif
-
 vibed_version = '0.9.4'
 
 # The DUB dependencies should normally be as simple as the following commented definitions.
@@ -83,7 +79,7 @@ if get_option('enable_server') or get_option('enable_test')
         ),
         dependency('vibe-core',
             method: 'dub',
-            version: '1.22.0',
+            version: '1.22.1',
         ),
         dependency('eventcore',
             method: 'dub',
@@ -105,8 +101,8 @@ if get_option('enable_server') or get_option('enable_test')
     if host_machine.system() == 'windows'
         vibed_http_deps += declare_dependency(
             link_args: [
-                join_paths(meson.source_root(), 'libs/windows-x64/libcrypto.lib'),
-                join_paths(meson.source_root(), 'libs/windows-x64/libssl.lib'),
+                join_paths(meson.source_root(), 'windows-x64/lib/libcrypto.lib'),
+                join_paths(meson.source_root(), 'windows-x64/lib/libssl.lib'),
                 'user32.lib'
             ],
         )
@@ -138,6 +134,7 @@ endif
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 
 subdir('lua')
+subdir('common')
 subdir('lib')
 
 if get_option('enable_client')
