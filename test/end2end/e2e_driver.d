@@ -122,8 +122,6 @@ class ExpectLib : Expect
         const dirname = res.filepath(this.dirname);
 
         string[] names;
-        const prefixes = ["lib", ""];
-        string[] exts;
         if (type & Type.archive)
         {
             names ~= [
@@ -155,6 +153,31 @@ class ExpectLib : Expect
             msg ~= "\n - " ~ tr;
         }
         return msg;
+    }
+}
+
+class ExpectExe : Expect
+{
+    string path;
+
+    this(string path)
+    {
+        version (Windows)
+        {
+            if (!path.endsWith(".exe"))
+            {
+                path ~= ".exe";
+            }
+        }
+        this.path = path;
+    }
+
+    override string expect(ref RunResult res)
+    {
+        const path = res.filepath(this.path);
+        if (exists(path))
+            return null;
+        return format("Could not find the expected executable %s", path);
     }
 }
 
@@ -488,6 +511,9 @@ struct Test
                     break;
                 case "SHARED_LIB":
                     expect = new ExpectLib(data, ExpectLib.Type.dynamic);
+                    break;
+                case "EXE":
+                    expect = new ExpectExe(data);
                     break;
                 case "MATCH":
                     expect = new ExpectMatch(arg, data);
