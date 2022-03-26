@@ -256,6 +256,37 @@ interface Skip
     string skip();
 }
 
+class SkipOS : Skip
+{
+    string os;
+
+    this(string os)
+    {
+        this.os = os;
+    }
+
+    override string skip()
+    {
+        version (Windows)
+        {
+            const skp = os.toLower() == "windows";
+        }
+        else version (linux)
+        {
+            const skp = os.toLower() == "linux" || os.toLower() == "posix";
+        }
+        else version (Posix)
+        {
+            const skp = os.toLower() == "posix";
+        }
+        if (skp)
+        {
+            return os[0 .. 1].toUpper() ~ os[1 .. $].toLower();
+        }
+        return null;
+    }
+}
+
 /// environment variable path separator
 version (Posix)
     enum envPathSep = ':';
@@ -422,6 +453,11 @@ struct Test
                         break;
                     case "NOINET":
                         test.skips ~= new SkipNoInet;
+                        break;
+                    case "WINDOWS":
+                    case "LINUX":
+                    case "POSIX":
+                        test.skips ~= new SkipOS(type);
                         break;
                     default:
                         throw new Exception("Unknown skip reason: " ~ type);
@@ -636,8 +672,6 @@ struct Test
         // FIXME: we'd better have a command parser that return an array of args
         // in platform independent way instead of relying on native shell.
         // This would allow portable CMD in test files.
-
-        writeln("will spawn in ", sandboxRecipePath);
 
         auto pid = spawnShell(
             cmd, stdin, File(outPath, "w"), File(errPath, "w"),
