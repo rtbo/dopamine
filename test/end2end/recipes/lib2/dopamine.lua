@@ -4,23 +4,14 @@ return {
     langs = {'c'},
     revision = '1',
 
-    source = function()
-        -- mimic a download to src/
-        dop.mkdir('src')
-        dop.copy('lib2.h', 'src')
-        dop.copy('lib2.c', 'src')
-        dop.copy('meson.build', 'src')
-        return "."
-    end,
-
     build = function(self, dirs, config)
         local profile = config.profile
         local meson = dop.Meson:new(profile)
 
-        dop.mkdir {dirs.build, recurse = true}
+        build_dir = dop.mkdir {"build", recurse = true}
 
-        meson:setup{build_dir = dirs.build, install_dir = dirs.install}
-        dop.from_dir(dirs.build, function()
+        meson:setup{build_dir = build_dir, src_dir = dirs.src}
+        dop.from_dir("build", function()
             meson:compile()
             meson:install()
         end)

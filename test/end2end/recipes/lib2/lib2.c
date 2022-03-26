@@ -1,6 +1,8 @@
 #include "lib2.h"
 
+#include "pkga.h"
+
 int func2(int x)
 {
-    return x - 2;
+    return funca(x - 2);
 }
