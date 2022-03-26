@@ -149,7 +149,7 @@ class ExpectLib : Expect
             else
                 tries ~= path;
         }
-        auto msg = format("Could not find any library named %s in %s.\nTried:", basename, dirname);
+        auto msg = format("Could not find any library named %s in %s\nTried:", basename, dirname);
         foreach (tr; tries)
         {
             msg ~= "\n - " ~ tr;
