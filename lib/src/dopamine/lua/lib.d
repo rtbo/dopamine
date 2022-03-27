@@ -47,7 +47,7 @@ void luaLoadDopLib(lua_State* L)
     lua_pop(L, 2);
 
     // push the dop module on the stack
-    cast(void)luaDopModule(L);
+    cast(void) luaDopModule(L);
     // assign it to the 'dop' global
     lua_setglobal(L, "dop");
 
@@ -58,14 +58,28 @@ private:
 
 int luaDopModule(lua_State* L) nothrow
 {
-    const dopMod = import("dop.lua");
+    import dopamine.paths : homeLuaScript;
+    import std.file : exists, write;
 
-    if (luaL_dostring(L, dopMod.toStringz) != LUA_OK)
-    {
-        return luaL_error(L, "Error during 'dop.lua' execution: %s", lua_tostring(L, -1));
-    }
+    return L.catchAll!({
+        // we write the content to a file rather than executing the string
+        // in otder to have better error reporting
+        const libFile = homeLuaScript();
+        if (!exists(libFile))
+        {
+            const content = import("dop.lua");
+            write(libFile, content);
+        }
 
-    return 1;
+        if (luaL_dofile(L, libFile.toStringz) != LUA_OK)
+        {
+            const msg = luaToString(L, -1);
+            throw new Exception(msg);
+        }
+
+        return 1;
+    });
+
 }
 
 int luaDopNativeModule(lua_State* L) nothrow
@@ -652,7 +666,8 @@ int luaDownload(lua_State* L) nothrow
 
     return L.catchAll!({
         string dest;
-        try {
+        try
+        {
             dest = luaGetTable!string(L, 1, "dest");
         }
         catch (Exception ex)

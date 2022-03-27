@@ -34,6 +34,13 @@ string homeDopDir()
     }
 }
 
+string homeLuaScript()
+{
+    import dopamine.conf : DOP_BUILD_ID;
+
+    return buildPath(homeDopDir(), format("dop-%s.lua", DOP_BUILD_ID));
+}
+
 string homeProfilesDir()
 {
     return buildPath(homeDopDir(), "profiles");
