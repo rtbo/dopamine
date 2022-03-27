@@ -1,8 +1,8 @@
 
-conf_data = configuration_data()
-conf_data.set('VERSION', meson.project_version())
-configure_file(
-    input: 'conf.di.in',
+dop_conf = custom_target('conf_di',
     output: 'conf.di',
-    configuration: conf_data,
+    input: 'conf.di.in',
+    command: [config_gen, '--input', '@INPUT@', '--output', '@OUTPUT@'],
+    install: true,
+    install_dir: '.',
 )

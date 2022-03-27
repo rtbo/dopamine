@@ -39,7 +39,7 @@ dop_inc = include_directories('src')
 dop_deps = [ lua_dep, dop_common_dep, vibed_data_dep ]
 dop_imp = include_directories('src/dopamine/lua')
 
-dop_lib = library('dopamine', dop_src,
+dop_lib = library('dopamine', dop_conf, dop_src,
     install: true,
     include_directories: dop_inc,
     dependencies: dop_deps,

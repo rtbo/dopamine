@@ -75,7 +75,7 @@ int main(string[] args)
     if (showVer)
     {
         // verbose version info?
-        logInfo("%s", info(dopamineVersion));
+        logInfo("%s", info(DOP_VERSION));
         return 0;
     }
     if (changeDir.length)

@@ -1,3 +1,4 @@
 module dopamine.conf;
 
-enum dopamineVersion = "@VERSION@";
+enum DOP_VERSION = "@DOP_VERSION@";
+enum DOP_BUILD_ID = "@DOP_BUILD_ID@";
