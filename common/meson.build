@@ -7,7 +7,7 @@ dop_common_src = files([
 ])
 
 dop_common_inc = include_directories('src')
-dop_common_deps = vibed_data_deps
+dop_common_deps = [vibed_data_dep]
 
 dop_common_lib = library('dopamine', dop_common_src,
     install: true,
