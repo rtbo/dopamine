@@ -1,4 +1,4 @@
-dop_ut_src = dop_src + dop_client_src + files([
+dop_ut_src = dop_client_src + files([
     'test/main.d',
     'test/silly.d',
     'test/util.d',
@@ -13,10 +13,10 @@ dop_ut_inc = [dop_inc, dop_client_inc, include_directories('.')]
 subdir('test')
 dop_ut_src += all_mods
 
-dop_ut_exe = executable('unit-tests', dop_ut_src,
+dop_ut_exe = executable('unit-tests', dop_conf, dop_ut_src,
     install: false,
     include_directories: dop_ut_inc,
-    dependencies: dop_deps + ut_assertions_dep,
+    dependencies: dop_deps + dop_dep + ut_assertions_dep,
     d_import_dirs: dop_ut_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,
