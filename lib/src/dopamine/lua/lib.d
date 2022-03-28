@@ -59,7 +59,8 @@ private:
 int luaDopModule(lua_State* L) nothrow
 {
     import dopamine.paths : homeLuaScript;
-    import std.file : exists, write;
+    import std.file : exists, mkdirRecurse, write;
+    import std.path : dirName;
 
     return L.catchAll!({
         // we write the content to a file rather than executing the string
@@ -67,6 +68,7 @@ int luaDopModule(lua_State* L) nothrow
         const libFile = homeLuaScript();
         if (!exists(libFile))
         {
+            mkdirRecurse(dirName(libFile));
             const content = import("dop.lua");
             write(libFile, content);
         }
