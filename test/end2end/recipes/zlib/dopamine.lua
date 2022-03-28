@@ -13,9 +13,10 @@ return {
     source = function (self)
         local folder = 'zlib-' .. self.version
         local archive = folder .. '.tar.gz'
+        local url = 'https://github.com/madler/zlib/archive/refs/tags/v' .. self.version .. '.tar.gz'
 
-        dop.download {'https://zlib.net/' .. archive, dest = archive}
-        dop.checksum {archive, sha1 = 'e6d119755acdf9104d7ba236b1242696940ed6dd'}
+        dop.download {url, dest = archive}
+        dop.checksum {archive, sha1 = '56559d4c03beaedb0be1c7481d6a371e2458a496'}
         dop.extract_archive {archive, outdir = '.'}
 
         return folder
