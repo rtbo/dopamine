@@ -4,14 +4,17 @@ project('lib2', ['c'], version:'1.0.0')
 cflags = []
 cflags_lib2 = []
 if host_machine.system() == 'windows'
-    cflags += ['-DIS_DLL', '-DLIB1_LIB']
+    cflags += ['-DIS_DLL', '-DLIB2_LIB']
     cflags_lib2 = ['-DIS_DLL']
 endif
+
+pkga_dep = dependency('pkga')
 
 lib2_lib = library('lib2', ['lib2.h', 'lib2.c'],
     install: true,
     include_directories: ['.'],
     c_args: cflags,
+    dependencies: pkga_dep,
 )
 
 pkg = import('pkgconfig')
