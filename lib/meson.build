@@ -51,4 +51,5 @@ dop_dep = declare_dependency(
     include_directories: dop_inc,
     dependencies: dop_deps,
     link_with: [dop_lib],
+    sources: dop_conf,
 )

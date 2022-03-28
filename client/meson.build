@@ -10,7 +10,7 @@ dop_client_src = files([
 
 dop_client_inc = include_directories('src')
 
-dop_client_exe = executable('dop', dop_conf, dop_client_src,
+dop_client_exe = executable('dop', dop_client_src,
     install: true,
     include_directories: dop_client_inc,
     dependencies: dop_dep,
