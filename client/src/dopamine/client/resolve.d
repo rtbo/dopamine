@@ -15,6 +15,20 @@ import std.getopt;
 import std.stdio;
 import std.typecons;
 
+DepDAG enforceResolved(RecipeDir rdir)
+{
+    import std.file : read;
+    import std.json : parseJSON;
+
+    enforce(rdir.hasDepsLockFile, new ErrorLogException(
+        "Dependencies: %s - try to run %s", error("NOK"), info("dop resolve"),
+    ));
+    const fname = rdir.depsLockFile;
+    const content = cast(const(char)[])read(fname);
+    auto json = parseJSON(content);
+    return DepDAG.fromJson(json);
+}
+
 int resolveMain(string[] args)
 {
     bool force;
