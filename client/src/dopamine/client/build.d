@@ -1,10 +1,12 @@
 module dopamine.client.build;
 
 import dopamine.client.profile;
+import dopamine.client.resolve;
 import dopamine.client.source;
 import dopamine.client.utils;
 
 import dopamine.build_id;
+import dopamine.dep.dag;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
@@ -50,6 +52,18 @@ int buildMain(string[] args)
         // Used by end-to-end tests to locate build config directory
         write(environment["DOP_E2E_TEST_CONFIG"], config.digestHash);
     }
+
+    DepInfo[string] depInfos;
+    if (recipe.hasDependencies)
+    {
+        auto dag = enforceResolved(dir);
+        foreach (dep; dag.traverseBottomUpResolved)
+        {
+            // build if not done
+            // collect DepInfo
+        }
+    }
+
     const cDir = dir.configDir(config);
     auto cLock = acquireConfigLockFile(cDir);
 
@@ -74,7 +88,8 @@ int buildMain(string[] args)
     mkdirRecurse(cDir.dir);
     chdir(cDir.dir);
 
-    recipe.build(bdirs, config, null);
+    recipe.build(bdirs, config, depInfos);
 
+    logInfo("Build: %s", success("OK"));
     return 0;
 }

@@ -16,13 +16,24 @@ import std.stdio;
 import std.typecons;
 
 DepDAG enforceResolved(RecipeDir rdir)
+in(rdir.hasRecipeFile)
 {
-    import std.file : read;
+    import std.file : read, timeLastModified;
     import std.json : parseJSON;
 
-    enforce(rdir.hasDepsLockFile, new ErrorLogException(
-        "Dependencies: %s - try to run %s", error("NOK"), info("dop resolve"),
-    ));
+    if (!rdir.hasDepsLockFile)
+        throw new ErrorLogException(
+            "Dependency resolution: %s - `dop.lock` doesn't exist. Try to run %s", error("NOK"), info("dop resolve"),
+        );
+
+    if (timeLastModified(rdir.depsLockFile) < timeLastModified(rdir.recipeFile))
+        throw new ErrorLogException(
+            "Dependency resolution: %s - `dop.lock` is out-dated. Try to run %s", error("NOK"), info("dop resolve"),
+        );
+
+    scope(success)
+        logInfo("Dependency resolution: %s", success("OK"));
+
     const fname = rdir.depsLockFile;
     const content = cast(const(char)[])read(fname);
     auto json = parseJSON(content);
@@ -101,6 +112,8 @@ int resolveMain(string[] args)
         import std.file : write;
 
         write(dir.depsLockFile, json.toPrettyString());
+
+        logInfo("Dependency resolution: %s", success("OK"));
     }
     catch (ServerDownException ex)
     {
