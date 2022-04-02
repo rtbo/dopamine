@@ -1,4 +1,6 @@
 SKIP_NOPROG=meson
+SKIP_WINDOWS
+SKIP_POSIX
 
 PRE_CMD=$DOP profile --discover
 PRE_CMD=$DOP resolve
