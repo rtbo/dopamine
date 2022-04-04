@@ -4,7 +4,6 @@ import dopamine.build_id;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
-import dopamine.util;
 
 import std.file;
 import std.format;
@@ -72,10 +71,8 @@ struct RecipeDir
 
     this(string dir, string dopDir = null)
     {
-        import std.path : buildPath;
-
-        _dir = dir;
-        _dopDir = dopDir ? dopDir : buildPath(dir, ".dop");
+        _dir = buildNormalizedPath(absolutePath(dir));
+        _dopDir = dopDir ? absolutePath(dopDir) : buildPath(_dir, ".dop");
     }
 
     @property string dir() const
@@ -140,11 +137,6 @@ struct RecipeDir
         return _dopDir;
     }
 
-    @property PkgStateFile stateFile() const
-    {
-        return PkgStateFile(_dopPath("state.json"));
-    }
-
     ConfigDir configDir(const(BuildConfig) config) const
     {
         return ConfigDir(_dopPath(_configDirName(config)), this);
@@ -173,7 +165,7 @@ struct RecipeDir
         return buildPath(_dir, comps);
     }
 
-    private string _dopPath(C...)(C comps) const
+    package string _dopPath(C...)(C comps) const
     {
         return buildPath(_dopDir, comps);
     }
@@ -187,14 +179,6 @@ struct RecipeDir
     private string _dopDir;
 }
 
-alias PkgStateFile = JsonStateFile!PkgState;
-
-/// Content of the main state for the package dir state
-struct PkgState
-{
-    string srcDir;
-}
-
 /// Directory of a build configuration
 struct ConfigDir
 {
@@ -206,6 +190,13 @@ struct ConfigDir
         return _dir;
     }
 
+    @property bool exists() const
+    {
+        import std.file : exists, isDir;
+
+        return dir.exists && dir.isDir;
+    }
+
     @property RecipeDir recipeDir() const
     {
         return _recipeDir;
@@ -215,19 +206,6 @@ struct ConfigDir
     {
         return _dir ~ ".lock";
     }
-
-    @property ConfigStateFile stateFile() const
-    {
-        return ConfigStateFile(_dir ~ ".json");
-    }
-}
-
-alias ConfigStateFile = JsonStateFile!ConfigState;
-
-/// Content of the state relative to a build configuration
-struct ConfigState
-{
-    string build;
 }
 
 @("RecipeDir.recipeFile")

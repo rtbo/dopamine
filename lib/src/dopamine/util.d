@@ -108,11 +108,13 @@ struct JsonStateFile(T)
 
     this(string filename)
     {
+        import std.path : absolutePath;
+
         enforce(
             !std.file.exists(filename) || isFile(filename),
             filename ~ ": must not be a directory!"
         );
-        this.filename = filename;
+        this.filename = absolutePath(filename);
     }
 
     T read() @trusted

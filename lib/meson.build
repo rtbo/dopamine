@@ -30,6 +30,7 @@ dop_src = files([
     'src/dopamine/profile.d',
     'src/dopamine/recipe.d',
     'src/dopamine/registry.d',
+    'src/dopamine/state.d',
     'src/dopamine/util.d',
 ])
 

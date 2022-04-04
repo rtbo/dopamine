@@ -6,6 +6,7 @@ import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
 import dopamine.util;
+import dopamine.state;
 
 import std.getopt;
 import std.file;
