@@ -21,7 +21,7 @@ import std.process;
 
 void enforceBuildReady(RecipeDir rdir, ConfigDirs cdirs)
 {
-    enforce(exists(cdirs.buildDir), new FormatLogException(
+    enforce(exists(cdirs.installDir), new FormatLogException(
         "Build: %s - Config directory doesn't exist", error( "NOK")
     ));
 
@@ -111,7 +111,7 @@ int buildMain(string[] args)
 
     const root = absolutePath(".", cwd);
     const src = absolutePath(srcDir, cwd);
-    const bdirs = BuildDirs(root, src);
+    const bdirs = BuildDirs(root, src, cdirs.installDir);
 
     mkdirRecurse(cdirs.buildDir);
 

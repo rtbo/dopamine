@@ -28,6 +28,7 @@ struct BuildDirs
 {
     string root;
     string src;
+    string install;
 
     invariant
     {
@@ -35,23 +36,7 @@ struct BuildDirs
 
         assert(root.isAbsolute);
         assert(src.isAbsolute);
-    }
-}
-
-/// Directories passed to the `package` recipe function
-struct PackageDirs
-{
-    string root;
-    string src;
-    string build;
-
-    invariant
-    {
-        import std.path : isAbsolute;
-
-        assert(root.isAbsolute);
-        assert(src.isAbsolute);
-        assert(build.isAbsolute);
+        assert(install.isAbsolute);
     }
 }
 
@@ -280,17 +265,9 @@ struct Recipe
     {
         lua_createtable(L, 0, 2);
         const ind = lua_gettop(L);
-        luaSetTable(L, ind, "src", dirs.src);
         luaSetTable(L, ind, "root", dirs.root);
-    }
-
-    private void pushPackageDirs(lua_State* L, PackageDirs dirs) @trusted
-    {
-        lua_createtable(L, 0, 2);
-        const ind = lua_gettop(L);
         luaSetTable(L, ind, "src", dirs.src);
-        luaSetTable(L, ind, "root", dirs.root);
-        luaSetTable(L, ind, "build", dirs.build);
+        luaSetTable(L, ind, "install", dirs.install);
     }
 
     private void pushConfig(lua_State* L, BuildConfig config) @trusted
@@ -348,26 +325,6 @@ struct Recipe
         if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 0, 0) != LUA_OK)
         {
             throw new Exception("Cannot build recipe: " ~ luaPop!string(L));
-        }
-    }
-
-    /// Execute the `package` function of this recipe
-    void pack(PackageDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
-    in (isPackage, "Light recipes do not package")
-    {
-        auto L = d.L;
-
-        lua_getfield(L, 1, "package");
-        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a package function");
-
-        lua_pushvalue(L, 1); // push self
-        pushPackageDirs(L, dirs);
-        pushConfig(L, config);
-        pushDepInfos(L, depInfos);
-
-        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 0, 0) != LUA_OK)
-        {
-            throw new Exception("Cannot package recipe: " ~ luaPop!string(L));
         }
     }
 

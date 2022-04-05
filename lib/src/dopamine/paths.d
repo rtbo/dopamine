@@ -185,9 +185,9 @@ struct ConfigDirs
         return _recipeDir._dopPath(_hash) ~ "-build";
     }
 
-    @property string defaultPackageDir() const
+    @property string installDir() const
     {
-        return _recipeDir._dopPath(_hash) ~ "-package";
+        return _recipeDir._dopPath(_hash);
     }
 
     @property RecipeDir recipeDir() const
