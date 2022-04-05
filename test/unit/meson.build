@@ -11,9 +11,8 @@ dop_ut_inc = [dop_inc, dop_client_inc, include_directories('.')]
 
 # all_mods defined in test
 subdir('test')
-dop_ut_src += all_mods
 
-dop_ut_exe = executable('unit-tests', dop_ut_src,
+dop_ut_exe = executable('unit-tests', all_mods, dop_ut_src,
     install: false,
     include_directories: dop_ut_inc,
     dependencies: [dop_dep, ut_assertions_dep],
