@@ -11,6 +11,6 @@ RECIPE=zlib
 EXPECT_MATCH=Recipe: OK - zlib-1.2.11
 EXPECT_MATCH=Source: OK - zlib-1.2.11
 EXPECT_MATCH=Build: OK
-EXPECT_DIR=.dop/$DOP_CONFIG/build
+EXPECT_DIR=.dop/$DOP_CONFIG-package
 EXPECT_SHARED_LIB=.dop/$DOP_CONFIG-package/lib/z
 EXPECT_STATIC_LIB=.dop/$DOP_CONFIG-package/lib/z

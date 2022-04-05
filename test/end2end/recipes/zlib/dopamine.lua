@@ -28,4 +28,21 @@ return {
         cmake:configure{ src_dir = dirs.src }
         cmake:build()
     end,
+
+    package = function (self, dirs, config)
+        dop.install_file(dop.path(dirs.src, 'zlib.h'), 'include/zlib.h')
+
+        local install = dop.installer(dirs.build, '.')
+        install.file('zconf.h', 'include')
+        install.file('zlib.pc', 'share/pkgconfig')
+        if dop.posix then
+            install.file('libz.so.'..self.version, 'lib')
+            install.file('libz.so.1', 'lib')
+            install.file('libz.so', 'lib')
+            install.file('libz.a', 'lib')
+        elseif dop.windows then
+            install.file('zlib1.dll', 'bin')
+            install.file('zlibstatic.lib', 'lib')
+        end
+    end,
 }
