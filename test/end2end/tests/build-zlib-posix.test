@@ -4,7 +4,7 @@ SKIP_NOINET
 
 PRE_CMD=$DOP profile --discover
 PRE_CMD=$DOP source
-CMD=$DOP --verbose build
+CMD=$DOP build
 RECIPE=zlib
 
 EXPECT_MATCH=Recipe: OK - zlib-1.2.11
