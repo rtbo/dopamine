@@ -127,7 +127,7 @@ struct RecipeDir
         return _path("dop.lock");
     }
 
-    @property string lockFile() const
+    @property string lockPath() const
     {
         return _dopPath("lock");
     }
@@ -137,9 +137,9 @@ struct RecipeDir
         return _dopDir;
     }
 
-    ConfigDir configDir(const(BuildConfig) config) const
+    ConfigDirs configDirs(const(BuildConfig) config) const
     {
-        return ConfigDir(_dopPath(_configDirName(config)), this);
+        return ConfigDirs(this, config.digestHash[0 .. 10]);
     }
 
     private static bool hasFile(string path)
@@ -170,31 +170,24 @@ struct RecipeDir
         return buildPath(_dopDir, comps);
     }
 
-    private string _configDirName(const(BuildConfig) config) const
-    {
-        return config.digestHash[0 .. 10];
-    }
-
     private string _dir;
     private string _dopDir;
 }
 
-/// Directory of a build configuration
-struct ConfigDir
+/// Directories of a build configuration
+struct ConfigDirs
 {
-    private string _dir;
     private RecipeDir _recipeDir;
+    private string _hash;
 
-    @property string dir() const
+    @property string buildDir() const
     {
-        return _dir;
+        return _recipeDir._dopPath(_hash) ~ "-build";
     }
 
-    @property bool exists() const
+    @property string defaultPackageDir() const
     {
-        import std.file : exists, isDir;
-
-        return dir.exists && dir.isDir;
+        return _recipeDir._dopPath(_hash) ~ "-package";
     }
 
     @property RecipeDir recipeDir() const
@@ -202,9 +195,14 @@ struct ConfigDir
         return _recipeDir;
     }
 
-    @property string lockFile() const
+    @property string lockPath() const
     {
-        return _dir ~ ".lock";
+        return _recipeDir._dopPath(_hash ~ ".lock");
+    }
+
+    @property string statePath() const
+    {
+        return _recipeDir._dopPath(_hash ~ ".json");
     }
 }
 

@@ -306,7 +306,7 @@ struct Recipe
     }
 
     /// Execute the `build` function of this recipe
-    bool build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
     in (isPackage, "Light recipes do not build")
     {
         auto L = d.L;
@@ -319,7 +319,7 @@ struct Recipe
         pushConfig(L, config);
         pushDepInfos(L, depInfos);
 
-        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 1, 0) != LUA_OK)
+        if (lua_pcall(L, /* nargs = */ 4, /* nresults = */ 0, 0) != LUA_OK)
         {
             throw new Exception("Cannot build recipe: " ~ luaPop!string(L));
         }

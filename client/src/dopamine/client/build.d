@@ -19,20 +19,20 @@ import std.getopt;
 import std.path;
 import std.process;
 
-void enforceBuildReady(RecipeDir rdir, ConfigDir cdir)
+void enforceBuildReady(RecipeDir rdir, ConfigDirs cdirs)
 {
-    enforce(cdir.exists, new FormatLogException(
+    enforce(exists(cdirs.buildDir), new FormatLogException(
         "Build: %s - Config directory doesn't exist", error( "NOK")
     ));
 
-    auto lock = acquireConfigLockFile(cdir);
-    enforce(cdir.stateFile.exists(), new FormatLogException(
+    auto lock = acquireConfigLockFile(cdirs);
+    enforce(cdirs.stateFile.exists(), new FormatLogException(
         "Build: %s - Config state file doesn't exist", error("NOK")
     ));
 
-    auto state = cdir.stateFile.read();
+    auto state = cdirs.stateFile.read();
 
-    enforce (rdir.recipeLastModified < cdir.stateFile.timeLastModified, new FormatLogException(
+    enforce (rdir.recipeLastModified < cdirs.stateFile.timeLastModified, new FormatLogException(
         "Build: %s - Config directory is not up-to-date", error("NOK")
     ));
 
@@ -90,11 +90,11 @@ int buildMain(string[] args)
         }
     }
 
-    const cDir = dir.configDir(config);
-    auto cLock = acquireConfigLockFile(cDir);
+    const cdirs = dir.configDirs(config);
+    auto cLock = acquireConfigLockFile(cdirs);
 
 
-    auto state = cDir.stateFile.read();
+    auto state = cdirs.stateFile.read();
 
     if (!recipe.inTreeSrc && state.buildTime > dir.recipeLastModified && !force)
     {
@@ -109,12 +109,14 @@ int buildMain(string[] args)
 
     const cwd = getcwd();
 
-    const bdirs = BuildDirs(absolutePath(".", cwd), absolutePath(srcDir, cwd));
+    const root = absolutePath(".", cwd);
+    const src = absolutePath(srcDir, cwd);
+    const bdirs = BuildDirs(root, src);
 
-    mkdirRecurse(cDir.dir);
+    mkdirRecurse(cdirs.buildDir);
 
     {
-        chdir(cDir.dir);
+        chdir(cdirs.buildDir);
         scope(success)
             chdir(cwd);
         recipe.build(bdirs, config, depInfos);
@@ -122,7 +124,7 @@ int buildMain(string[] args)
 
     state.buildTime = Clock.currTime;
 
-    cDir.stateFile.write(state);
+    cdirs.stateFile.write(state);
 
     logInfo("Build: %s", success("OK"));
     return 0;

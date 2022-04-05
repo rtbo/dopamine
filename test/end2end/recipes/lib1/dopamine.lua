@@ -8,10 +8,8 @@ return {
     build = function(self, dirs, config)
         local meson = dop.Meson:new(config.profile)
 
-        build_dir = dop.mkdir {"build", recurse = true}
-
-        meson:setup{build_dir = build_dir, src_dir = dirs.src}
-        dop.from_dir(build_dir, function() meson:compile() end)
+        meson:setup{build_dir = '.', src_dir = dirs.src}
+        meson:compile()
 
         return true
     end,

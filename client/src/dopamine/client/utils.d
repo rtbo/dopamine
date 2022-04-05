@@ -35,10 +35,10 @@ private auto acquireSomeLockFile(string path, string desc)
 
 auto acquireRecipeLockFile(RecipeDir dir)
 {
-    return acquireSomeLockFile(dir.lockFile, "recipe");
+    return acquireSomeLockFile(dir.lockPath, "recipe");
 }
 
-auto acquireConfigLockFile(ConfigDir dir)
+auto acquireConfigLockFile(ConfigDirs cdirs)
 {
-    return acquireSomeLockFile(dir.lockFile, "config build");
+    return acquireSomeLockFile(cdirs.lockPath, "config build");
 }

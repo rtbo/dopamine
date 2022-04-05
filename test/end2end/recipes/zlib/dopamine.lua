@@ -25,11 +25,7 @@ return {
     build = function (self, dirs, config)
         local cmake = dop.CMake:new(config.profile)
 
-        build_dir = dop.mkdir {"build", recurse = true}
-
-        dop.from_dir(build_dir, function()
-            cmake:configure{ src_dir = dirs.src }
-            cmake:build()
-        end)
+        cmake:configure{ src_dir = dirs.src }
+        cmake:build()
     end,
 }

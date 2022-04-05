@@ -31,7 +31,7 @@ struct ConfigState
 
 alias ConfigStateFile = JsonStateFile!ConfigState;
 
-@property ConfigStateFile stateFile(const ConfigDir cdir)
+@property ConfigStateFile stateFile(const ConfigDirs cdirs)
 {
-    return ConfigStateFile(cdir.dir ~ ".json");
+    return ConfigStateFile(cdirs.statePath);
 }
