@@ -210,5 +210,5 @@ struct ConfigDirs
 unittest
 {
     const dir = RecipeDir(".");
-    assert(dir.recipeFile == buildPath(".", "dopamine.lua"));
+    assert(buildNormalizedPath(dir.recipeFile) == buildNormalizedPath(absolutePath(buildPath(".", "dopamine.lua"))));
 }
