@@ -434,7 +434,12 @@ int luaInstallFile(lua_State* L) nothrow
     const src = checkString(L, 1);
     const dest = checkString(L, 2);
 
-    L.catchAll!({ installFile(src, dest); });
+    L.catchAll!({
+        import std.file : exists, isFile;
+
+        enforce(exists(src) && isFile(src), src ~ ": No such file");
+        installFile(src, dest);
+    });
 
     return 0;
 }
@@ -446,7 +451,12 @@ int luaInstallDir(lua_State* L) nothrow
     const src = checkString(L, 1);
     const dest = checkString(L, 2);
 
-    L.catchAll!({ installRecurse(src, dest); });
+    L.catchAll!({
+        import std.file : exists, isDir;
+
+        enforce(exists(src) && isDir(src), src ~ ": No such file or directory");
+        installRecurse(src, dest);
+    });
 
     return 0;
 }
@@ -509,7 +519,7 @@ int luaRunCmd(lua_State* L) nothrow
     {
         import dopamine.log : log, LogLevel, info, minLogLevel;
         import std.array : join;
-        import std.process : Config, execute, spawnProcess, wait;
+        import std.process : Config, escapeShellCommand, execute, spawnProcess, wait;
 
         int status;
         string output;
@@ -592,16 +602,16 @@ int luaRunCmd(lua_State* L) nothrow
         {
             import std.file : read;
 
-            auto msg = format("%s returned %d.", cmd[0], status);
+            auto msg = format("%s returned %d.", escapeShellCommand(cmd), status);
             if (stdoutLog)
             {
                 const content = cast(const(char)[]) read(stdoutLog);
-                msg ~= "\n----- command stdout -----\n" ~ content;
+                msg ~= format("\n----- %s stdout -----\n%s", cmd[0], content);
             }
             if (stderrLog)
             {
                 const content = cast(const(char)[]) read(stderrLog);
-                msg ~= "\n----- command stderr -----\n" ~ content;
+                msg ~= format("\n----- %s stderr -----\n%s", cmd[0], content);
             }
             msg ~= '\0';
             return luaL_error(L, &msg[0]);

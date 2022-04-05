@@ -526,6 +526,7 @@ in (src.exists && src.isFile, src ~ " does not exist or is not a file")
 /// If [preserveLinks] is false, a copy of the linked files in [src] are created in [dest]
 /// [preserveLinks] has no effect on Windows (acts as preserveLinks==false)
 void installRecurse(const(char)[] src, const(char)[] dest, bool preserveLinks = true) @system
+in (exists(src), src ~ " does not exist")
 {
     import std.exception : enforce;
     import std.path : buildNormalizedPath, buildPath, dirName;
