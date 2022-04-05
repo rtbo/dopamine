@@ -33,6 +33,8 @@ e2e_tests = [
     'build-lib2',
     'build-zlib-posix',
     'build-zlib-win',
+
+    'package-zlib-posix',
 ]
 
 foreach e2e_test : e2e_tests
