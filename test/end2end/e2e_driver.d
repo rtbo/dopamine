@@ -780,7 +780,7 @@ struct Test
         // otherwise we leave it here as it might be useful
         // to look at its content for debug
 
-        if (numFailed == 0)
+        if (numFailed == 0 && !environment.get("KEEP_SANDBOX"))
             rmdirRecurse(sbDir);
 
         return numFailed;
