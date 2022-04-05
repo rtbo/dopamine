@@ -955,10 +955,7 @@ string expandEnvVars(string input, string[string] environment)
     }
 
     if (env)
-    {
-        throw new Exception(
-            "Unterminated environment variable");
-    }
+        expand();
 
     return result;
 }
