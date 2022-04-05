@@ -1,4 +1,4 @@
-dop_ut_src = dop_client_src + files([
+dop_ut_src = dop_common_src + dop_src + dop_client_src + files([
     'test/main.d',
     'test/silly.d',
     'test/util.d',
