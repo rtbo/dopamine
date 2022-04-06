@@ -467,6 +467,9 @@ int luaRunCmd(lua_State* L) nothrow
 {
     // take a single table argument:
     // integer keys (array) is the actual command
+    // ["shell"]:   If true, the command must be a single string and is run in the native shell.
+    //              If string, the command must be a single string and is run in the given shell executable.
+    //              If false or undefined, the command is an array of arguments and executed directly.
     // ["workdir"]: working directory
     // ["loglevel"]: log level (one of "info" or "verbose") - default "verbose"
     //               passing false disables the log entirely.
@@ -483,13 +486,13 @@ int luaRunCmd(lua_State* L) nothrow
     // if allow_fail:
     //      status integer
 
+    import std.process : Config, escapeShellCommand, execute, executeShell, nativeShell, spawnProcess, spawnShell, wait;
+
     luaL_checktype(L, 1, LUA_TTABLE);
 
     const len = lua_rawlen(L, 1);
     if (len == 0)
-    {
         return luaL_argerror(L, 1, "Invalid empty command");
-    }
 
     string[] cmd;
     cmd.length = len;
@@ -501,6 +504,12 @@ int luaRunCmd(lua_State* L) nothrow
         cmd[i - 1] = s[0 .. l].idup;
         lua_pop(L, 1);
     }
+
+    auto shell = luaGetTable!string(L, 1, "shell", null);
+    if (!shell && luaGetTable!bool(L, 1, "shell", false))
+        shell = nativeShell();
+    if (shell && cmd.length != 1)
+        return luaL_argerror(L, 1, "Expected a single shell command");
 
     const workDir = luaGetTable!string(L, 1, "workdir", null);
 
@@ -521,7 +530,6 @@ int luaRunCmd(lua_State* L) nothrow
     {
         import dopamine.log : log, LogLevel, info, minLogLevel;
         import std.array : join;
-        import std.process : Config, escapeShellCommand, execute, spawnProcess, wait;
 
         int status;
         string output;
@@ -555,7 +563,11 @@ int luaRunCmd(lua_State* L) nothrow
 
         if (catchOut)
         {
-            const res = execute(cmd, env, Config.none, size_t.max, workDir);
+            // dfmt off
+            const res = shell
+                ? executeShell(cmd[0], env, Config.none, size_t.max, workDir, shell)
+                : execute(cmd, env, Config.none, size_t.max, workDir);
+            // dfmt on
             status = res.status;
             output = res.output;
             if (logLevel && ll >= minLogLevel)
@@ -596,7 +608,11 @@ int luaRunCmd(lua_State* L) nothrow
                 }
             }
 
-            auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
+            // dfmt off
+            auto pid = shell
+                ? spawnShell(cmd[0], stdin, childStdout, childStderr, env, config, workDir, shell)
+                : spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
+            // dfmt on
             status = wait(pid);
         }
 
