@@ -23,4 +23,5 @@ dop_ut_exe = executable('unit-tests', all_mods, dop_ut_src,
 
 test('all unit tests', dop_ut_exe,
     suite: 'unit',
+    is_parallel: false,
 )
