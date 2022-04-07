@@ -61,3 +61,32 @@ alias ConfigStateFile = JsonStateFile!ConfigState;
 {
     return ConfigStateFile(cdirs.statePath);
 }
+
+bool checkBuildReady(RecipeDir rdir, ConfigDirs cdirs, out string reason)
+{
+    import std.file : exists;
+
+    if (!exists(cdirs.installDir))
+    {
+        reason = "Install directory doesn't exist";
+        return false;
+    }
+
+    if (!cdirs.stateFile.exists())
+    {
+        reason = "Build config state file doesn't exist";
+        return false;
+    }
+
+    const rtime = rdir.recipeLastModified;
+    auto state = cdirs.stateFile.read();
+
+    if (rtime >= cdirs.stateFile.timeLastModified ||
+        rtime >= state.buildTime)
+    {
+        reason = "Build is not up-to-date";
+        return false;
+    }
+
+    return true;
+}
