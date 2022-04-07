@@ -489,6 +489,13 @@ final class Profile
         return new Profile(this.basename, this.hostInfo, this.buildType, compilers);
     }
 
+    bool hasLang(Lang lang) const @trusted
+    {
+        import std.algorithm : canFind;
+
+        return langs.canFind(lang);
+    }
+
     bool hasAllLangs(const(Lang)[] langs) const @trusted
     {
         import std.algorithm : canFind;
