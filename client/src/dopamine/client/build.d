@@ -6,10 +6,14 @@ import dopamine.client.source;
 import dopamine.client.utils;
 
 import dopamine.build_id;
+import dopamine.cache;
+import dopamine.dep.build;
 import dopamine.dep.dag;
+import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
+import dopamine.registry;
 import dopamine.state;
 
 import std.datetime;
@@ -18,6 +22,7 @@ import std.file;
 import std.getopt;
 import std.path;
 import std.process;
+import std.typecons;
 
 void enforceBuildReady(RecipeDir rdir, ConfigDirs cdirs)
 {
@@ -38,6 +43,7 @@ int buildMain(string[] args)
     string profileName;
     bool force;
     bool noNetwork;
+    bool noSystem;
 
     // dfmt off
     auto helpInfo = getopt(args,
@@ -73,11 +79,12 @@ int buildMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(dir);
-        foreach (dep; dag.traverseBottomUpResolved)
-        {
-            // build if not done
-            // collect DepInfo
-        }
+        auto cache = new PackageCache(homeCacheDir);
+        auto registry = noNetwork ? null : new Registry();
+        const system = Yes.system;
+
+        auto service = new DependencyService(cache, registry, system);
+        depInfos = buildDependencies(dag, recipe, profile, service);
     }
 
     const cdirs = dir.configDirs(config);
