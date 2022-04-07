@@ -8,18 +8,16 @@ return {
         pkga = '>=1.0.0',
     },
 
-    build = function(self, dirs, config)
+    build = function(self, dirs, config, deps)
         local profile = config.profile
         local meson = dop.Meson:new(profile)
 
-        build_dir = dop.mkdir {"build", recurse = true}
+        local env = {
+            PKG_CONFIG_PATH = dop.path(deps['pkga'].install_dir, 'lib', 'pkgconfig'),
+        };
 
-        meson:setup{build_dir = build_dir, src_dir = dirs.src}
-        dop.from_dir("build", function()
-            meson:compile()
-            meson:install()
-        end)
-
-        return true
+        meson:setup({build_dir = '.', src_dir = dirs.src, install_dir = dirs.install}, env)
+        meson:compile()
+        meson:install()
     end,
 }
