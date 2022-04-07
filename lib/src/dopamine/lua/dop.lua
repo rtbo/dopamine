@@ -227,7 +227,7 @@ local function is_system_wide(prefix)
     return prefix:sub(1, 4) == '/usr' or prefix == '/'
 end
 
-function Meson:setup(params)
+function Meson:setup(params, env)
     assert(params, 'Meson:setup must be passed a parameter table')
 
     self.build_dir = assert(params.build_dir,
@@ -268,9 +268,15 @@ function Meson:setup(params)
         table.insert(cmd, '-D' .. k .. '=' .. v)
     end
 
-    local env = dop.profile_environment(self.profile)
-    cmd.env = env
-    self.env = env
+    local cmd_env = dop.profile_environment(self.profile)
+    if env then
+        for k, v in pairs(env) do
+            cmd_env[k] = v
+        end
+    end
+
+    cmd.env = cmd_env
+    self.env = cmd_env
 
     dop.run_cmd(cmd)
 end
