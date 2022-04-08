@@ -14,35 +14,13 @@ import std.path;
 
 string enforceSourceReady(RecipeDir dir, Recipe recipe)
 {
-    if (recipe.inTreeSrc)
-    {
-        const srcDir = recipe.source();
-        auto state = dir.stateFile.read();
-        state.srcDir = srcDir;
-        dir.stateFile.write(state);
-        return srcDir;
-    }
+    import std.exception : enforce;
 
-    auto sf = dir.stateFile;
-    auto state = sf.read();
-    if (!sf || !state.srcDir)
-    {
-        throw new ErrorLogException(
-            "Source directory is not ready. Run %s.",
-            info("dop source"),
-        );
-    }
-
-    if (sf.timeLastModified < dir.recipeLastModified)
-    {
-        throw new ErrorLogException(
-            "Source directory is not up-to-date. Run %s.",
-            info("dop source"),
-        );
-    }
-
-    logInfo("Source: %s - %s", success("OK"), info(state.srcDir));
-    return state.srcDir;
+    string reason;
+    string srcDir = checkSourceReady(dir, recipe, reason);
+    enforce(srcDir, new ErrorLogException("%s. Try to run %s", reason, info("dop source")));
+    logInfo("Source: %s - %s", success("OK"), info(srcDir));
+    return srcDir;
 }
 
 int sourceMain(string[] args)

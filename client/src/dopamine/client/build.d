@@ -6,10 +6,14 @@ import dopamine.client.source;
 import dopamine.client.utils;
 
 import dopamine.build_id;
+import dopamine.cache;
+import dopamine.dep.build;
 import dopamine.dep.dag;
+import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
+import dopamine.registry;
 import dopamine.state;
 
 import std.datetime;
@@ -18,27 +22,18 @@ import std.file;
 import std.getopt;
 import std.path;
 import std.process;
+import std.typecons;
 
 void enforceBuildReady(RecipeDir rdir, ConfigDirs cdirs)
 {
-    enforce(exists(cdirs.installDir), new FormatLogException(
-        "Build: %s - Config directory doesn't exist", error( "NOK")
-    ));
-
-    auto lock = acquireConfigLockFile(cdirs);
-    enforce(cdirs.stateFile.exists(), new FormatLogException(
-        "Build: %s - Config state file doesn't exist", error("NOK")
-    ));
-
-    auto state = cdirs.stateFile.read();
-
-    enforce (rdir.recipeLastModified < cdirs.stateFile.timeLastModified, new FormatLogException(
-        "Build: %s - Config directory is not up-to-date", error("NOK")
-    ));
-
-    enforce(rdir.recipeLastModified < state.buildTime, new FormatLogException(
-        "Build: %s - Build is not up-to-date", error("NOK")
-    ));
+    string reason;
+    if (!checkBuildReady(rdir, cdirs, reason))
+    {
+        throw new FormatLogException(
+            "Build: %s - %s. Try to run %s.",
+            error("NOK"), reason, info("dop build")
+        );
+    }
 
     logInfo("Build: %s", success("OK"));
 }
@@ -48,6 +43,7 @@ int buildMain(string[] args)
     string profileName;
     bool force;
     bool noNetwork;
+    bool noSystem;
 
     // dfmt off
     auto helpInfo = getopt(args,
@@ -83,11 +79,12 @@ int buildMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(dir);
-        foreach (dep; dag.traverseBottomUpResolved)
-        {
-            // build if not done
-            // collect DepInfo
-        }
+        auto cache = new PackageCache(homeCacheDir);
+        auto registry = noNetwork ? null : new Registry();
+        const system = Yes.system;
+
+        auto service = new DependencyService(cache, registry, system);
+        depInfos = buildDependencies(dag, recipe, profile, service);
     }
 
     const cdirs = dir.configDirs(config);

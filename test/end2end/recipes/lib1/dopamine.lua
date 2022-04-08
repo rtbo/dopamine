@@ -8,9 +8,8 @@ return {
     build = function(self, dirs, config)
         local meson = dop.Meson:new(config.profile)
 
-        meson:setup{build_dir = '.', src_dir = dirs.src}
+        meson:setup{build_dir = '.', src_dir = dirs.src, install_dir = dirs.install}
         meson:compile()
-
-        return true
+        meson:install()
     end,
 }

@@ -659,34 +659,6 @@ struct DepDAG
         return res;
     }
 
-    /// Collect all resolved nodes that are dependencies of the given [node]
-    DagNode[string] collectDependencies(DagNode node) @safe
-    {
-        DagNode[string] res;
-
-        void doNode(DagNode n) @safe
-        {
-            res[n.pack.name] = n;
-            foreach (e; n.downEdges)
-            {
-                if (e.down.resolvedNode)
-                {
-                    doNode(e.down.resolvedNode);
-                }
-            }
-        }
-
-        foreach (e; node.downEdges)
-        {
-            if (e.down.resolvedNode)
-            {
-                doNode(e.down.resolvedNode);
-            }
-        }
-
-        return res;
-    }
-
     JSONValue toJson(Flag!"emitAllVersions" emitAllVersions = Yes.emitAllVersions)
     {
         import dopamine.dep.lock : dagToJson;
@@ -1000,6 +972,34 @@ class DagNode
     bool isResolved() const @trusted
     {
         return pack.resolvedNode is this;
+    }
+
+    /// Collect all resolved nodes that are dependencies of this node
+    DagNode[string] collectDependencies() @safe
+    {
+        DagNode[string] res;
+
+        void doNode(DagNode n) @safe
+        {
+            res[n.pack.name] = n;
+            foreach (e; n.downEdges)
+            {
+                if (e.down.resolvedNode)
+                {
+                    doNode(e.down.resolvedNode);
+                }
+            }
+        }
+
+        foreach (e; downEdges)
+        {
+            if (e.down.resolvedNode)
+            {
+                doNode(e.down.resolvedNode);
+            }
+        }
+
+        return res;
     }
 }
 
