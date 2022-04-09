@@ -20,6 +20,6 @@ pkg.generate(name: 'pkga',
               libraries: pkga_lib,
               subdirs: 'pkga',
               version: meson.project_version(),
-              description: 'A simple example D library.',
+              description: 'A simple example C library.',
 )
 install_data('pkga.h', install_dir: 'include/pkga/')

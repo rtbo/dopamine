@@ -4,7 +4,7 @@ project('pkga', ['c'], version:'1.0.0')
 cflags = []
 cflags_pkgc = []
 if host_machine.system() == 'windows'
-    cflags += ['-DIS_DLL', '-DPKGA_LIB'] 
+    cflags += ['-DIS_DLL', '-DPKGA_LIB']
     cflags_pkgc = ['-DIS_DLL']
 endif
 
@@ -20,6 +20,6 @@ pkg.generate(name: 'pkga',
               libraries: pkga_lib,
               subdirs: 'pkga',
               version: meson.project_version(),
-              description: 'A simple example D library.',
+              description: 'A simple example C library.',
 )
 install_data('pkga.h', install_dir: 'include/pkga/')
