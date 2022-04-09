@@ -1,6 +1,7 @@
 module dopamine.build_id;
 
 import dopamine.profile;
+import dopamine.util;
 
 import std.digest.sha;
 
@@ -11,12 +12,23 @@ alias DopDigest = SHA1;
 /// The build configuration
 struct BuildConfig
 {
-    // at the moment only the profile, but build options are to be added
-    // as well as some dependencies options or checksum
+    /// the build profile
     Profile profile;
+
+    /// recipes declaring `stage = false` have the stage directory
+    /// in the digest hash. Such packages cannot be uploaded as binaries.
+    string stageFalseDest;
 
     @property string digestHash() const
     {
-        return profile.digestHash;
+        DopDigest digest;
+
+        profile.feedDigest(digest);
+        if (stageFalseDest)
+        {
+            feedDigestData(digest, stageFalseDest);
+        }
+
+        return toHexString!(LetterCase.lower)(digest.finish()).idup;
     }
 }

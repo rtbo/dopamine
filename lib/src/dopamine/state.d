@@ -68,7 +68,7 @@ bool checkBuildReady(RecipeDir rdir, ConfigDirs cdirs, out string reason)
 
     if (!exists(cdirs.installDir))
     {
-        reason = "Install directory doesn't exist";
+        reason = "Install directory doesn't exist: " ~ cdirs.installDir;
         return false;
     }
 

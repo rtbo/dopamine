@@ -5,6 +5,7 @@ import dopamine.client.login;
 import dopamine.client.profile;
 import dopamine.client.resolve;
 import dopamine.client.source;
+import dopamine.client.stage;
 
 import dopamine.conf;
 import dopamine.log;
@@ -38,6 +39,7 @@ int main(string[] args)
         Command("resolve", &resolveMain, "Resolve and lock dependencies versions"),
         Command("source", &sourceMain, "Download and prepare the source code"),
         Command("build", &buildMain, "Build the package"),
+        Command("stage", &stageMain, "Stage the package"),
     ];
     const commandNames = commands.map!(c => c.name).array;
 

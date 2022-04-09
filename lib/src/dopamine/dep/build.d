@@ -14,7 +14,7 @@ import std.file;
 import std.path;
 
 DepInfo[string] collectDepInfos(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepService service)
+    const(Profile) profile, DepService service, string stageFalseDest=null)
 in (dag.resolved)
 {
     const langs = collectLangs(dag, service);
@@ -26,6 +26,10 @@ in (dag.resolved)
         auto rdir = RecipeDir.enforced(dirName(rec.filename));
         auto prof = profile.subset(rec.langs);
         auto conf = BuildConfig(prof);
+        if (rec.stageFalse && stageFalseDest)
+        {
+            conf.stageFalseDest = stageFalseDest;
+        }
         auto cdirs = rdir.configDirs(conf);
 
         depNode.userData = new DepInfoObj(cdirs.installDir);
@@ -35,7 +39,7 @@ in (dag.resolved)
 }
 
 DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepService service)
+    const(Profile) profile, DepService service, string stageFalseDest=null)
 in (dag.resolved)
 {
     import std.algorithm : map, maxElement;
@@ -59,6 +63,10 @@ in (dag.resolved)
         auto rdir = RecipeDir.enforced(dirName(rec.filename));
         auto prof = profile.subset(rec.langs);
         auto conf = BuildConfig(prof);
+        if (rec.stageFalse && stageFalseDest)
+        {
+            conf.stageFalseDest = stageFalseDest;
+        }
         auto cdirs = rdir.configDirs(conf);
 
         const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
