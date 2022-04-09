@@ -49,9 +49,9 @@ jobs:
       - name: Install CMake
         uses: jwlawson/actions-setup-cmake@v1.12
 
-      - name: Add pkg-config to PATH
+      - name: Add pkg-config to Windows PATH
         if: ${{ matrix.os == 'windows-latest' }}
-        run: echo $GITHUB_WORKSPACE/windows-x64/bin >> $GITHUB_PATH
+        run: echo $GITHUB_WORKSPACE/tools >> $GITHUB_PATH
         shell: bash
 
       - name: Enable MS Developer Command Prompt

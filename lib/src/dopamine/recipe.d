@@ -53,6 +53,8 @@ enum RecipeType
 
 struct Recipe
 {
+    import std.path : isAbsolute;
+
     // Implementation note:
     //  - the Recipe struct acts as a reference counter to the payload (d)
     //  - the payload carries a Lua state that is unique to the recipe (no state sharing between recipes)
@@ -106,6 +108,11 @@ struct Recipe
         return d !is null;
     }
 
+    @property string filename() const @safe
+    {
+        return d.filename;
+    }
+
     @property RecipeType type() const @safe
     {
         return d.type;
@@ -119,6 +126,18 @@ struct Recipe
     @property bool isPackage() const @safe
     {
         return d.type == RecipeType.pack;
+    }
+
+    bool hasFunction(string fname) const @safe
+    {
+        import std.algorithm : canFind;
+
+        return d.funcs.canFind(fname);
+    }
+
+    @property bool stageFalse() const @safe
+    {
+        return d.stageFalse;
     }
 
     @property string name() const @safe
@@ -153,12 +172,12 @@ struct Recipe
 
     @property bool hasDependencies() const @safe
     {
-        return d.depFunc || d.dependencies.length != 0;
+        return hasFunction("dependencies") || d.dependencies.length != 0;
     }
 
     @property const(DepSpec)[] dependencies(const(Profile) profile) @system
     {
-        if (!d.depFunc)
+        if (!hasFunction("dependencies"))
             return d.dependencies;
 
         auto L = d.L;
@@ -195,11 +214,6 @@ struct Recipe
             lua_pop(L, 1);
 
         return readDependencies(L);
-    }
-
-    @property string filename() const @safe
-    {
-        return d.filename;
     }
 
     @property string revision() @system
@@ -328,6 +342,44 @@ struct Recipe
         }
     }
 
+    /// Execute the `stage` function of this recipe, which MUST be defined
+    void stage(string dest) @system
+    in (isPackage, "Light recipes do not stage")
+    in (hasFunction("stage"))
+    in (isAbsolute(dest))
+    {
+        auto L = d.L;
+
+        lua_getfield(L, 1, "stage");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a stage function");
+
+        lua_pushvalue(L, 1); // push self
+        luaPush(L, dest);
+
+        if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+        {
+            throw new Exception("Cannot stage recipe: " ~ luaPop!string(L));
+        }
+    }
+
+    /// Execute the `post_stage` function of this recipe, which MUST be defined
+    void postStage() @system
+    in (isPackage, "Light recipes do not stage")
+    in (hasFunction("post_stage"))
+    {
+        auto L = d.L;
+
+        lua_getfield(L, 1, "post_stage");
+        enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a post_stage function");
+
+        lua_pushvalue(L, 1); // push self
+
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+        {
+            throw new Exception("Cannot post-stage recipe: " ~ luaPop!string(L));
+        }
+    }
+
     static Recipe parseFile(string path, string revision = null) @system
     {
         auto d = RecipePayload.parse(path, revision);
@@ -363,9 +415,9 @@ package class RecipePayload
     Lang[] langs;
 
     DepSpec[] dependencies;
-    bool depFunc;
-
+    string[] funcs;
     string inTreeSrc;
+    bool stageFalse;
 
     string filename;
     string revision;
@@ -425,7 +477,7 @@ package class RecipePayload
                 switch (lua_type(L, -1))
                 {
                 case LUA_TFUNCTION:
-                    d.depFunc = true;
+                    d.funcs ~= "dependencies";
                     break;
                 case LUA_TTABLE:
                     d.dependencies = readDependencies(L);
@@ -453,6 +505,32 @@ package class RecipePayload
             d.license = luaGetTable!string(L, 1, "license", null);
             d.copyright = luaGetTable!string(L, 1, "copyright", null);
 
+            if (revision)
+            {
+                d.revision = revision;
+            }
+            else
+            {
+                lua_getfield(L, 1, "revision");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                switch (lua_type(L, -1))
+                {
+                case LUA_TFUNCTION:
+                    d.funcs ~= "revision";
+                    // will be called from Recipe.revision
+                    break;
+                case LUA_TNIL:
+                    // revision will be lazily computed from the file content in Recipe.revision
+                    break;
+                case LUA_TSTRING:
+                    d.revision = luaToString(L, -1);
+                    break;
+                default:
+                    throw new Exception("Invalid revision specification");
+                }
+            }
             {
                 lua_getfield(L, 1, "langs");
                 scope (exit)
@@ -468,7 +546,7 @@ package class RecipePayload
                 switch (lua_type(L, -1))
                 {
                 case LUA_TFUNCTION:
-                    d.depFunc = true;
+                    d.funcs ~= "dependencies";
                     break;
                 case LUA_TTABLE:
                     d.dependencies = readDependencies(L);
@@ -492,6 +570,7 @@ package class RecipePayload
                             "constant source must be relative to package file");
                     break;
                 case LUA_TFUNCTION:
+                    d.funcs ~= "source";
                     break;
                 case LUA_TNIL:
                     d.inTreeSrc = ".";
@@ -509,6 +588,7 @@ package class RecipePayload
                 switch (lua_type(L, -1))
                 {
                 case LUA_TFUNCTION:
+                    d.funcs ~= "build";
                     break;
                 case LUA_TNIL:
                     throw new Exception("Recipe misses the mandatory build function");
@@ -516,29 +596,43 @@ package class RecipePayload
                     throw new Exception("Invalid 'build' field: expected a function");
                 }
             }
-            if (revision)
             {
-                d.revision = revision;
-            }
-            else
-            {
-                lua_getfield(L, 1, "revision");
+                lua_getfield(L, 1, "stage");
                 scope (exit)
                     lua_pop(L, 1);
 
                 switch (lua_type(L, -1))
                 {
                 case LUA_TFUNCTION:
-                    // will be called from Recipe.revision
+                    d.funcs ~= "stage";
+                    break;
+                case LUA_TBOOLEAN:
+                    import dopamine.log : logWarningH;
+                    if (!luaTo!bool(L, -1))
+                        d.stageFalse = true;
+                    else
+                        logWarningH("%s: `stage = true` has no effect.", filename);
                     break;
                 case LUA_TNIL:
-                    // revision will be lazily computed from the file content in Recipe.revision
-                    break;
-                case LUA_TSTRING:
-                    d.revision = luaToString(L, -1);
                     break;
                 default:
-                    throw new Exception("Invalid revision specification");
+                    throw new Exception("Invalid 'stage' field: expected a function or boolean");
+                }
+            }
+            {
+                lua_getfield(L, 1, "post_stage");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                switch (lua_type(L, -1))
+                {
+                case LUA_TFUNCTION:
+                    d.funcs ~= "stage";
+                    break;
+                case LUA_TNIL:
+                    break;
+                default:
+                    throw new Exception("Invalid 'post_stage' field: expected a function");
                 }
             }
 

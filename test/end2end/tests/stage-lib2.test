@@ -1,0 +1,20 @@
+SKIP_NOPROG=meson
+
+PRE_CMD=$DOP profile --discover
+PRE_CMD=$DOP resolve
+PRE_CMD=$DOP source
+PRE_CMD=$DOP build
+CMD=$DOP stage dest
+RECIPE=lib2
+CACHE=base
+REGISTRY=base
+
+EXPECT_MATCH=Recipe: OK - lib2-1.0.0
+EXPECT_DIR=.dop/$DOP_CONFIG-build
+EXPECT_LIB=.dop/$DOP_CONFIG-build/lib2
+EXPECT_LIB=.dop/$DOP_CONFIG/lib/lib2
+EXPECT_FILE=.dop/$DOP_CONFIG/include/lib2/lib2.h
+EXPECT_LIB=dest/lib/pkga
+EXPECT_FILE=dest/include/pkga/pkga.h
+EXPECT_LIB=dest/lib/lib2
+EXPECT_FILE=dest/include/lib2/lib2.h
