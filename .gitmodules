@@ -1,0 +1,3 @@
+[submodule "subprojects/squiz-box"]
+	path = subprojects/squiz-box
+	url = https://github.com/rtbo/squiz-box.git

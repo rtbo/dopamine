@@ -7,6 +7,7 @@ import dopamine.semver;
 
 import std.file;
 import std.path;
+import std.string;
 
 import core.sync.mutex;
 
@@ -21,8 +22,6 @@ struct DeleteMe
 
     this(string basename, string ext)
     {
-        import dopamine.util : tempPath;
-
         path = tempPath(null, basename, ext);
     }
 
@@ -38,6 +37,43 @@ struct DeleteMe
                 remove(path);
         }
     }
+}
+
+/// Generate a unique name for temporary path (either dir or file)
+/// Params:
+///     location = some directory to place the file in. If omitted, std.file.tempDir is used
+///     prefix = prefix to give to the base name
+///     ext = optional extension to append to the path (must contain '.')
+/// Returns: a path (i.e. location/prefix-{uniquestring}.ext)
+string tempPath(string location = null, string prefix = null, string ext = null)
+in (!location || (exists(location) && isDir(location)))
+in (!ext || ext.startsWith('.'))
+out (res; (!location || res.startsWith(location)) && !exists(res))
+{
+    import std.array : array;
+    import std.path : buildPath;
+    import std.random : Random, unpredictableSeed, uniform;
+    import std.range : generate, only, takeExactly;
+
+    auto rnd = Random(unpredictableSeed);
+
+    if (prefix)
+        prefix ~= "-";
+
+    if (!location)
+        location = tempDir;
+
+    string res;
+    do
+    {
+        const basename = prefix ~ generate!(() => uniform!("[]")('a', 'z',
+                rnd)).takeExactly(10).array ~ ext;
+
+        res = buildPath(location, basename);
+    }
+    while (exists(res));
+
+    return res;
 }
 
 /// Execute pred from directory dir and chdir back

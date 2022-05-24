@@ -1,7 +1,10 @@
 project('dopamine', ['c', 'd'],
-    default_options: ['c_std=c99'],
+    default_options: ['c_std=c99', 'default_library=static'],
     version: '0.1.0-alpha.1',
 )
+
+squiz_proj = subproject('squiz-box')
+squiz_dep = squiz_proj.get_variable('squiz_dep')
 
 vibed_version = '0.9.4'
 
