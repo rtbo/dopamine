@@ -28,7 +28,7 @@ endif
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 config_gen = executable('config_generator', 'tools/config_generator.d')
 
-subdir('lua')
+subdir('3rdparty/lua')
 subdir('common')
 subdir('lib')
 
