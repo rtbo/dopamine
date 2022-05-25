@@ -3,6 +3,8 @@ project('dopamine', ['c', 'd'],
     version: '0.1.0-alpha.1',
 )
 
+subdir('3rdparty')
+
 squiz_proj = subproject('squiz-box')
 squiz_dep = squiz_proj.get_variable('squiz_dep')
 
@@ -28,7 +30,6 @@ endif
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 config_gen = executable('config_generator', 'tools/config_generator.d')
 
-subdir('3rdparty/lua')
 subdir('common')
 subdir('lib')
 
