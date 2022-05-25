@@ -1,15 +1,9 @@
 subdir('src/dopamine')
 
 dop_src = files([
-    'src/bindbc/loader/package.d',
-    'src/bindbc/loader/sharedlib.d',
-    'src/bindbc/loader/system.d',
-    'src/bindbc/lua/config.d',
-    'src/bindbc/lua/package.d',
-    'src/bindbc/lua/v53/binddynamic.d',
-    'src/bindbc/lua/v53/bindstatic.d',
-    'src/bindbc/lua/v53/package.d',
-    'src/bindbc/lua/v53/types.d',
+    'src/dopamine/c/lua/bindings.d',
+    'src/dopamine/c/lua/package.d',
+    'src/dopamine/c/lua/types.d',
 
     'src/dopamine/archive.d',
     'src/dopamine/build_id.d',
@@ -23,7 +17,6 @@ dop_src = files([
     'src/dopamine/log.d',
     'src/dopamine/login.d',
     'src/dopamine/lua/lib.d',
-    'src/dopamine/lua/package.d',
     'src/dopamine/lua/profile.d',
     'src/dopamine/lua/util.d',
     'src/dopamine/msvc.d',

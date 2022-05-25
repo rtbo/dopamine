@@ -2,26 +2,17 @@ module test.lua.lib;
 
 import test.util;
 
+import dopamine.c.lua;
 import dopamine.lua.lib;
 import dopamine.lua.util;
-
-import bindbc.lua;
 
 import std.path : dirName, buildNormalizedPath;
 import std.string;
 
 const string testDirBase = buildNormalizedPath(__FILE_FULL_PATH__.dirName.dirName);
 
-shared static this()
-{
-    import dopamine.lua : initLua;
-
-    initLua();
-}
-
 lua_State* makeTestL()
 {
-
     auto L = luaL_newstate();
 
     luaL_openlibs(L);
@@ -35,6 +26,7 @@ lua_State* makeTestL()
     return L;
 }
 
+extern (C)
 int luaTestPath(lua_State* L) nothrow
 {
     import std.path : isAbsolute, dirSeparator;
@@ -64,6 +56,7 @@ int luaTestPath(lua_State* L) nothrow
     return 1;
 }
 
+extern (C)
 int luaTestAssertEq(lua_State* L) nothrow
 {
     const narg = lua_gettop(L);
@@ -86,6 +79,7 @@ int luaTestAssertEq(lua_State* L) nothrow
     return 0;
 }
 
+extern (C)
 int luaTestAssertNEq(lua_State* L) nothrow
 {
     const narg = lua_gettop(L);

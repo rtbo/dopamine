@@ -5,9 +5,8 @@
 /// The dop module re-exports all symbols of the dop_native module
 module dopamine.lua.lib;
 
+import dopamine.c.lua;
 import dopamine.lua.util;
-
-import bindbc.lua;
 
 import std.string;
 import std.exception;
@@ -55,6 +54,28 @@ void luaLoadDopLib(lua_State* L)
 }
 
 private:
+
+auto catchAll(alias fun)(lua_State* L) nothrow
+{
+    try
+    {
+        return fun();
+    }
+    catch (Exception ex)
+    {
+        luaL_error(L, ex.msg.toStringz);
+    }
+    assert(false);
+}
+
+const(char)[] checkString(lua_State* L, int ind) nothrow
+{
+    size_t sz;
+    auto p = luaL_checklstring(L, ind, &sz);
+    return p[0 .. sz];
+}
+
+extern (C):
 
 int luaDopModule(lua_State* L) nothrow
 {
@@ -164,26 +185,6 @@ int luaDopNativeModule(lua_State* L) nothrow
     return 1;
 }
 
-auto catchAll(alias fun)(lua_State* L) nothrow
-{
-    try
-    {
-        return fun();
-    }
-    catch (Exception ex)
-    {
-        luaL_error(L, ex.msg.toStringz);
-    }
-    assert(false);
-}
-
-const(char)[] checkString(lua_State* L, int ind) nothrow
-{
-    size_t sz;
-    auto p = luaL_checklstring(L, ind, &sz);
-    return p[0 .. sz];
-}
-
 int luaTrim(lua_State* L) nothrow
 {
     import std.ascii : isWhite;
@@ -205,14 +206,42 @@ int luaPath(lua_State* L) nothrow
 {
     import std.path : isAbsolute, dirSeparator;
 
+    const n = lua_gettop(L);
+    debug
+    {
+        import std.stdio : writeln;
+
+        try
+        {
+            writeln(n);
+        }
+        catch (Exception)
+        {
+        }
+    }
+    L.catchAll!({ import std.stdio;
+
+    luaPrintStack(L, stdout); });
+
     luaL_Buffer buf;
     luaL_buffinit(L, &buf);
 
-    const n = lua_gettop(L);
     foreach (i; 1 .. n + 1)
     {
         size_t l;
         const s = luaL_checklstring(L, i, &l);
+        debug
+        {
+            import std.stdio : writeln;
+
+            try
+            {
+                writeln(s[0 .. l]);
+            }
+            catch (Exception)
+            {
+            }
+        }
         if (i > 1 && isAbsolute(s[0 .. l]))
         {
             return luaL_argerror(L, i, "Invalid absolute path after first position");
@@ -249,7 +278,7 @@ int luaDirName(lua_State* L) nothrow
     size_t l;
     const ptr = luaL_checklstring(L, 1, &l);
 
-    int num = lua_gettop(L) > 1 ? luaL_checkint(L, 2) : 1;
+    int num = lua_gettop(L) > 1 ? cast(int) luaL_checkinteger(L, 2) : 1;
 
     return L.catchAll!({
         auto p = ptr[0 .. l];

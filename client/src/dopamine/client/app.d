@@ -9,7 +9,6 @@ import dopamine.client.stage;
 
 import dopamine.conf;
 import dopamine.log;
-import dopamine.lua;
 
 import std.getopt;
 import std.stdio;
@@ -30,8 +29,6 @@ int main(string[] args)
     import std.array : array;
     import std.file : chdir;
     import std.format : format;
-
-    initLua();
 
     const commands = [
         Command("login", &loginMain, "Register login credientials"),

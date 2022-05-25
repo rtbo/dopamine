@@ -1,6 +1,6 @@
 module dopamine.lua.util;
 
-import bindbc.lua;
+import dopamine.c.lua;
 
 import std.exception;
 import std.stdio;
