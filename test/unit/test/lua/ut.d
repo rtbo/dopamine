@@ -3,10 +3,9 @@ module test.lua.ut;
 import test.lua.lib;
 import test.util;
 
+import dopamine.c.lua;
 import dopamine.lua.util;
 import dopamine.util;
-
-import bindbc.lua;
 
 import std.file;
 import std.path;

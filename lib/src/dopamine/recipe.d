@@ -8,7 +8,7 @@ import dopamine.lua.util;
 import dopamine.profile;
 import dopamine.semver;
 
-import bindbc.lua;
+import dopamine.c.lua;
 
 import std.exception;
 import std.json;
@@ -388,7 +388,7 @@ struct Recipe
 
     static Recipe mock(string name, Semver ver, DepSpec[] deps, Lang[] langs, string revision) @trusted
     {
-        import bindbc.lua : lua_createtable;
+        import dopamine.c.lua : lua_createtable;
 
         auto d = new RecipePayload();
         d.name = name;

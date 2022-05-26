@@ -51,7 +51,8 @@ if host_machine.system() != 'windows'
     ]
 endif
 
-lua_lib = static_library('luadop', lua_core_src, lua_auxlib_src, lua_lib_src,
+lua_lib = static_library('lua', lua_core_src, lua_auxlib_src, lua_lib_src,
+    include_directories: include_directories('.'),
     c_args: lua_c_args,
 )
 

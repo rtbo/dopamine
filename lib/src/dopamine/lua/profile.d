@@ -1,10 +1,10 @@
 module dopamine.lua.profile;
 
+import dopamine.c.lua;
 import dopamine.lua.util;
 import dopamine.msvc;
 import dopamine.profile;
 import dopamine.semver;
-import bindbc.lua;
 
 package(dopamine):
 
