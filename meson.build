@@ -38,6 +38,11 @@ if get_option('enable_client')
 endif
 
 if get_option('enable_server')
+    libpq_dep = dependency('libpq',
+        version: '>= 14.3',
+        method: 'pkg-config',
+    )
+
     subdir('server')
 endif
 
