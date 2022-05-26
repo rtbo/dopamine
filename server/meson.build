@@ -4,6 +4,7 @@ dop_server_src = files([
     'src/dopamine/c/libpq/package.d',
     'src/dopamine/c/libpq/types.d',
 
+    'src/dopamine/server/config.d',
     'src/dopamine/server/main.d',
 ])
 
