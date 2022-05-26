@@ -10,16 +10,18 @@ squiz_dep = squiz_proj.get_variable('squiz_dep')
 
 vibed_version = '0.9.4'
 
-vibed_data_dep = dependency('vibe-d:data',
-    method: 'dub',
-    version: vibed_version,
-)
 if get_option('enable_server') or get_option('enable_test')
     vibed_http_dep = dependency('vibe-d:http',
         method: 'dub',
         version: vibed_version,
     )
 endif
+
+vibed_data_dep = dependency('vibe-d:data',
+    method: 'dub',
+    version: vibed_version,
+)
+
 if get_option('enable_test')
     ut_assertions_dep = dependency('unit-threaded:assertions',
         method: 'dub',
