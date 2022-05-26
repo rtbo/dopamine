@@ -11,8 +11,17 @@ struct Config
     string dbConnString;
 
     /// Database connection pool size
-    /// Read from $DOP_DB_POOLSIZE
-    string dbPoolSize;
+    /// Read from $DOP_DB_POOLMAXSIZE
+    string dbPoolMaxSize;
+
+    version (FormatDb)
+    {
+        /// Connection string to format (drop, then recreate) the database
+        /// This connection must have DROP and CREATE DATABASE privileges.
+        /// Read from $DOP_DB_FORMATCONNSTRING
+        /// The dbname to be formatted is extracted from $DOP_DB_CONNSTRING
+        string dbFormatConnString;
+    }
 
     static @property Config get()
     {
@@ -27,11 +36,18 @@ struct Config
                 "DOP_SERVER_HOSTNAME", "localhost:3500"
             );
             c.dbConnString = environment.get(
-                "DOP_DB_CONNSTRING", "postgres://dop-registry"
+                "DOP_DB_CONNSTRING", "postgres:///dop-registry"
             );
-            c.dbPoolSize = environment.get(
-                "DOP_DB_POOLSIZE", "1"
+            c.dbPoolMaxSize = environment.get(
+                "DOP_DB_POOLMAXSIZE", "1"
             );
+
+            version (FormatDb)
+            {
+                c.dbFormatConnString = environment.get(
+                    "DOP_DB_FORMATCONNSTRING", "postgres://"
+                );
+            }
 
             initialized = true;
         }
@@ -39,5 +55,3 @@ struct Config
         return c;
     }
 }
-
-
