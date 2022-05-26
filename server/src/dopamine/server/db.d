@@ -59,16 +59,21 @@ version (FormatDb)
 {
     void formatDb()
     {
+        import vibe.core.log;
+        import std.format;
+
         const conf = Config.get;
 
         const dbName = extractDbName(conf.dbConnString);
+
+        logWarn(`Formatting database "%s"`, dbName);
 
         auto conn = new DbConn(conf.dbFormatConnString);
         scope (exit)
             conn.dispose();
 
-        conn.execSync("DROP DATABASE IF EXISTS " ~ dbName);
-        conn.execSync("CREATE DATABASE " ~ dbName);
+        conn.execSync(format(`DROP DATABASE IF EXISTS "%s"`, dbName));
+        conn.execSync(format(`CREATE DATABASE "%s"`, dbName));
     }
 }
 

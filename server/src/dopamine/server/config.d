@@ -45,7 +45,7 @@ struct Config
             version (FormatDb)
             {
                 c.dbFormatConnString = environment.get(
-                    "DOP_DB_FORMATCONNSTRING", "postgres://"
+                    "DOP_DB_FORMATCONNSTRING", "postgres:///postgres"
                 );
             }
 

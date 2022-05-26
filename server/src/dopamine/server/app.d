@@ -3,24 +3,31 @@ module dopamine.server.app;
 import dopamine.server.config;
 import dopamine.server.db;
 
+import vibe.core.args;
 import vibe.core.core;
 import vibe.http.router;
 import vibe.http.server;
 
-import std.algorithm;
 import std.conv;
 import std.format;
 
 enum currentApiLevel = 1;
 
-version(DopServerMain)
-void main(string[] args)
+version (DopServerMain) void main(string[] args)
 {
     version (FormatDb)
     {
-        if (args.canFind("--format-db"))
+        import std.algorithm : find, remove;
+
+        const f = args.find("--format-db");
+        if (f.length != 0)
+        {
             formatDb();
+            args = args.remove(args.length - f.length);
+        }
     }
+
+    setCommandLineArgs(args);
 
     const conf = Config.get;
 
@@ -30,7 +37,7 @@ void main(string[] args)
     auto router = new URLRouter(prefix);
 
     auto listener = listenHTTP(settings, router);
-    scope(exit)
+    scope (exit)
         listener.stopListening();
 
     runApplication();

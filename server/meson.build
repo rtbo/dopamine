@@ -16,5 +16,5 @@ dop_server_exe = executable('dop-server', dop_server_src,
     include_directories: dop_server_inc,
     dependencies: [vibed_http_dep, libpq_dep, dop_common_dep],
     # TODO: remove FormatDb from production
-    d_module_versions: ['DopServerMain', 'FormatDb'],
+    d_module_versions: ['DopServerMain', 'FormatDb', 'VibeDisableCommandLineParsing'],
 )
