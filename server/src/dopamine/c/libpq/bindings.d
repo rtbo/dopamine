@@ -13,7 +13,7 @@ extern (C) nothrow:
 PGconn* PQconnectStart(const(char)* conninfo);
 PGconn* PQconnectStartParams(const(const(char)*)* keywords,
     const(const(char)*)* values, int expand_dbname);
-PostgresPollingStatusType PQconnectPoll(PGconn* conn);
+PostgresPollingStatus PQconnectPoll(PGconn* conn);
 
 /* Synchronous (blocking) */
 PGconn* PQconnectdb(const(char)* conninfo);
@@ -45,7 +45,7 @@ void PQconninfoFree(PQconninfoOption* connOptions);
  */
 /* Asynchronous (non-blocking) */
 int PQresetStart(PGconn* conn);
-PostgresPollingStatusType PQresetPoll(PGconn* conn);
+PostgresPollingStatus PQresetPoll(PGconn* conn);
 
 /* Synchronous (blocking) */
 void PQreset(PGconn* conn);
@@ -71,8 +71,8 @@ char* PQhostaddr(const(PGconn)* conn);
 char* PQport(const(PGconn)* conn);
 char* PQtty(const(PGconn)* conn);
 char* PQoptions(const(PGconn)* conn);
-ConnStatusType PQstatus(const(PGconn)* conn);
-PGTransactionStatusType PQtransactionStatus(const(PGconn)* conn);
+ConnStatus PQstatus(const(PGconn)* conn);
+PGTransactionStatus PQtransactionStatus(const(PGconn)* conn);
 const(char)* PQparameterStatus(const(PGconn)* conn,
     const(char)* paramName);
 int PQprotocolVersion(const(PGconn)* conn);
@@ -240,8 +240,8 @@ PGresult* PQfn(PGconn* conn,
     int nargs);
 
 /* Accessor functions for PGresult objects */
-ExecStatusType PQresultStatus(const PGresult* res);
-char* PQresStatus(ExecStatusType status);
+ExecStatus PQresultStatus(const PGresult* res);
+char* PQresStatus(ExecStatus status);
 char* PQresultErrorMessage(const PGresult* res);
 char* PQresultVerboseErrorMessage(const PGresult* res,
     PGVerbosity verbosity,
@@ -285,7 +285,7 @@ void PQfreemem(void* ptr);
 enum PQnoPasswordSupplied = "fe_sendauth: no password supplied\n";
 
 /* Create and manipulate PGresults */
-PGresult* PQmakeEmptyPGresult(PGconn* conn, ExecStatusType status);
+PGresult* PQmakeEmptyPGresult(PGconn* conn, ExecStatus status);
 PGresult* PQcopyResult(const PGresult* src, int flags);
 int PQsetResultAttrs(PGresult* res, int numAttributes, PGresAttDesc* attDescs);
 void* PQresultAlloc(PGresult* res, size_t nBytes);

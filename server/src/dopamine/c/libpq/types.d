@@ -37,86 +37,86 @@ enum PG_COPYRES_TUPLES = 0x02;
 enum PG_COPYRES_EVENTS = 0x04;
 enum PG_COPYRES_NOTICEHOOKS = 0x08;
 
-enum ConnStatusType
+enum ConnStatus
 {
-    CONNECTION_OK,
-    CONNECTION_BAD,
+    OK,
+    BAD,
     /* Non-blocking mode only below here */
 
     /*
 	 * The existence of these should never be relied upon - they should only
 	 * be used for user feedback or similar purposes.
 	 */
-    CONNECTION_STARTED, /* Waiting for connection to be made.  */
-    CONNECTION_MADE, /* Connection OK; waiting to send.     */
-    CONNECTION_AWAITING_RESPONSE, /* Waiting for a response from the
+    STARTED, /* Waiting for connection to be made.  */
+    MADE, /* Connection OK; waiting to send.     */
+    AWAITING_RESPONSE, /* Waiting for a response from the
 									 * postmaster.        */
-    CONNECTION_AUTH_OK, /* Received authentication; waiting for
+    AUTH_OK, /* Received authentication; waiting for
 								 * backend startup. */
-    CONNECTION_SETENV, /* This state is no longer used. */
-    CONNECTION_SSL_STARTUP, /* Negotiating SSL. */
-    CONNECTION_NEEDED, /* Internal state: connect() needed */
-    CONNECTION_CHECK_WRITABLE, /* Checking if session is read-write. */
-    CONNECTION_CONSUME, /* Consuming any extra messages. */
-    CONNECTION_GSS_STARTUP, /* Negotiating GSSAPI. */
-    CONNECTION_CHECK_TARGET, /* Checking target server properties. */
-    CONNECTION_CHECK_STANDBY /* Checking if server is in standby mode. */
+    SETENV, /* This state is no longer used. */
+    SSL_STARTUP, /* Negotiating SSL. */
+    NEEDED, /* Internal state: connect() needed */
+    CHECK_WRITABLE, /* Checking if session is read-write. */
+    CONSUME, /* Consuming any extra messages. */
+    GSS_STARTUP, /* Negotiating GSSAPI. */
+    CHECK_TARGET, /* Checking target server properties. */
+    CHECK_STANDBY /* Checking if server is in standby mode. */
 }
 
-enum PostgresPollingStatusType
+enum PostgresPollingStatus
 {
-    PGRES_POLLING_FAILED = 0,
-    PGRES_POLLING_READING, /* These two indicate that one may	  */
-    PGRES_POLLING_WRITING, /* use select before polling again.   */
-    PGRES_POLLING_OK,
-    PGRES_POLLING_ACTIVE /* unused; keep for awhile for backwards
+    FAILED = 0,
+    READING, /* These two indicate that one may	  */
+    WRITING, /* use select before polling again.   */
+    OK,
+    ACTIVE /* unused; keep for awhile for backwards
 								 * compatibility */
 }
 
-enum ExecStatusType
+enum ExecStatus
 {
-    PGRES_EMPTY_QUERY = 0, /* empty query string was executed */
-    PGRES_COMMAND_OK, /* a query command that doesn't return
+    EMPTY_QUERY = 0, /* empty query string was executed */
+    COMMAND_OK, /* a query command that doesn't return
 								 * anything was executed properly by the
 								 * backend */
-    PGRES_TUPLES_OK, /* a query command that returns tuples was
+    TUPLES_OK, /* a query command that returns tuples was
 								 * executed properly by the backend, PGresult
 								 * contains the result tuples */
-    PGRES_COPY_OUT, /* Copy Out data transfer in progress */
-    PGRES_COPY_IN, /* Copy In data transfer in progress */
-    PGRES_BAD_RESPONSE, /* an unexpected response was recv'd from the
+    COPY_OUT, /* Copy Out data transfer in progress */
+    COPY_IN, /* Copy In data transfer in progress */
+    BAD_RESPONSE, /* an unexpected response was recv'd from the
 								 * backend */
-    PGRES_NONFATAL_ERROR, /* notice or warning message */
-    PGRES_FATAL_ERROR, /* query failed */
-    PGRES_COPY_BOTH, /* Copy In/Out data transfer in progress */
-    PGRES_SINGLE_TUPLE, /* single tuple from larger resultset */
-    PGRES_PIPELINE_SYNC, /* pipeline synchronization point */
-    PGRES_PIPELINE_ABORTED /* Command didn't run because of an abort
+    NONFATAL_ERROR, /* notice or warning message */
+    FATAL_ERROR, /* query failed */
+    COPY_BOTH, /* Copy In/Out data transfer in progress */
+    SINGLE_TUPLE, /* single tuple from larger resultset */
+    PIPELINE_SYNC, /* pipeline synchronization point */
+    PIPELINE_ABORTED /* Command didn't run because of an abort
 								 * earlier in a pipeline */
 }
 
-enum PGTransactionStatusType
+enum PGTransactionStatus
 {
-    PQTRANS_IDLE, /* connection idle */
-    PQTRANS_ACTIVE, /* command in progress */
-    PQTRANS_INTRANS, /* idle, within transaction block */
-    PQTRANS_INERROR, /* idle, within failed transaction */
-    PQTRANS_UNKNOWN /* cannot determine status */
+    IDLE, /* connection idle */
+    ACTIVE, /* command in progress */
+    INTRANS, /* idle, within transaction block */
+    INERROR, /* idle, within failed transaction */
+    UNKNOWN /* cannot determine status */
 }
 
 enum PGVerbosity
 {
-    PQERRORS_TERSE, /* single-line error messages */
-    PQERRORS_DEFAULT, /* recommended style */
-    PQERRORS_VERBOSE, /* all the facts, ma'am */
-    PQERRORS_SQLSTATE /* only error severity and SQLSTATE code */
+    TERSE, /* single-line error messages */
+    DEFAULT, /* recommended style */
+    VERBOSE, /* all the facts, ma'am */
+    SQLSTATE /* only error severity and SQLSTATE code */
 }
 
 enum PGContextVisibility
 {
-    PQSHOW_CONTEXT_NEVER, /* never show CONTEXT field */
-    PQSHOW_CONTEXT_ERRORS, /* show CONTEXT for errors only (default) */
-    PQSHOW_CONTEXT_ALWAYS /* always show CONTEXT field */
+    NEVER, /* never show CONTEXT field */
+    ERRORS, /* show CONTEXT for errors only (default) */
+    ALWAYS /* always show CONTEXT field */
 }
 
 /*
@@ -126,10 +126,10 @@ enum PGContextVisibility
 
 enum PGPing
 {
-    PQPING_OK, /* server is accepting connections */
-    PQPING_REJECT, /* server is alive but rejecting connections */
-    PQPING_NO_RESPONSE, /* could not establish connection */
-    PQPING_NO_ATTEMPT /* connection not attempted (bad params) */
+    OK, /* server is accepting connections */
+    REJECT, /* server is alive but rejecting connections */
+    NO_RESPONSE, /* could not establish connection */
+    NO_ATTEMPT /* connection not attempted (bad params) */
 }
 
 /*
@@ -137,9 +137,9 @@ enum PGPing
  */
 enum PGpipelineStatus
 {
-    PQ_PIPELINE_OFF,
-    PQ_PIPELINE_ON,
-    PQ_PIPELINE_ABORTED
+    OFF,
+    ON,
+    ABORTED
 }
 
 /* PGconn encapsulates a connection to the backend.
