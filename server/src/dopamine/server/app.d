@@ -1,18 +1,27 @@
-module dopamine.server.main;
+module dopamine.server.app;
 
 import dopamine.server.config;
+import dopamine.server.db;
 
 import vibe.core.core;
 import vibe.http.router;
 import vibe.http.server;
 
+import std.algorithm;
 import std.conv;
 import std.format;
 
 enum currentApiLevel = 1;
 
-void main()
+version(DopServerMain)
+void main(string[] args)
 {
+    version (FormatDb)
+    {
+        if (args.canFind("--format-db"))
+            formatDb();
+    }
+
     const conf = Config.get;
 
     auto settings = new HTTPServerSettings(conf.serverHostname);

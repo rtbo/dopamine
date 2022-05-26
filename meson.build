@@ -23,6 +23,10 @@ vibed_data_dep = dependency('vibe-d:data',
 )
 
 if get_option('enable_test')
+    if not get_option('enable_client') or not get_option('enable_server')
+        error('both client and server are needed to enable tests')
+    endif
+
     ut_assertions_dep = dependency('unit-threaded:assertions',
         method: 'dub',
         version: '2.0.3',

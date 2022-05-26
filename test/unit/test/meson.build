@@ -6,7 +6,6 @@ all_mods = custom_target('gen_allmods',
     command: [
         discover_unittest, '@INPUT@',
         '--modname', 'test.all_mods',
-        '--exclude', 'arsd',
         '--exclude', 'silly'
     ],
 )
