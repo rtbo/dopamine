@@ -150,20 +150,20 @@ PGresult* PQexec(PGconn* conn, const(char)* query);
 PGresult* PQexecParams(PGconn* conn,
     const(char)* command,
     int nParams,
-    const Oid* paramTypes,
+    const(Oid)* paramTypes,
     const(const(char)*)* paramValues,
-    const int* paramLengths,
-    const int* paramFormats,
+    const(int)* paramLengths,
+    const(int)* paramFormats,
     int resultFormat);
 PGresult* PQprepare(PGconn* conn, const(char)* stmtName,
     const(char)* query, int nParams,
-    const Oid* paramTypes);
+    const(Oid)* paramTypes);
 PGresult* PQexecPrepared(PGconn* conn,
     const(char)* stmtName,
     int nParams,
     const(const(char)*)* paramValues,
-    const int* paramLengths,
-    const int* paramFormats,
+    const(int)* paramLengths,
+    const(int)* paramFormats,
     int resultFormat);
 
 /* Interface for multiple-result or asynchronous queries */
@@ -173,20 +173,20 @@ int PQsendQuery(PGconn* conn, const(char)* query);
 int PQsendQueryParams(PGconn* conn,
     const(char)* command,
     int nParams,
-    const Oid* paramTypes,
+    const(Oid)* paramTypes,
     const(const(char)*)* paramValues,
-    const int* paramLengths,
-    const int* paramFormats,
+    const(int)* paramLengths,
+    const(int)* paramFormats,
     int resultFormat);
 int PQsendPrepare(PGconn* conn, const(char)* stmtName,
     const(char)* query, int nParams,
-    const Oid* paramTypes);
+    const(Oid)* paramTypes);
 int PQsendQueryPrepared(PGconn* conn,
     const(char)* stmtName,
     int nParams,
     const(const(char)*)* paramValues,
-    const int* paramLengths,
-    const int* paramFormats,
+    const(int)* paramLengths,
+    const(int)* paramFormats,
     int resultFormat);
 int PQsetSingleRowMode(PGconn* conn);
 PGresult* PQgetResult(PGconn* conn);
@@ -236,37 +236,37 @@ PGresult* PQfn(PGconn* conn,
     int* result_buf,
     int* result_len,
     int result_is_int,
-    const PQArgBlock* args,
+    const(PQArgBlock)* args,
     int nargs);
 
 /* Accessor functions for PGresult objects */
-ExecStatus PQresultStatus(const PGresult* res);
+ExecStatus PQresultStatus(const(PGresult)* res);
 char* PQresStatus(ExecStatus status);
-char* PQresultErrorMessage(const PGresult* res);
-char* PQresultVerboseErrorMessage(const PGresult* res,
+char* PQresultErrorMessage(const(PGresult)* res);
+char* PQresultVerboseErrorMessage(const(PGresult)* res,
     PGVerbosity verbosity,
     PGContextVisibility show_context);
-char* PQresultErrorField(const PGresult* res, int fieldcode);
-int PQntuples(const PGresult* res);
-int PQnfields(const PGresult* res);
-int PQbinaryTuples(const PGresult* res);
-char* PQfname(const PGresult* res, int field_num);
-int PQfnumber(const PGresult* res, const(char)* field_name);
-Oid PQftable(const PGresult* res, int field_num);
-int PQftablecol(const PGresult* res, int field_num);
-int PQfformat(const PGresult* res, int field_num);
-Oid PQftype(const PGresult* res, int field_num);
-int PQfsize(const PGresult* res, int field_num);
-int PQfmod(const PGresult* res, int field_num);
+char* PQresultErrorField(const(PGresult)* res, int fieldcode);
+int PQntuples(const(PGresult)* res);
+int PQnfields(const(PGresult)* res);
+int PQbinaryTuples(const(PGresult)* res);
+char* PQfname(const(PGresult)* res, int field_num);
+int PQfnumber(const(PGresult)* res, const(char)* field_name);
+Oid PQftable(const(PGresult)* res, int field_num);
+int PQftablecol(const(PGresult)* res, int field_num);
+int PQfformat(const(PGresult)* res, int field_num);
+Oid PQftype(const(PGresult)* res, int field_num);
+int PQfsize(const(PGresult)* res, int field_num);
+int PQfmod(const(PGresult)* res, int field_num);
 char* PQcmdStatus(PGresult* res);
-char* PQoidStatus(const PGresult* res); /* old and ugly */
-Oid PQoidValue(const PGresult* res); /* new and improved */
+char* PQoidStatus(const(PGresult)* res); /* old and ugly */
+Oid PQoidValue(const(PGresult)* res); /* new and improved */
 char* PQcmdTuples(PGresult* res);
-char* PQgetvalue(const PGresult* res, int tup_num, int field_num);
-int PQgetlength(const PGresult* res, int tup_num, int field_num);
-int PQgetisnull(const PGresult* res, int tup_num, int field_num);
-int PQnparams(const PGresult* res);
-Oid PQparamtype(const PGresult* res, int param_num);
+char* PQgetvalue(const(PGresult)* res, int tup_num, int field_num);
+int PQgetlength(const(PGresult)* res, int tup_num, int field_num);
+int PQgetisnull(const(PGresult)* res, int tup_num, int field_num);
+int PQnparams(const(PGresult)* res);
+Oid PQparamtype(const(PGresult)* res, int param_num);
 
 /* Describe prepared statements and portals */
 PGresult* PQdescribePrepared(PGconn* conn, const(char)* stmt);
@@ -286,10 +286,10 @@ enum PQnoPasswordSupplied = "fe_sendauth: no password supplied\n";
 
 /* Create and manipulate PGresults */
 PGresult* PQmakeEmptyPGresult(PGconn* conn, ExecStatus status);
-PGresult* PQcopyResult(const PGresult* src, int flags);
+PGresult* PQcopyResult(const(PGresult)* src, int flags);
 int PQsetResultAttrs(PGresult* res, int numAttributes, PGresAttDesc* attDescs);
 void* PQresultAlloc(PGresult* res, size_t nBytes);
-size_t PQresultMemorySize(const PGresult* res);
+size_t PQresultMemorySize(const(PGresult)* res);
 int PQsetvalue(PGresult* res, int tup_num, int field_num, char* value, int len);
 
 /* Quoting strings before inclusion in queries. */
@@ -301,7 +301,7 @@ char* PQescapeIdentifier(PGconn* conn, const(char)* str, size_t len);
 ubyte* PQescapeByteaConn(PGconn* conn,
     const(ubyte)* from, size_t from_length,
     size_t* to_length);
-ubyte* PQunescapeBytea(const ubyte* strtext,
+ubyte* PQunescapeBytea(const(ubyte)* strtext,
     size_t* retbuflen);
 
 /* These forms are deprecated! */
@@ -310,17 +310,17 @@ ubyte* PQescapeBytea(const(ubyte)* from, size_t from_length,
     size_t* to_length);
 
 void PQprint(FILE* fout, /* output stream */
-    const PGresult* res,
-    const PQprintOpt* ps); /* option structure */
+    const(PGresult)* res,
+    const(PQprintOpt)* ps); /* option structure */
 
-void PQdisplayTuples(const PGresult* res,
+void PQdisplayTuples(const(PGresult)* res,
     FILE* fp, /* where to send the output */
     int fillAlign, /* pad the fields with spaces */
     const(char)* fieldSep, /* field separator */
     int printHeader, /* display headers? */
     int quiet);
 
-void PQprintTuples(const PGresult* res,
+void PQprintTuples(const(PGresult)* res,
     FILE* fout, /* output stream */
     int PrintAttNames, /* print attribute names */
     int TerseOutput, /* delimiter bars */
