@@ -46,17 +46,7 @@ endif
 discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 config_gen = executable('config_generator', 'tools/config_generator.d')
 
-subdir('common')
-subdir('lib')
-
-if get_option('enable_client')
-    subdir('client')
-endif
-
-if get_option('enable_server')
-
-    subdir('server')
-endif
+subdir('packages')
 
 if get_option('enable_test')
     subdir('test')

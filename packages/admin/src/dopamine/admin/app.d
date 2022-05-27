@@ -1,8 +1,8 @@
 module dopamine.admin.app;
 
-import dopamine.c.libpq;
-import dopamine.server.config;
-import dopamine.server.db;
+import dopamine.admin.config;
+import pgd.conn;
+import pgd.libpq;
 
 import std.getopt;
 import std.stdio;
@@ -56,7 +56,7 @@ version (DopAdminMain) int main(string[] args)
 
     if (createDb)
     {
-        auto db = new DbConn(conf.adminConnString);
+        auto db = new PgConn(conf.adminConnString);
         scope (exit)
             db.dispose();
 
@@ -65,7 +65,7 @@ version (DopAdminMain) int main(string[] args)
         createDatabase(db, dbName);
     }
 
-    auto db = new DbConn(conf.dbConnString);
+    auto db = new PgConn(conf.dbConnString);
     scope (exit)
         db.dispose();
 
@@ -78,7 +78,7 @@ version (DopAdminMain) int main(string[] args)
     return 0;
 }
 
-void createDatabase(DbConn db, string dbName)
+void createDatabase(PgConn db, string dbName)
 {
     import std.format;
 

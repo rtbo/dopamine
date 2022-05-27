@@ -1,6 +1,6 @@
-module dopamine.c.libpq.bindings;
+module pgd.libpq.bindings;
 
-import dopamine.c.libpq.defs;
+import pgd.libpq.defs;
 
 import core.stdc.stdio : FILE;
 

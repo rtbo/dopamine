@@ -2,9 +2,26 @@
   "name": "dopamine",
   "authors": ["Rémi Thebault"],
   "description": "This file is intended to make linting work in IDEs but not for actual building. Use meson for that.",
-  "versions": ["LUA_53", "BindBC_Static"],
-  "sourcePaths": ["lib/src", "client/src", "server/src", "test/unit"],
-  "importPaths": ["lib/src", "client/src", "server/src", "test/unit"],
+  "sourcePaths": [
+    "packages/admin/src",
+    "packages/client/src",
+    "packages/common/src",
+    "packages/lib/src",
+    "packages/pgd/src",
+    "packages/server/src",
+    "test/end2end",
+    "test/unit"
+  ],
+  "importPaths": [
+    "packages/admin/src",
+    "packages/client/src",
+    "packages/common/src",
+    "packages/lib/src",
+    "packages/pgd/src",
+    "packages/server/src",
+    "test/end2end",
+    "test/unit"
+  ],
   "dependencies": {
     "vibe-d:http": "0.9.4",
     "vibe-d:data": "0.9.4",

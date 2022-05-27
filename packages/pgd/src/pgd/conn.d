@@ -1,36 +1,14 @@
-module dopamine.server.db;
+module pgd.conn;
 
-import dopamine.c.libpq;
-import dopamine.server.config;
-
-import vibe.core.connectionpool;
+import pgd.libpq;
 
 import std.conv;
 import std.string;
 import std.traits;
-import core.time;
-
-class DbClient
-{
-    ConnectionPool!DbConn pool;
-
-    /// Create a connection pool with specfied size, each connection specified by connString
-    this(string conninfo, uint size)
-    {
-        const conninfoz = conninfo.toStringz();
-
-        pool = new ConnectionPool!DbConn(() @safe => new DbConn(conninfoz), size);
-    }
-
-    LockedConnection!DbConn lockConnection()
-    {
-        return pool.lockConnection();
-    }
-}
 
 enum isDbLiteral(T) = isSomeString!T || isIntegral!T || isFloatingPoint!T;
 
-class DbConn
+class PgConn
 {
     private PGconn* pg;
 
