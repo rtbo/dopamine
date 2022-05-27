@@ -6,15 +6,21 @@ import std.conv;
 import std.string;
 import std.traits;
 
-enum isDbLiteral(T) = isSomeString!T || isIntegral!T || isFloatingPoint!T;
+enum isDbScalar(T) = isSomeString!T || isIntegral!T || isFloatingPoint!T;
 
+/// An interface to a Postgresql connection.
+/// This interface is single threaded and cannot be shared among threads.
+/// It is safe however to use one PgConn instance per thread.
 class PgConn
 {
-    private PGconn* pg;
+    private PGconn* conn;
+
+    // A provision of counters for results.
+    private int[] refCounts;
 
     private this(const(char)* conninfo) @trusted
     {
-        pg = pgEnforceStatus(PQconnectdb(conninfo));
+        conn = pgEnforceStatus(PQconnectdb(conninfo));
     }
 
     this(string conninfo) @safe
@@ -22,36 +28,101 @@ class PgConn
         this(conninfo.toStringz());
     }
 
-    void dispose()
+    final void finish()
     {
-        PQreset(pg);
+        PQfinish(conn);
     }
 
-    /// Execute a single statement expecting no result.
+    final void reset()
+    {
+        PQreset(conn);
+    }
+
+    /// The file descriptor of the socket that communicate with the server.
+    /// Can be used for polling on the conneciton.
+    final int socket()
+    {
+        return PQsocket(conn);
+    }
+
+    /// Send execution of a SQL statement
+    /// Can be used in synchronous mode (if getting the result right after)
+    /// or in asynchronous (e.g. by waiting on the socket to get the result)
+    void send(Args...)(string sql, Args args)
+    {
+        sendPriv(sql, args);
+        conn.pgEnforce(PQsetSingleRowMode(conn) == 1);
+    }
+
+    /// Execute a SQL statement expecting no result.
     /// Thread is blocked until response is received from the server
-    void execSync(string sql)
+    void execSync(Args...)(string sql, Args args)
     {
-        auto res = PQexec(pg, sql.toStringz());
+        sendPriv(sql, args);
 
-        pg.pgEnforce(PQresultStatus(res) == ExecStatus.COMMAND_OK);
+        auto res = PQgetResult(conn);
+        conn.pgEnforce(res && (PQresultStatus(res) == ExecStatus.COMMAND_OK));
+
+        // drain results (should be a single null at this point)
+        while (res)
+        {
+            PQclear(res);
+            res = PQgetResult(conn);
+        }
     }
 
-    string escapeLiteral(T)(T val) if (isDbLiteral!T)
+    private void sendPriv(Args...)(string sql, Args args)
+    {
+        static if (Args.length > 0)
+        {
+            // TODO: debug check that maximum index in sql is not greater than args.length
+            auto params = pgQueryParams(args);
+
+            auto res = PQsendQueryParams(conn, sql.toStringz(),
+                cast(int) params.length, null, &params.values[0], &params.lengths[0], null, 0
+            );
+        }
+        else
+        {
+            auto res = PQsendQuery(conn, sql.toStringz());
+        }
+
+        conn.pgEnforce(res == 1);
+    }
+
+    private PGresult* execPriv(Args...)(string sql, Args args)
+    {
+        static if (Args.length > 0)
+        {
+            // TODO: debug check that maximum index in sql is not greater than args.length
+            auto params = pgQueryParams(args);
+
+            return PQexecParams(conn, sql.toStringz(),
+                cast(int) params.length, null, &params.values[0], &params.lengths[0], null, 0
+            );
+        }
+        else
+        {
+            return PQexec(conn, sql.toStringz());
+        }
+    }
+
+    string escapeLiteral(T)(T val) if (isDbScalar!T)
     {
         string sval = val.to!string;
 
-        auto res = PQescapeLiteral(pg, sval.ptr, sval.length);
-        scope(exit)
-            PQfreemem(cast(void*)res);
+        auto res = PQescapeLiteral(conn, sval.ptr, sval.length);
+        scope (exit)
+            PQfreemem(cast(void*) res);
 
         return res.fromStringz.idup;
     }
 
     string escapeIdentifier(string ident)
     {
-        auto res = PQescapeIdentifier(pg, ident.ptr, ident.length);
-        scope(exit)
-            PQfreemem(cast(void*)res);
+        auto res = PQescapeIdentifier(conn, ident.ptr, ident.length);
+        scope (exit)
+            PQfreemem(cast(void*) res);
 
         return res.fromStringz.idup;
     }
@@ -75,15 +146,14 @@ string[string] breakdownConnString(string conninfo)
 
     string[string] res;
 
-    for (auto opt=opts; opt && opt.keyword; opt++)
+    for (auto opt = opts; opt && opt.keyword; opt++)
         if (opt.val)
             res[opt.keyword.fromStringz().idup] = opt.val.fromStringz().idup;
 
     return res;
 }
 
-version(unittest)
-    import unit_threaded.assertions;
+version (unittest) import unit_threaded.assertions;
 
 @("breakdownConnString")
 unittest
@@ -117,22 +187,54 @@ unittest
 
 private:
 
-PGconn* pgEnforceStatus(PGconn* pg)
+PGconn* pgEnforceStatus(PGconn* conn)
 {
-    if (PQstatus(pg) != ConnStatus.OK)
+    if (PQstatus(conn) != ConnStatus.OK)
     {
-        const msg = PQerrorMessage(pg).fromStringz().idup;
+        const msg = PQerrorMessage(conn).fromStringz().idup;
         throw new Exception(msg);
     }
-    return pg;
+    return conn;
 }
 
-auto pgEnforce(C)(PGconn* pg, C cond)
+auto pgEnforce(C)(PGconn* conn, C cond)
 {
     if (!cond)
     {
-        const msg = PQerrorMessage(pg).fromStringz().idup;
+        const msg = PQerrorMessage(conn).fromStringz().idup;
         throw new Exception(msg);
     }
     return cond;
+}
+
+struct PgQueryParams
+{
+    const(char)*[] values;
+    int[] lengths;
+
+    @property size_t length()
+    {
+        assert(values.length == lengths.length);
+        return values.length;
+    }
+
+    @property void length(size_t newLen)
+    {
+        values.length = newLen;
+        lengths.length = newLen;
+    }
+}
+
+PgQueryParams pgQueryParams(Args...)(Args args)
+{
+    PgQueryParams params;
+    params.length = Args.length;
+
+    static foreach (i, arg; args)
+    {
+        string val = arg.to!string;
+        params.values[i] = val.ptr;
+        params.lengths[i] = cast(int) val.length;
+    }
+    return params;
 }
