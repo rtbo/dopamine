@@ -2,8 +2,8 @@ module dopamine.admin.app;
 
 import dopamine.admin.config;
 import pgd.conn;
-import pgd.libpq;
 
+import std.exception;
 import std.getopt;
 import std.stdio;
 import std.string;
@@ -60,9 +60,7 @@ version (DopAdminMain) int main(string[] args)
         scope (exit)
             db.dispose();
 
-        const dbName = extractDbName(conf.dbConnString);
-
-        createDatabase(db, dbName);
+        createDatabase(db, conf.dbConnString);
     }
 
     auto db = new PgConn(conf.dbConnString);
@@ -78,9 +76,14 @@ version (DopAdminMain) int main(string[] args)
     return 0;
 }
 
-void createDatabase(PgConn db, string dbName)
+void createDatabase(PgConn db, string connString)
 {
     import std.format;
+
+    const info = breakdownConnString(connString);
+    writeln(info);
+
+    const dbName = *enforce("dbname" in info, "Could not find DB name in " ~ connString);
 
     writefln(`(Re)creating database "%s"`, dbName);
 
@@ -88,41 +91,4 @@ void createDatabase(PgConn db, string dbName)
 
     db.execSync("DROP DATABASE IF EXISTS " ~ dbIdent);
     db.execSync("CREATE DATABASE " ~ dbIdent);
-}
-
-string extractDbName(string conninfo)
-{
-    const conninfoz = conninfo.toStringz();
-
-    char* errmsg;
-    PQconninfoOption* opts = PQconninfoParse(conninfoz, &errmsg);
-
-    if (!opts)
-    {
-        const msg = errmsg.fromStringz().idup;
-        throw new Exception("Could not parse connection string: " ~ msg);
-    }
-
-    auto orig = opts; // copy original pointer for freeing
-    scope (exit)
-        PQconninfoFree(orig);
-
-    while (opts && opts.keyword)
-    {
-        if (opts.keyword.fromStringz() == "dbname")
-            return opts.val.fromStringz().idup;
-
-        opts++;
-    }
-
-    return null;
-}
-
-@("extractDbName")
-unittest
-{
-    assert(extractDbName("postgres://") == null);
-    assert(extractDbName("postgres:///adatabase") == "adatabase");
-    assert(extractDbName("postgres://host:3210/adatabase") == "adatabase");
-    assert(extractDbName("postgres://user@host:3210/adatabase") == "adatabase");
 }
