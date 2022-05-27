@@ -1,8 +1,8 @@
 
 dop_server_src = files([
     'src/dopamine/c/libpq/bindings.d',
+    'src/dopamine/c/libpq/defs.d',
     'src/dopamine/c/libpq/package.d',
-    'src/dopamine/c/libpq/types.d',
 
     'src/dopamine/server/app.d',
     'src/dopamine/server/config.d',

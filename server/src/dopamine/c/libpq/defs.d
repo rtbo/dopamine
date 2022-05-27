@@ -1,4 +1,4 @@
-module dopamine.c.libpq.types;
+module dopamine.c.libpq.defs;
 
 // pg_config_ext.h
 alias PG_INT64_TYPE = long;

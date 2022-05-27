@@ -2,7 +2,7 @@
 module dopamine.c.libpq;
 
 public import dopamine.c.libpq.bindings;
-public import dopamine.c.libpq.types;
+public import dopamine.c.libpq.defs;
 
 PGconn* PQsetdb(const(char)* pghost, const(char)* pgport, const(char)* pgoptions,
     const(char)* pgtty, const(char)* dbName)
