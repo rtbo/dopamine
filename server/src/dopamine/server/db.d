@@ -5,7 +5,9 @@ import dopamine.server.config;
 
 import vibe.core.connectionpool;
 
+import std.conv;
 import std.string;
+import std.traits;
 import core.time;
 
 class DbClient
@@ -25,6 +27,8 @@ class DbClient
         return pool.lockConnection();
     }
 }
+
+enum isDbLiteral(T) = isSomeString!T || isIntegral!T || isFloatingPoint!T;
 
 class DbConn
 {
@@ -53,50 +57,26 @@ class DbConn
 
         pg.pgEnforce(PQresultStatus(res) == ExecStatus.COMMAND_OK);
     }
-}
 
-version (FormatDb)
-{
-    void formatDb()
+    string escapeLiteral(T)(T val) if (isDbLiteral!T)
     {
-        import vibe.core.log;
-        import std.format;
+        string sval = val.to!string;
 
-        const conf = Config.get;
+        auto res = PQescapeLiteral(pg, sval.ptr, sval.length);
+        scope(exit)
+            PQfreemem(cast(void*)res);
 
-        const dbName = extractDbName(conf.dbConnString);
-
-        logWarn(`Formatting database "%s"`, dbName);
-
-        auto conn = new DbConn(conf.dbFormatConnString);
-        scope (exit)
-            conn.dispose();
-
-        conn.execSync(format(`DROP DATABASE IF EXISTS "%s"`, dbName));
-        conn.execSync(format(`CREATE DATABASE "%s"`, dbName));
+        return res.fromStringz.idup;
     }
-}
 
-private:
-
-PGconn* pgEnforceStatus(PGconn* pg)
-{
-    if (PQstatus(pg) != ConnStatus.OK)
+    string escapeIdentifier(string ident)
     {
-        const msg = PQerrorMessage(pg).fromStringz().idup;
-        throw new Exception(msg);
-    }
-    return pg;
-}
+        auto res = PQescapeIdentifier(pg, ident.ptr, ident.length);
+        scope(exit)
+            PQfreemem(cast(void*)res);
 
-auto pgEnforce(C)(PGconn* pg, C cond)
-{
-    if (!cond)
-    {
-        const msg = PQerrorMessage(pg).fromStringz().idup;
-        throw new Exception(msg);
+        return res.fromStringz.idup;
     }
-    return cond;
 }
 
 string extractDbName(string conninfo)
@@ -134,4 +114,25 @@ unittest
     assert(extractDbName("postgres:///adatabase") == "adatabase");
     assert(extractDbName("postgres://host:3210/adatabase") == "adatabase");
     assert(extractDbName("postgres://user@host:3210/adatabase") == "adatabase");
+}
+private:
+
+PGconn* pgEnforceStatus(PGconn* pg)
+{
+    if (PQstatus(pg) != ConnStatus.OK)
+    {
+        const msg = PQerrorMessage(pg).fromStringz().idup;
+        throw new Exception(msg);
+    }
+    return pg;
+}
+
+auto pgEnforce(C)(PGconn* pg, C cond)
+{
+    if (!cond)
+    {
+        const msg = PQerrorMessage(pg).fromStringz().idup;
+        throw new Exception(msg);
+    }
+    return cond;
 }
