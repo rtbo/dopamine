@@ -258,3 +258,8 @@ extern (C) nothrow
     alias pgthreadlock_t = void function(int acquire);
     alias PQsslKeyPassHook_OpenSSL_type = int function(char* buf, int size, PGconn* conn);
 }
+
+// libpq-fs.h
+
+enum INV_WRITE = 0x0002_0000;
+enum INV_READ = 0x0004_0000;
