@@ -1,10 +1,12 @@
 module dopamine.admin.app;
 
+import dopamine.c.libpq;
 import dopamine.server.config;
 import dopamine.server.db;
 
 import std.getopt;
 import std.stdio;
+import std.string;
 
 immutable(string[string]) migrations;
 
@@ -86,4 +88,41 @@ void createDatabase(DbConn db, string dbName)
 
     db.execSync("DROP DATABASE IF EXISTS " ~ dbIdent);
     db.execSync("CREATE DATABASE " ~ dbIdent);
+}
+
+string extractDbName(string conninfo)
+{
+    const conninfoz = conninfo.toStringz();
+
+    char* errmsg;
+    PQconninfoOption* opts = PQconninfoParse(conninfoz, &errmsg);
+
+    if (!opts)
+    {
+        const msg = errmsg.fromStringz().idup;
+        throw new Exception("Could not parse connection string: " ~ msg);
+    }
+
+    auto orig = opts; // copy original pointer for freeing
+    scope (exit)
+        PQconninfoFree(orig);
+
+    while (opts && opts.keyword)
+    {
+        if (opts.keyword.fromStringz() == "dbname")
+            return opts.val.fromStringz().idup;
+
+        opts++;
+    }
+
+    return null;
+}
+
+@("extractDbName")
+unittest
+{
+    assert(extractDbName("postgres://") == null);
+    assert(extractDbName("postgres:///adatabase") == "adatabase");
+    assert(extractDbName("postgres://host:3210/adatabase") == "adatabase");
+    assert(extractDbName("postgres://user@host:3210/adatabase") == "adatabase");
 }

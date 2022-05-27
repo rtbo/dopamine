@@ -1,4 +1,4 @@
-dop_ut_src = dop_common_src + dop_src + dop_client_src + dop_server_src + files([
+dop_ut_src = dop_common_src + dop_src + dop_client_src + dop_server_all_src + files([
     'test/main.d',
     'test/silly.d',
     'test/util.d',
@@ -6,7 +6,7 @@ dop_ut_src = dop_common_src + dop_src + dop_client_src + dop_server_src + files(
     'test/lua/ut.d',
 ])
 
-dop_ut_imp = [dop_imp, include_directories('test/data')]
+dop_ut_imp = [dop_imp, dop_admin_imp, include_directories('test/data')]
 dop_ut_inc = [dop_inc, dop_client_inc, dop_server_inc, include_directories('.')]
 
 # all_mods defined in test
