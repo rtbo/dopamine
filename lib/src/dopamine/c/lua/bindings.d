@@ -1,6 +1,6 @@
 module dopamine.c.lua.bindings;
 
-import dopamine.c.lua.types;
+import dopamine.c.lua.defs;
 import core.stdc.stdarg : va_list;
 
 extern (C) nothrow @nogc @system:

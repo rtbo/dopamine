@@ -1,5 +1,5 @@
 /// Types and constants of lua-5.4
-module dopamine.c.lua.types;
+module dopamine.c.lua.defs;
 
 import core.stdc.stdio : FILE;
 import core.stdc.config : c_long;

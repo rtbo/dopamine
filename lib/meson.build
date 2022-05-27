@@ -2,8 +2,9 @@ subdir('src/dopamine')
 
 dop_src = files([
     'src/dopamine/c/lua/bindings.d',
+    'src/dopamine/c/lua/defs.d',
+    'src/dopamine/c/lua/macros.d',
     'src/dopamine/c/lua/package.d',
-    'src/dopamine/c/lua/types.d',
 
     'src/dopamine/archive.d',
     'src/dopamine/build_id.d',
