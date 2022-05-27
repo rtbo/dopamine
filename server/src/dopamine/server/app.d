@@ -15,20 +15,6 @@ enum currentApiLevel = 1;
 
 version (DopServerMain) void main(string[] args)
 {
-    version (FormatDb)
-    {
-        import std.algorithm : find, remove;
-
-        const f = args.find("--format-db");
-        if (f.length != 0)
-        {
-            formatDb();
-            args = args.remove(args.length - f.length);
-        }
-    }
-
-    setCommandLineArgs(args);
-
     const conf = Config.get;
 
     auto settings = new HTTPServerSettings(conf.serverHostname);

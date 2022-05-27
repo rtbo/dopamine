@@ -1,10 +1,16 @@
 module dopamine.server.config;
 
+/// Server and admin tool configuration.
+/// Fields are read from environment variables.
+/// Defaults values should suit development environement.
 struct Config
 {
-    /// Hostname of server (including port)
-    /// Read from $DOP_SERVER_HOSTNAME
-    string serverHostname;
+    version (DopServerMain)
+    {
+        /// Hostname of server (including port)
+        /// Read from $DOP_SERVER_HOSTNAME
+        string serverHostname;
+    }
 
     /// Connection string of the database
     /// Read from $DOP_DB_CONNSTRING
@@ -14,13 +20,17 @@ struct Config
     /// Read from $DOP_DB_POOLMAXSIZE
     string dbPoolMaxSize;
 
-    version (FormatDb)
+    version (DopAdminMain)
     {
-        /// Connection string to format (drop, then recreate) the database
+        /// Connection string to administrate the database.
+        /// Requires privileges for:
+        ///  - DROP DATABASE
+        ///  - CREATE DATABASE
+        ///  - DROP TABLE
+        ///  - CREATE TABLE
         /// This connection must have DROP and CREATE DATABASE privileges.
-        /// Read from $DOP_DB_FORMATCONNSTRING
-        /// The dbname to be formatted is extracted from $DOP_DB_CONNSTRING
-        string dbFormatConnString;
+        /// The name of the database to be administrated is extracted from $DOP_DB_CONNSTRING
+        string adminConnString;
     }
 
     static @property Config get()
@@ -32,9 +42,13 @@ struct Config
 
         if (!initialized)
         {
-            c.serverHostname = environment.get(
-                "DOP_SERVER_HOSTNAME", "localhost:3500"
-            );
+            version (DopServerMain)
+            {
+                c.serverHostname = environment.get(
+                    "DOP_SERVER_HOSTNAME", "localhost:3000"
+                );
+            }
+
             c.dbConnString = environment.get(
                 "DOP_DB_CONNSTRING", "postgres:///dop-registry"
             );
@@ -42,10 +56,10 @@ struct Config
                 "DOP_DB_POOLMAXSIZE", "1"
             );
 
-            version (FormatDb)
+            version (DopAdminMain)
             {
-                c.dbFormatConnString = environment.get(
-                    "DOP_DB_FORMATCONNSTRING", "postgres:///postgres"
+                c.adminConnString = environment.get(
+                    "DOP_ADMIN_CONNSTRING", "postgres:///postgres"
                 );
             }
 
