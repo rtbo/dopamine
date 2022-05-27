@@ -1,8 +1,8 @@
 /// bindings to libpq-14.3
-module dopamine.c.libpq;
+module pgd.libpq;
 
-public import dopamine.c.libpq.bindings;
-public import dopamine.c.libpq.defs;
+public import pgd.libpq.bindings;
+public import pgd.libpq.defs;
 
 PGconn* PQsetdb(const(char)* pghost, const(char)* pgport, const(char)* pgoptions,
     const(char)* pgtty, const(char)* dbName)
