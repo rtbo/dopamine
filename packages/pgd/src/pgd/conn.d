@@ -9,8 +9,32 @@ import std.exception;
 import std.meta;
 import std.string;
 import std.traits;
+import core.exception;
 
-enum isScalar(T) = isSomeString!T || isIntegral!T || isFloatingPoint!T;
+class ConnectionException : Exception
+{
+    mixin basicExceptionCtors!();
+}
+
+class ExecutionException : Exception
+{
+    mixin basicExceptionCtors!();
+}
+
+class ResultLayoutException : Exception
+{
+    mixin basicExceptionCtors!();
+}
+
+private enum isByte(T) = is(T == byte) || is (T == ubyte);
+private enum isByteArray(T) = isArray!T && isByte!(Unqual!(typeof(T.init[0])));
+
+static assert(isByteArray!(const(ubyte)[]));
+static assert(isByteArray!(const(byte)[]));
+static assert(isByteArray!(ubyte[]));
+static assert(isByteArray!(byte[]));
+
+enum isScalar(T) = isSomeString!T || isIntegral!T || isFloatingPoint!T || isByteArray!T;
 enum isRow(R) = is(R == struct);
 
 /// struct attached as UDA to provide at compile time
@@ -36,12 +60,14 @@ class PgConn
     private PGconn* conn;
 
     // A provision of counters for results.
-    private int[] refCounts;
+    private int[64] refCounts;
 
     private this(const(char)* conninfo) @trusted
     {
-        conn = pgEnforceStatus(PQconnectdb(conninfo));
-        refCounts = new int[64];
+        conn = enforce!OutOfMemoryError(PQconnectdb(conninfo));
+
+        if (PQstatus(conn) != ConnStatus.OK)
+            badConnection(conn);
     }
 
     this(string conninfo) @safe
@@ -72,26 +98,6 @@ class PgConn
     void send(Args...)(string sql, Args args)
     {
         sendPriv(sql, args);
-        conn.pgEnforce(PQsetSingleRowMode(conn) == 1);
-    }
-
-    private void sendPriv(Args...)(string sql, Args args)
-    {
-        static if (Args.length > 0)
-        {
-            // TODO: debug check that maximum index in sql is not greater than args.length
-            auto params = pgQueryParams(args);
-
-            auto res = PQsendQueryParams(conn, sql.toStringz(),
-                cast(int) params.length, null, &params.values[0], &params.lengths[0], null, 0
-            );
-        }
-        else
-        {
-            auto res = PQsendQuery(conn, sql.toStringz());
-        }
-
-        conn.pgEnforce(res == 1);
     }
 
     /// Execute a SQL statement expecting no result.
@@ -100,51 +106,66 @@ class PgConn
     {
         sendPriv(sql, args);
 
-        auto res = PQgetResult(conn);
-
+        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
         scope (exit)
             clearAndDrain(res);
 
-        conn.pgEnforce(res && (PQresultStatus(res) == ExecStatus.COMMAND_OK));
+        const status = PQresultStatus(res);
+        if (status.isError)
+            badExecution(res, sql, args);
+
+        checkVoid(res);
+    }
+
+    private void checkVoid(PGresult* res)
+    {
+        if (PQresultStatus(res) != ExecStatus.COMMAND_OK)
+            badResultLayout("Expected an empty result", res);
     }
 
     T execScalarSync(T, Args...)(string sql, Args args) if (isScalar!T)
     {
         sendPriv(sql, args);
 
-        auto res = PQgetResult(conn);
-
+        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
         scope (exit)
             clearAndDrain(res);
 
         const status = PQresultStatus(res);
         if (status.isError)
-        {
-            throw new Exception(formatQueryMsg(res, sql, args));
-        }
+            badExecution(res, sql, args);
 
-        enforce(PQnfields(res) == 1, "Expected a single column result");
-        enforce(PQntuples(res) == 1, "Expected a single row result");
+        return checkScalar!T(res);
+    }
+
+    private T checkScalar(T)(PGresult* res)
+    {
+        if (PQntuples(res) != 1 || PQnfields(res) != 1)
+            badResultLayout("Expected a single row and single column", res);
 
         return convScalar!T(0, 0, res);
+
     }
 
     T[] execScalarsSync(T, Args...)(string sql, Args args) if (isScalar!T)
     {
         sendPriv(sql, args);
 
-        auto res = PQgetResult(conn);
-
+        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
         scope (exit)
             clearAndDrain(res);
 
         const status = PQresultStatus(res);
-        if (status != ExecStatus.TUPLES_OK)
-        {
-            // FIXME: find out if error or if void and define exception types
-            throw new Exception("FIXME");
-        }
-        // FIXME: throw if multiple columns
+        if (status.isError)
+            badExecution(res, sql, args);
+
+        return checkScalars!T(res);
+    }
+
+    private T[] checkScalars(T)(PGresult* res)
+    {
+        if (PQnfields(res) != 1)
+            badResultLayout("Expected a single column", res);
 
         const nrows = PQntuples(res);
         if (!nrows)
@@ -165,19 +186,21 @@ class PgConn
     {
         sendPriv(sql, args);
 
-        auto res = PQgetResult(conn);
-
+        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
         scope (exit)
             clearAndDrain(res);
 
         const status = PQresultStatus(res);
-        if (status != ExecStatus.TUPLES_OK)
-        {
-            // FIXME: find out if error or if void and define exception types
-            throw new Exception("FIXME");
-        }
+        if (status.isError)
+            badExecution(res, sql, args);
 
-        // throw if multiple rows
+        return checkRow!R(res);
+    }
+
+    private R checkRow(R)(PGresult* res)
+    {
+        if (PQntuples(res) != 1)
+            badResultLayout("Expected a single row", res);
 
         auto colInds = getColIndices!R(res);
         auto row = convRow!R(colInds, 0, res);
@@ -191,18 +214,19 @@ class PgConn
     {
         sendPriv(sql, args);
 
-        auto res = PQgetResult(conn);
-
+        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
         scope (exit)
             clearAndDrain(res);
 
         const status = PQresultStatus(res);
-        if (status != ExecStatus.TUPLES_OK)
-        {
-            // FIXME: find out if error or if void and define exception types
-            throw new Exception("FIXME");
-        }
+        if (status.isError)
+            badExecution(res, sql, args);
 
+        return checkRows!R(res);
+    }
+
+    private R[] checkRows(R)(PGresult* res)
+    {
         const nrows = PQntuples(res);
         if (!nrows)
             return [];
@@ -216,6 +240,26 @@ class PgConn
         }
 
         return rows;
+    }
+
+    private void sendPriv(Args...)(string sql, Args args)
+    {
+        static if (Args.length > 0)
+        {
+            // TODO: debug check that maximum index in sql is not greater than args.length
+            auto params = pgQueryParams(args);
+
+            auto res = PQsendQueryParams(conn, sql.toStringz(),
+                cast(int) params.length, null, &params.values[0], &params.lengths[0], null, 0
+            );
+        }
+        else
+        {
+            auto res = PQsendQuery(conn, sql.toStringz());
+        }
+
+        if (res != 1)
+            badConnection(conn);
     }
 
     private void clearAndDrain(PGresult* res)
@@ -267,74 +311,7 @@ class PgConn
     }
 }
 
-string[string] breakdownConnString(string conninfo)
-{
-    const conninfoz = conninfo.toStringz();
-
-    char* errmsg;
-    PQconninfoOption* opts = PQconninfoParse(conninfoz, &errmsg);
-
-    if (!opts)
-    {
-        const msg = errmsg.fromStringz().idup;
-        throw new Exception("Could not parse connection string: " ~ msg);
-    }
-
-    scope (exit)
-        PQconninfoFree(opts);
-
-    string[string] res;
-
-    for (auto opt = opts; opt && opt.keyword; opt++)
-        if (opt.val)
-            res[opt.keyword.fromStringz().idup] = opt.val.fromStringz().idup;
-
-    return res;
-}
-
-version (unittest) import unit_threaded.assertions;
-
-@("breakdownConnString")
-unittest
-{
-    const bd0 = breakdownConnString("postgres://");
-    const string[string] exp0;
-
-    const bd1 = breakdownConnString("postgres:///adatabase");
-    const string[string] exp1 = ["dbname": "adatabase"];
-
-    const bd2 = breakdownConnString("postgres://somehost:3210/adatabase");
-    const string[string] exp2 = [
-        "host": "somehost",
-        "port": "3210",
-        "dbname": "adatabase",
-    ];
-
-    const bd3 = breakdownConnString("postgres://someuser@somehost:3210/adatabase");
-    const string[string] exp3 = [
-        "user": "someuser",
-        "host": "somehost",
-        "port": "3210",
-        "dbname": "adatabase",
-    ];
-
-    bd0.shouldEqual(exp0);
-    bd1.shouldEqual(exp1);
-    bd2.shouldEqual(exp2);
-    bd3.shouldEqual(exp3);
-}
-
 private:
-
-PGconn* pgEnforceStatus(PGconn* conn)
-{
-    if (PQstatus(conn) != ConnStatus.OK)
-    {
-        const msg = PQerrorMessage(conn).fromStringz().idup;
-        throw new Exception(msg);
-    }
-    return conn;
-}
 
 auto pgEnforce(C)(PGconn* conn, C cond)
 {
@@ -360,7 +337,33 @@ auto pgEnforce(C)(PGconn* conn, C cond)
     }
 }
 
-string formatQueryMsg(Args...)(PGresult* res, string sql, Args args)
+noreturn badConnection(PGconn* conn)
+{
+    const msg = PQerrorMessage(conn).fromStringz.idup;
+    throw new ConnectionException(msg);
+}
+
+
+noreturn badExecution(Args...)(PGresult* res, string sql, Args args)
+{
+    const msg = formatExecErrorMsg(res, sql, args);
+    throw new ExecutionException(msg);
+}
+
+noreturn badResultLayout(string expectation, PGresult* res)
+{
+    const rowCount = PQntuples(res);
+    const rowPlural = rowCount > 1 ? "s" : "";
+    const colCount = PQnfields(res);
+    const colPlural = colCount > 1 ? "s" : "";
+    const msg = expectation ~ format(
+        " - received a result with %s row%s and %s column%s",
+        rowCount, rowPlural, colCount, colPlural
+    );
+    throw new ResultLayoutException(msg);
+}
+
+string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args)
 {
     string msg = "Error during query execution.\n";
     msg ~= "SQL:\n  " ~ sql ~ "\n";

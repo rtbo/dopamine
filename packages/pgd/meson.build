@@ -5,6 +5,7 @@ pgd_src = files([
     'src/pgd/libpq/package.d',
 
     'src/pgd/conn.d',
+    'src/pgd/connstring.d',
     'src/pgd/result.d',
 ])
 

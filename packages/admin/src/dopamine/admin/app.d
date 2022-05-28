@@ -3,6 +3,7 @@ module dopamine.admin.app;
 import dopamine.admin.config;
 import dopamine.cache_dirs;
 import pgd.conn;
+import pgd.connstring;
 
 import std.algorithm;
 import std.exception;
@@ -149,7 +150,7 @@ struct User
     string avatarUrl;
 }
 
-enum adminEmail = "dop-admin@dopamine.org";
+enum adminEmail = "admin.tool@dop-test.org";
 
 int createUserIfNotExist(PgConn db, string email)
 {
