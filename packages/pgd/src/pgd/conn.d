@@ -9,7 +9,12 @@ import std.exception;
 import std.meta;
 import std.string;
 import std.traits;
+import std.typecons;
 import core.exception;
+
+// exporting a few Postgresql enums
+alias ConnStatus = pgd.libpq.ConnStatus;
+alias PostgresPollingStatus = pgd.libpq.PostgresPollingStatus;
 
 class ConnectionException : Exception
 {
@@ -26,7 +31,7 @@ class ResultLayoutException : Exception
     mixin basicExceptionCtors!();
 }
 
-private enum isByte(T) = is(T == byte) || is (T == ubyte);
+private enum isByte(T) = is(T == byte) || is(T == ubyte);
 private enum isByteArray(T) = isArray!T && isByte!(Unqual!(typeof(T.init[0])));
 
 static assert(isByteArray!(const(ubyte)[]));
@@ -62,22 +67,53 @@ class PgConn
     // A provision of counters for results.
     private int[64] refCounts;
 
-    private this(const(char)* conninfo) @trusted
+    private this(const(char)* conninfo, Flag!"async" async = No.async)
     {
-        conn = enforce!OutOfMemoryError(PQconnectdb(conninfo));
+        if (async)
+        {
+            conn = enforce!OutOfMemoryError(PQconnectStart(conninfo));
 
-        if (PQstatus(conn) != ConnStatus.OK)
+            if (PQstatus(conn) == ConnStatus.BAD)
+                badConnection(conn);
+        }
+        else
+        {
+            conn = enforce!OutOfMemoryError(PQconnectdb(conninfo));
+
+            if (PQstatus(conn) != ConnStatus.OK)
+                badConnection(conn);
+        }
+    }
+
+    this(string conninfo, Flag!"async" async = No.async)
+    {
+        this(conninfo.toStringz(), async);
+    }
+
+    @property final ConnStatus status() const
+    {
+        return PQstatus(conn);
+    }
+
+    @property final PostgresPollingStatus connectPoll()
+    {
+        return PQconnectPoll(conn);
+    }
+
+    void finish()
+    {
+        PQfinish(conn);
+    }
+
+    final void resetStart()
+    {
+        if (!PQresetStart(conn))
             badConnection(conn);
     }
 
-    this(string conninfo) @safe
+    @property final PostgresPollingStatus resetPoll()
     {
-        this(conninfo.toStringz());
-    }
-
-    final void finish()
-    {
-        PQfinish(conn);
+        return PQresetPoll(conn);
     }
 
     final void reset()
@@ -85,9 +121,14 @@ class PgConn
         PQreset(conn);
     }
 
+    @property final string errorMessage() const
+    {
+        return PQerrorMessage(conn).fromStringz.idup;
+    }
+
     /// The file descriptor of the socket that communicate with the server.
     /// Can be used for polling on the conneciton.
-    final int socket()
+    @property final int socket()
     {
         return PQsocket(conn);
     }
@@ -325,7 +366,7 @@ auto pgEnforce(C)(PGconn* conn, C cond)
 
 @property bool isError(ExecStatus status)
 {
-    switch(status)
+    switch (status)
     {
     case ExecStatus.EMPTY_QUERY:
     case ExecStatus.BAD_RESPONSE:
@@ -342,7 +383,6 @@ noreturn badConnection(PGconn* conn)
     const msg = PQerrorMessage(conn).fromStringz.idup;
     throw new ConnectionException(msg);
 }
-
 
 noreturn badExecution(Args...)(PGresult* res, string sql, Args args)
 {
