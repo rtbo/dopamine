@@ -1,9 +1,11 @@
+
 pgd_src = files([
     'src/pgd/libpq/bindings.d',
     'src/pgd/libpq/defs.d',
     'src/pgd/libpq/package.d',
 
     'src/pgd/conn.d',
+    'src/pgd/result.d',
 ])
 
 pgd_inc = include_directories('src')

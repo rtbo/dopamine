@@ -1,6 +1,7 @@
 module pgd.conn;
 
 import pgd.libpq;
+import pgd.result;
 
 import std.conv;
 import std.string;
@@ -21,6 +22,7 @@ class PgConn
     private this(const(char)* conninfo) @trusted
     {
         conn = pgEnforceStatus(PQconnectdb(conninfo));
+        refCounts = new int[64];
     }
 
     this(string conninfo) @safe
@@ -97,14 +99,23 @@ class PgConn
             // TODO: debug check that maximum index in sql is not greater than args.length
             auto params = pgQueryParams(args);
 
-            return PQexecParams(conn, sql.toStringz(),
-                cast(int) params.length, null, &params.values[0], &params.lengths[0], null, 0
-            );
-        }
-        else
+    /// Get the (untyped) result for the current query
+    /// if result casts to false, it means there is no more result
+    Result getResult()
+    {
+        auto res = PQgetResult(conn);
+        // FIXME: check for error
+        return Result(res, findRefCount());
+    }
+
+    private int* findRefCount()
+    {
+        for (size_t i = 0; i < refCounts.length; ++i)
         {
-            return PQexec(conn, sql.toStringz());
+            if (refCounts[i] == 0)
+                return &refCounts[i];
         }
+        return null;
     }
 
     string escapeLiteral(T)(T val) if (isDbScalar!T)
