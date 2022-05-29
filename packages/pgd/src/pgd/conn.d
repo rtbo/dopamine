@@ -1,6 +1,7 @@
 module pgd.conn;
 
 import pgd.libpq;
+import pgd.conv;
 import pgd.result;
 
 import std.array;
@@ -31,15 +32,7 @@ class ResultLayoutException : Exception
     mixin basicExceptionCtors!();
 }
 
-private enum isByte(T) = is(T == byte) || is(T == ubyte);
-private enum isByteArray(T) = isArray!T && isByte!(Unqual!(typeof(T.init[0])));
-static assert(isByteArray!(const(ubyte)[]));
-static assert(isByteArray!(const(byte)[]));
-static assert(isByteArray!(ubyte[]));
-static assert(isByteArray!(byte[]));
 
-enum isScalar(T) = isSomeString!T || isIntegral!T || isFloatingPoint!T || isByteArray!T;
-enum isRow(R) = is(R == struct);
 
 /// struct attached as UDA to provide at compile time
 /// the column index in a query result.
@@ -289,7 +282,7 @@ class PgConn
             auto params = pgQueryParams(args);
 
             auto res = PQsendQueryParams(conn, sql.toStringz(),
-                cast(int) params.length, null, &params.values[0], &params.lengths[0], null, 0
+                cast(int) params.num, &params.oids[0], &params.values[0], &params.lengths[0], &params.formats[0], 0
             );
         }
         else
@@ -432,42 +425,6 @@ string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args)
     const pgMsg = PQresultErrorMessage(res).fromStringz;
     msg ~= "PostgreSQL message: " ~ pgMsg;
     return msg ~ "\n";
-}
-
-/// Bind query args to parameters to PQexecParams or similar
-struct PgQueryParams
-{
-    const(char)*[] values;
-    int[] lengths;
-
-    @property size_t length()
-    {
-        assert(values.length == lengths.length);
-        return values.length;
-    }
-
-    @property void length(size_t newLen)
-    {
-        values.length = newLen;
-        lengths.length = newLen;
-    }
-}
-
-/// ditto
-PgQueryParams pgQueryParams(Args...)(Args args)
-{
-    PgQueryParams params;
-    params.length = Args.length;
-
-    static foreach (i, arg; args)
-    {
-        {
-            string val = arg.to!string;
-            params.values[i] = val.toStringz();
-            params.lengths[i] = cast(int) val.length;
-        }
-    }
-    return params;
 }
 
 /// Generate a struct that has integer fields
