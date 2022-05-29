@@ -115,7 +115,7 @@ version (DopAdminMain) int main(string[] args)
     foreach (mig; opts.migrationsToRun)
     {
         writefln("Running migration \"%s\"", mig);
-        db.execSync(migrations[mig]);
+        db.exec(migrations[mig]);
     }
 
     if (opts.registryDir)
@@ -136,8 +136,8 @@ void createDatabase(PgConn db, string connString)
 
     const dbIdent = db.escapeIdentifier(dbName);
 
-    db.execSync("DROP DATABASE IF EXISTS " ~ dbIdent);
-    db.execSync("CREATE DATABASE " ~ dbIdent);
+    db.exec("DROP DATABASE IF EXISTS " ~ dbIdent);
+    db.exec("CREATE DATABASE " ~ dbIdent);
 }
 
 struct User
@@ -154,14 +154,14 @@ enum adminEmail = "admin.tool@dop-test.org";
 
 int createUserIfNotExist(PgConn db, string email)
 {
-    auto ids = db.execScalarsSync!int(
+    auto ids = db.execScalars!int(
         `SELECT "id" FROM "user" WHERE "email" = $1`,
         email
     );
     if (ids.length)
         return ids[0];
 
-    const userId = db.execScalarSync!int(
+    const userId = db.execScalar!int(
         `
             INSERT INTO "user"("email") VALUES($1)
             RETURNING "id"
@@ -199,7 +199,7 @@ void populateRegistry(PgConn db, string regDir)
             continue;
         }
 
-        const pkgId = db.execScalarSync!int(
+        const pkgId = db.execScalar!int(
             `
                 INSERT INTO "package" ("name", "maintainer_id")
                 VALUES ($1, $2)
@@ -217,7 +217,7 @@ void populateRegistry(PgConn db, string regDir)
 
                 const recipe = cast(string)read(rdir.recipeFile);
 
-                const recId = db.execScalarSync!int(
+                const recId = db.execScalar!int(
                     `
                         INSERT INTO "recipe" (
                             "package_id",

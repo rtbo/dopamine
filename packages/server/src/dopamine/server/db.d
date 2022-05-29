@@ -11,7 +11,10 @@ import core.time;
 
 private alias vibeSleep = vibe.core.core.sleep;
 
-class DbClient
+private enum connectionTimeout = dur!"seconds"(10);
+private enum queryTimout = dur!"seconds"(30);
+
+final class DbClient
 {
     ConnectionPool!DbConn pool;
 
@@ -25,37 +28,28 @@ class DbClient
     {
         auto db = new DbConn(connString);
 
-        loop: while(1)
+        loop: while (true)
         {
-            switch (db.status)
-            {
-            case ConnStatus.OK:
-                break loop;
-            case ConnStatus.BAD:
-                throw new ConnectionException(db.errorMessage);
-            default:
-                break;
-            }
-
-            switch(db.connectPoll)
+            final switch (db.connectPoll)
             {
             case PostgresPollingStatus.READING:
-                db.socketEvent.wait();
-                break;
+                db.socketEvent.wait(connectionTimeout);
+                continue loop;
             case PostgresPollingStatus.WRITING:
-                //
+                // no implementation of waiting for write
                 vibeSleep(dur!"msecs"(10));
-                break;
-            default:
-                break;
+                continue loop;
+            case PostgresPollingStatus.OK:
+                break loop;
+            case PostgresPollingStatus.FAILED:
+                throw new ConnectionException(db.errorMessage);
             }
         }
 
-        assert (db.status == ConnStatus.OK);
+        assert(db.status == ConnStatus.OK);
 
         return db;
     }
-
 
     void connect(alias fun)()
     {
@@ -64,17 +58,13 @@ class DbClient
         auto conn = cast(DbConn) lock;
 
         try
-        {
-            fun(conn);
-        }
+            return fun(conn);
         catch (ConnectionException ex)
-        {
-            conn.reset();
-        }
+            conn.resetAsync();
     }
 }
 
-class DbConn : PgConn
+final class DbConn : PgConn
 {
     private int lastSock = -1;
     private FileDescriptorEvent sockEvent;
@@ -90,6 +80,47 @@ class DbConn : PgConn
         destroy(sockEvent);
     }
 
+    void resetAsync()
+    {
+        resetStart();
+
+        loop: while (true)
+        {
+            final switch (db.connectPoll)
+            {
+            case PostgresPollingStatus.READING:
+                socketEvent.wait(connectionTimeout);
+                continue loop;
+            case PostgresPollingStatus.WRITING:
+                // no implementation of waiting for write
+                vibeSleep(dur!"msecs"(10));
+                continue loop;
+            case PostgresPollingStatus.OK:
+                break loop;
+            case PostgresPollingStatus.FAILED:
+                throw new ConnectionException(db.errorMessage);
+            }
+        }
+    }
+
+    override protected void pollResult()
+    {
+        while (!isBusy)
+        {
+            if (status == ConnStatus.BAD)
+                throw new ConnectionException(errorMessage);
+
+            socketEvent.wait(queryTimout);
+            consumeInput();
+        }
+    }
+
+    // current impl of FileDescriptorEvent has the flaw
+    // that it closes the file descriptor during descruction.
+    // So we need to duplicate the socket descriptor.
+    // To avoid having to do this on every query we cache the FileDescriptorEvent
+    // and rebuild it each time the postgres socket changes
+    // (it is not guaranteed to remain the same, but hopefully doesn't change too often)
     private FileDescriptorEvent socketEvent()
     {
         const sock = super.socket;
@@ -111,5 +142,4 @@ class DbConn : PgConn
         }
         return sockEvent;
     }
-
 }

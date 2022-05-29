@@ -69,8 +69,6 @@ enum PostgresPollingStatus
     READING, /* These two indicate that one may	  */
     WRITING, /* use select before polling again.   */
     OK,
-    ACTIVE /* unused; keep for awhile for backwards
-								 * compatibility */
 }
 
 enum ExecStatus

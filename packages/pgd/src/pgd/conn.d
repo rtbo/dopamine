@@ -33,7 +33,6 @@ class ResultLayoutException : Exception
 
 private enum isByte(T) = is(T == byte) || is(T == ubyte);
 private enum isByteArray(T) = isArray!T && isByte!(Unqual!(typeof(T.init[0])));
-
 static assert(isByteArray!(const(ubyte)[]));
 static assert(isByteArray!(const(byte)[]));
 static assert(isByteArray!(ubyte[]));
@@ -60,6 +59,12 @@ struct ColName
 /// An interface to a Postgresql connection.
 /// This interface is single threaded and cannot be shared among threads.
 /// It is safe however to use one PgConn instance per thread.
+///
+/// By default the exec function family are synchronous
+/// which mean that they will block the calling thread until the result is received
+/// from the server.
+/// To perform asynchronous calls, the PgConn class shall be subclassed
+/// and the pollResult method provide implementation to poll on the socket.
 class PgConn
 {
     private PGconn* conn;
@@ -130,81 +135,82 @@ class PgConn
     /// Can be used for polling on the conneciton.
     @property final int socket()
     {
-        return PQsocket(conn);
+        const sock = PQsocket(conn);
+        if (sock == -1)
+            badConnection(conn);
+        return sock;
     }
 
-    /// Send execution of a SQL statement
-    /// Can be used in synchronous mode (if getting the result right after)
-    /// or in asynchronous (e.g. by waiting on the socket to get the result)
-    void send(Args...)(string sql, Args args)
+    @property final bool isBusy()
     {
-        sendPriv(sql, args);
+        return !!PQisBusy(conn);
+    }
+
+    final void consumeInput()
+    {
+        if (!PQconsumeInput(conn))
+            badConnection(conn);
+    }
+
+    /// wait for result by polling on the socket
+    /// default impl does nothing
+    protected void pollResult()
+    {
     }
 
     /// Execute a SQL statement expecting no result.
-    /// Thread is blocked until response is received from the server
-    void execSync(Args...)(string sql, Args args)
+    void exec(Args...)(string sql, Args args)
     {
         sendPriv(sql, args);
 
-        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
+        pollResult();
+
+        auto res = getLastResult();
         scope (exit)
-            clearAndDrain(res);
+            PQclear(res);
 
         const status = PQresultStatus(res);
         if (status.isError)
             badExecution(res, sql, args);
 
-        checkVoid(res);
-    }
-
-    private void checkVoid(PGresult* res)
-    {
-        if (PQresultStatus(res) != ExecStatus.COMMAND_OK)
+        if (status != ExecStatus.COMMAND_OK)
             badResultLayout("Expected an empty result", res);
     }
 
-    T execScalarSync(T, Args...)(string sql, Args args) if (isScalar!T)
+    T execScalar(T, Args...)(string sql, Args args) if (isScalar!T)
     {
         sendPriv(sql, args);
 
-        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
+        pollResult();
+
+        auto res = getLastResult();
         scope (exit)
-            clearAndDrain(res);
+            PQclear(res);
 
         const status = PQresultStatus(res);
         if (status.isError)
             badExecution(res, sql, args);
 
-        return checkScalar!T(res);
-    }
-
-    private T checkScalar(T)(PGresult* res)
-    {
         if (PQntuples(res) != 1 || PQnfields(res) != 1)
             badResultLayout("Expected a single row and single column", res);
 
         return convScalar!T(0, 0, res);
-
     }
 
-    T[] execScalarsSync(T, Args...)(string sql, Args args) if (isScalar!T)
+    T[] execScalars(T, Args...)(string sql, Args args) if (isScalar!T)
     {
         sendPriv(sql, args);
 
-        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
+        pollResult();
+
+        auto res = getLastResult();
         scope (exit)
-            clearAndDrain(res);
+            PQclear(res);
 
         const status = PQresultStatus(res);
         if (status.isError)
             badExecution(res, sql, args);
 
-        return checkScalars!T(res);
-    }
-
-    private T[] checkScalars(T)(PGresult* res)
-    {
         if (PQnfields(res) != 1)
             badResultLayout("Expected a single column", res);
 
@@ -214,32 +220,27 @@ class PgConn
 
         T[] scalars = uninitializedArray!(T[])(nrows);
         foreach (ri; 0 .. nrows)
-        {
             scalars[ri] = convScalar!T(ri, 0, res);
-        }
 
         return scalars;
     }
 
     /// Execute a SQL statement expecting a single row result.
     /// Result row is converted to the provided struct type.
-    R execRowSync(R, Args...)(string sql, Args args) if (isRow!R)
+    R execRow(R, Args...)(string sql, Args args) if (isRow!R)
     {
         sendPriv(sql, args);
 
-        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
+        pollResult();
+
+        auto res = getLastResult();
         scope (exit)
-            clearAndDrain(res);
+            PQclear(res);
 
         const status = PQresultStatus(res);
         if (status.isError)
             badExecution(res, sql, args);
 
-        return checkRow!R(res);
-    }
-
-    private R checkRow(R)(PGresult* res)
-    {
         if (PQntuples(res) != 1)
             badResultLayout("Expected a single row", res);
 
@@ -251,23 +252,20 @@ class PgConn
 
     /// Execute a SQL statement expecting a zero or many row result.
     /// Result rows are converted to the provided struct type.
-    R[] execRowsSync(R, Args...)(string sql, Args args) if (isRow!R)
+    R[] execRows(R, Args...)(string sql, Args args) if (isRow!R)
     {
         sendPriv(sql, args);
 
-        auto res = enforce!OutOfMemoryError(PQgetResult(conn));
+        pollResult();
+
+        auto res = getLastResult();
         scope (exit)
-            clearAndDrain(res);
+            PQclear(res);
 
         const status = PQresultStatus(res);
         if (status.isError)
             badExecution(res, sql, args);
 
-        return checkRows!R(res);
-    }
-
-    private R[] checkRows(R)(PGresult* res)
-    {
         const nrows = PQntuples(res);
         if (!nrows)
             return [];
@@ -301,6 +299,24 @@ class PgConn
 
         if (res != 1)
             badConnection(conn);
+    }
+
+    private PGresult* getLastResult()
+    {
+        PGresult* last;
+        PGresult* res = enforce!OutOfMemoryError(PQgetResult(conn));
+        while (res)
+        {
+            if (last)
+                PQclear(last);
+            last = res;
+            res = PQgetResult(conn);
+        }
+
+        if (status == ConnStatus.BAD)
+            badConnection(conn);
+
+        return last;
     }
 
     private void clearAndDrain(PGresult* res)
