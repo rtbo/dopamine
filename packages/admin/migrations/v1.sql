@@ -1,4 +1,3 @@
-
 CREATE TABLE "user" (
     "id"            serial PRIMARY KEY,
     "email"         text NOT NULL,
@@ -29,9 +28,9 @@ CREATE TABLE "recipe" (
     "version"       text NOT NULL,
     "revision"      text NOT NULL,
     "recipe"        text NOT NULL,
-    -- "filename"      text NOT NULL,
-    -- "filesha1"      text NOT NULL,
-    -- "filedata"      bytea NOT NULL,
+    "filename"      text NOT NULL,
+    "filesha1"      bytea NOT NULL,
+    "filedata"      bytea NOT NULL,
 
     FOREIGN KEY ("package_id") REFERENCES "package"("id") ON DELETE CASCADE,
     FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL

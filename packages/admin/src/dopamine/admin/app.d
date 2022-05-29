@@ -4,8 +4,11 @@ import dopamine.admin.config;
 import dopamine.cache_dirs;
 import pgd.conn;
 import pgd.connstring;
+import squiz_box;
 
 import std.algorithm;
+import std.array;
+import std.digest.sha;
 import std.exception;
 import std.getopt;
 import std.file;
@@ -217,6 +220,16 @@ void populateRegistry(PgConn db, string regDir)
 
                 const recipe = cast(string)read(rdir.recipeFile);
 
+                auto recipeFileBlob = dirEntries(rdir.dir, SpanMode.breadth)
+                    .filter!(e => !e.isDir)
+                    .map!(e => fileEntry(e.name, rdir.dir))
+                    .createTarArchive()
+                    .compressXz()
+                    .join();
+
+                const filename = format("%s-%s-%s.tar.xz", pkg.name, vdir.ver, rdir.revision);
+                const sha1 = sha1Of(recipeFileBlob);
+
                 const recId = db.execScalar!int(
                     `
                         INSERT INTO "recipe" (
@@ -224,14 +237,20 @@ void populateRegistry(PgConn db, string regDir)
                             "maintainer_id",
                             "version",
                             "revision",
-                            "recipe"
+                            "recipe",
+                            "filename",
+                            "filesha1",
+                            "filedata"
                         ) VALUES(
-                            $1, $2, $3, $4, $5
+                            $1, $2, $3, $4, $5, $6, $7, $8
                         )
                         RETURNING "id"
                     `,
-                    pkgId, adminId, vdir.ver, rdir.revision, recipe
+                    pkgId, adminId, vdir.ver, rdir.revision, recipe, filename, sha1, recipeFileBlob
                 );
+
+                writefln("%(%02x%)", sha1[]);
+
                 writefln("Created recipe %s/%s/%s (%s)", pkg.name, vdir.ver, rdir.revision, recId);
             }
 
