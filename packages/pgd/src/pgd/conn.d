@@ -11,6 +11,7 @@ import std.meta;
 import std.string;
 import std.traits;
 import std.typecons;
+import std.stdio : File;
 import core.exception;
 
 // exporting a few Postgresql enums
@@ -31,8 +32,6 @@ class ResultLayoutException : Exception
 {
     mixin basicExceptionCtors!();
 }
-
-
 
 /// struct attached as UDA to provide at compile time
 /// the column index in a query result.
@@ -61,7 +60,8 @@ struct ColName
 class PgConn
 {
     private PGconn* conn;
-
+    private bool inTransac;
+    private int transacSavePoint;
     // A provision of counters for results.
     private int[64] refCounts;
 
@@ -145,10 +145,71 @@ class PgConn
             badConnection(conn);
     }
 
+    final void trace(File dest)
+    {
+        PQtrace(conn, dest.getFP());
+    }
+
+    final void untrace()
+    {
+        PQuntrace(conn);
+    }
+
     /// wait for result by polling on the socket
     /// default impl does nothing
     protected void pollResult()
     {
+    }
+
+    /// Execute a transaction and return whatever is returned by the transaction handler.
+    /// `START TRANSACTION` is executed before the handler and either `COMMIT` or `ROLLBACK`
+    /// is executed after depending on whether an exception is thrown in the handler.
+    ///
+    /// `handler` must be a function or delegate accepting a scope PgTransac object.
+    ///
+    /// Nested transactions are also supported by use of savePoint
+    auto transac(H)(H handler)
+    {
+        static assert(is(typeof(handler())), "function must not take any parameter");
+        alias Ret = typeof(handler());
+
+        const savePoint = transacSavePoint;
+        const rootTransac = savePoint == 0;
+
+        if (rootTransac)
+            exec("START TRANSACTION");
+        else
+            exec(format("SAVEPOINT pgd_savepoint_%s", savePoint));
+
+        transacSavePoint += 1;
+        scope (exit)
+            transacSavePoint -= 1;
+
+        try
+        {
+            static if (is(Ret == void))
+                handler();
+            else
+                auto res = handler();
+
+            if (rootTransac)
+                exec("COMMIT");
+
+            static if (!is(Ret == void))
+                return res;
+        }
+        catch (ConnectionException connEx)
+        {
+            throw connEx;
+        }
+        catch (Exception ex)
+        {
+            if (rootTransac)
+                exec("ROLLBACK");
+            else
+                exec("SAVEPOINT pgd_savepoint_%s", savePoint);
+            throw ex;
+        }
     }
 
     /// Execute a SQL statement expecting no result.
@@ -306,19 +367,10 @@ class PgConn
             res = PQgetResult(conn);
         }
 
-        if (status == ConnStatus.BAD)
+        if (PQstatus(conn) == ConnStatus.BAD)
             badConnection(conn);
 
         return last;
-    }
-
-    private void clearAndDrain(PGresult* res)
-    {
-        while (res)
-        {
-            PQclear(res);
-            res = PQgetResult(conn);
-        }
     }
 
     /// Get the (untyped) result for the current query
@@ -362,16 +414,6 @@ class PgConn
 }
 
 private:
-
-auto pgEnforce(C)(PGconn* conn, C cond)
-{
-    if (!cond)
-    {
-        const msg = PQerrorMessage(conn).fromStringz().idup;
-        throw new Exception(msg);
-    }
-    return cond;
-}
 
 @property bool isError(ExecStatus status)
 {

@@ -1,3 +1,5 @@
+CREATE EXTENSION "pgcrypto";
+
 CREATE TABLE "user" (
     "id"            serial PRIMARY KEY,
     "email"         text NOT NULL,
@@ -29,7 +31,6 @@ CREATE TABLE "recipe" (
     "revision"      text NOT NULL,
     "recipe"        text NOT NULL,
     "filename"      text NOT NULL,
-    "filesha1"      bytea NOT NULL,
     "filedata"      bytea NOT NULL,
 
     FOREIGN KEY ("package_id") REFERENCES "package"("id") ON DELETE CASCADE,

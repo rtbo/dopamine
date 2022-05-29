@@ -112,6 +112,8 @@ version (DopAdminMain) int main(string[] args)
     }
 
     auto db = new PgConn(conf.dbConnString);
+    // db.trace(stderr);
+
     scope (exit)
         db.finish();
 
@@ -230,26 +232,34 @@ void populateRegistry(PgConn db, string regDir)
                 const filename = format("%s-%s-%s.tar.xz", pkg.name, vdir.ver, rdir.revision);
                 const sha1 = sha1Of(recipeFileBlob);
 
-                const recId = db.execScalar!int(
-                    `
-                        INSERT INTO "recipe" (
-                            "package_id",
-                            "maintainer_id",
-                            "version",
-                            "revision",
-                            "recipe",
-                            "filename",
-                            "filesha1",
-                            "filedata"
-                        ) VALUES(
-                            $1, $2, $3, $4, $5, $6, $7, $8
-                        )
-                        RETURNING "id"
-                    `,
-                    pkgId, adminId, vdir.ver, rdir.revision, recipe, filename, sha1, recipeFileBlob
-                );
-
-                writefln("%(%02x%)", sha1[]);
+                const recId = db.transac({
+                    const recId = db.execScalar!int(
+                        `
+                            INSERT INTO "recipe" (
+                                "package_id",
+                                "maintainer_id",
+                                "version",
+                                "revision",
+                                "recipe",
+                                "filename",
+                                "filedata"
+                            ) VALUES(
+                                $1, $2, $3, $4, $5, $6, $7
+                            )
+                            RETURNING "id"
+                        `,
+                        pkgId, adminId, vdir.ver, rdir.revision, recipe, filename, recipeFileBlob
+                    );
+                    auto dbSha1 = db.execScalar!string(
+                        `
+                            SELECT encode(digest("filedata", 'sha1'), 'hex') FROM "recipe"
+                            WHERE "id" = $1
+                        `,
+                        recId
+                    );
+                    enforce(dbSha1 == format("%(%02x%)", sha1));
+                    return recId;
+                });
 
                 writefln("Created recipe %s/%s/%s (%s)", pkg.name, vdir.ver, rdir.revision, recId);
             }
