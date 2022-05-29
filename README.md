@@ -118,12 +118,14 @@ return {
 
 ## Build
 
-Dopamine is built with `meson` and has no external dependency.
+Dopamine is built with `meson`.
 You need the following tools:
  - meson
  - ninja
  - a D compiler (either DMD or LDC)
- - a C compiler (Lua is compiled during the build).
+ - Dub (dopamine depends on vibe-d)
+ - a C compiler
+    - C libraries are compiled if not found on the system (Lua + compression libraries)
 
 ### Linux
 
@@ -144,7 +146,7 @@ Only MSVC is supported as C compiler, as D compilers do not link to MingW out of
 Also you need to run both meson **and** ninja from a VS prompt.
 If you have `[vswhere](https://github.com/microsoft/vswhere)` in your Path,
 `win_env_vs.bat` is provided to setup the VS environment from your regular CMD prompt (do not work with powershell).
-If you don't have `vswhere`, do yourself a favor and put `vswhere` in your Path.
+Alternatively, the modern `Windows Terminal` app is also helpful.
 
 ```bat
 win_env_vs.bat
