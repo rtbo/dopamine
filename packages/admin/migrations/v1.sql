@@ -39,7 +39,7 @@ CREATE TABLE "recipe" (
 
 -- recipe file data is received compressed, therefore the following will save CPU time on the server.
 -- See https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/
--- ALTER TABLE "recipe" ALTER COLUMN "filedata" SET STORAGE EXTERNAL;
+ALTER TABLE "recipe" ALTER COLUMN "filedata" SET STORAGE EXTERNAL;
 
 CREATE TABLE "recipe_file" (
     "id"            serial PRIMARY KEY,

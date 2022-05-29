@@ -215,7 +215,7 @@ class PgConn
     /// Execute a SQL statement expecting no result.
     void exec(Args...)(string sql, Args args)
     {
-        sendPriv(sql, args);
+        sendPriv!false(sql, args);
 
         pollResult();
 
@@ -233,7 +233,7 @@ class PgConn
 
     T execScalar(T, Args...)(string sql, Args args) if (isScalar!T)
     {
-        sendPriv(sql, args);
+        sendPriv!true(sql, args);
 
         pollResult();
 
@@ -253,7 +253,7 @@ class PgConn
 
     T[] execScalars(T, Args...)(string sql, Args args) if (isScalar!T)
     {
-        sendPriv(sql, args);
+        sendPriv!true(sql, args);
 
         pollResult();
 
@@ -283,7 +283,7 @@ class PgConn
     /// Result row is converted to the provided struct type.
     R execRow(R, Args...)(string sql, Args args) if (isRow!R)
     {
-        sendPriv(sql, args);
+        sendPriv!true(sql, args);
 
         pollResult();
 
@@ -308,7 +308,7 @@ class PgConn
     /// Result rows are converted to the provided struct type.
     R[] execRows(R, Args...)(string sql, Args args) if (isRow!R)
     {
-        sendPriv(sql, args);
+        sendPriv!true(sql, args);
 
         pollResult();
 
@@ -335,15 +335,26 @@ class PgConn
         return rows;
     }
 
-    private void sendPriv(Args...)(string sql, Args args)
+    private void sendPriv(bool withResults, Args...)(string sql, Args args)
     {
+        // PQsendQueryParams is needed to specify that we need results in binary format
+        // The downside is that it does not allow to send multiple sql commands at once
+        // (; separated in the same string)
+        // so when no result is expected and no param is needed we use PQsendQuery
+
         static if (Args.length > 0)
         {
             // TODO: debug check that maximum index in sql is not greater than args.length
             auto params = pgQueryParams(args);
 
             auto res = PQsendQueryParams(conn, sql.toStringz(),
-                cast(int) params.num, &params.oids[0], &params.values[0], &params.lengths[0], &params.formats[0], 0
+                cast(int) params.num, &params.oids[0], &params.values[0], &params.lengths[0], &params.formats[0], 1
+            );
+        }
+        else static if (withResults)
+        {
+            auto res = PQsendQueryParams(conn, sql.toStringz(),
+                0, null, null, null, null, 1
             );
         }
         else
@@ -392,7 +403,7 @@ class PgConn
         return null;
     }
 
-    string escapeLiteral(T)(T val) if (isDbScalar!T)
+    string escapeLiteral(T)(T val) if (isScalar!T)
     {
         string sval = val.to!string;
 
@@ -457,7 +468,7 @@ noreturn badResultLayout(string expectation, PGresult* res)
 string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args)
 {
     string msg = "Error during query execution.\n";
-    msg ~= "SQL:\n  " ~ sql ~ "\n";
+    msg ~= "SQL:\n" ~ sql ~ "\n";
     if (args.length)
     {
         msg ~= "Params:\n";
@@ -545,29 +556,3 @@ auto getColIndices(R)(const(PGresult)* res)
 
     return inds;
 }
-
-T convScalar(T)(int rowInd, int colInd, const(PGresult)* res)
-{
-    const len = PQgetlength(res, rowInd, colInd);
-    const pval = PQgetvalue(res, rowInd, colInd);
-    const val = pval[0 .. len];
-    return val.to!T;
-}
-
-R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res)
-{
-    R row = void;
-    static foreach (f; FieldNameTuple!R)
-    {
-        {
-            const colInd = __traits(getMember, colInds, f);
-            const len = PQgetlength(res, rowInd, colInd);
-            const pval = PQgetvalue(res, rowInd, colInd);
-            const val = pval[0 .. len];
-            __traits(getMember, row, f) = val.to!(typeof(__traits(getMember, row, f)));
-        }
-    }
-    return row;
-}
-
-/// TODO: make dummy connection and dummy result for testing

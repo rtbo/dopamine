@@ -250,14 +250,14 @@ void populateRegistry(PgConn db, string regDir)
                         `,
                         pkgId, adminId, vdir.ver, rdir.revision, recipe, filename, recipeFileBlob
                     );
-                    auto dbSha1 = db.execScalar!string(
+                    auto dbSha1 = db.execScalar!(ubyte[20])(
                         `
-                            SELECT encode(digest("filedata", 'sha1'), 'hex') FROM "recipe"
+                            SELECT digest("filedata", 'sha1') FROM "recipe"
                             WHERE "id" = $1
                         `,
                         recId
                     );
-                    enforce(dbSha1 == format("%(%02x%)", sha1));
+                    enforce(dbSha1 == sha1);
                     return recId;
                 });
 

@@ -1,9 +1,11 @@
 module pgd.conv;
 
-import pgd.libpq.defs;
+import pgd.libpq;
 
 import std.array;
 import std.bitmanip;
+import std.conv;
+import std.exception;
 import std.meta;
 import std.traits;
 
@@ -53,6 +55,83 @@ private struct NotSomeRow
 static assert(isRow!SomeRow);
 static assert(!isRow!NotSomeRow);
 static assert(!isScalar!SomeRow);
+
+package T convScalar(T)(int rowInd, int colInd, const(PGresult)* res)
+{
+    const len = PQgetlength(res, rowInd, colInd);
+    const pval = PQgetvalue(res, rowInd, colInd);
+    const val = pval[0 .. len];
+    const text = PQfformat(res, colInd) == 0;
+
+    if (text)
+    {
+        // FIXME: probably not suited to all conversions (e.g. bin encoding)
+        return val.to!T;
+    }
+    else
+    {
+        const binVal = BinValue(cast(const(ubyte)[])val, PQftype(res, colInd));
+        return toScalar!T(binVal);
+    }
+}
+
+package R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res)
+{
+    R row = void;
+    // dfmt off
+    static foreach (f; FieldNameTuple!R)
+    {{
+        alias T = typeof(__traits(getMember, row, f));
+        const colInd = __traits(getMember, colInds, f);
+        __traits(getMember, row, f) = convScalar!T(rowInd, colInd, res);
+    }}
+    // dfmt on
+    return row;
+}
+
+private struct BinValue
+{
+    const(ubyte)[] val;
+    Oid oid;
+
+    void check(Oid enforceOid, size_t enforceSize, string typename)
+    {
+        enforce(oid == enforceOid, "FIXME: msg oid " ~ typename);
+        enforce(val.length == enforceSize, "FIXME: msg size " ~ typename);
+    }
+}
+
+private bool toScalar(T)(BinValue val) if (is(T == bool))
+{
+    val.check(BOOLOID, 1, "bool");
+    return val.val[0] != 0;
+}
+
+private T toScalar(T)(BinValue val) if (isNumeric!T)
+{
+    val.check(typeOid!T, T.sizeof, T.stringof);
+    const ubyte[T.sizeof] be = val.val[0 .. T.sizeof];
+    return bigEndianToNative!T(be);
+}
+
+private T toScalar(T)(BinValue val) if (isString!T)
+{
+    enforce(val.oid == TEXTOID, "FIXME: msg oid string");
+    return (cast(const(char)[])val.val).idup;
+}
+
+private T toScalar(T)(BinValue val) if (isByteArray!T && isStaticArray!T)
+{
+    val.check(BYTEAOID, T.length, "FIXME: msg oid ubyte[]");
+    T arr = (cast(const(ElType!T)[])val.val)[0 .. T.length];
+    return arr;
+}
+
+private T toScalar(T)(BinValue val) if (isByteArray!T && isDynamicArray!T)
+{
+    enforce (val.oid == BYTEAOID, "FIXME: msg oid ubyte[]");
+    return cast(ElType!T[])val.val.dup;
+}
 
 private template typeOid(TT)
 {
