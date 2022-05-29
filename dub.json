@@ -9,6 +9,7 @@
     "packages/lib/src",
     "packages/pgd/src",
     "packages/server/src",
+    "subprojects/squiz-box/src",
     "test/end2end",
     "test/unit"
   ],
@@ -19,6 +20,7 @@
     "packages/lib/src",
     "packages/pgd/src",
     "packages/server/src",
+    "subprojects/squiz-box/src",
     "test/end2end",
     "test/unit"
   ],
