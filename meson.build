@@ -23,10 +23,19 @@ if get_option('enable_server')
         method: 'dub',
         version: vibed_version,
     )
-    libpq_dep = dependency('libpq',
-        version: '>= 14.3',
-        method: 'pkg-config',
-    )
+    if host_machine.system() == 'windows'
+        src_dir = meson.current_source_dir()
+        libpq_file = src_dir / 'windows-x64/lib/libpq.lib'
+        libpq_dep = declare_dependency(
+            link_args: libpq_file,
+        )
+    else
+        libpq_dep = dependency('libpq',
+            version: '>= 14.3',
+            method: 'pkg-config',
+            required: pq_required,
+        )
+    endif
 endif
 
 if get_option('enable_client')
