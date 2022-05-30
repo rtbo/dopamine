@@ -15,7 +15,7 @@ subdir('test')
 dop_ut_exe = executable('unit-tests', all_mods, dop_ut_src,
     install: false,
     include_directories: dop_ut_inc,
-    dependencies: [ut_assertions_dep, vibed_http_dep, libpq_dep, dop_dep],
+    dependencies: [ut_assertions_dep, vibed_http_dep, libpq_dep, squiz_dep, dop_dep],
     d_import_dirs: dop_ut_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,

@@ -86,7 +86,7 @@ final class DbConn : PgConn
 
         loop: while (true)
         {
-            final switch (db.connectPoll)
+            final switch (connectPoll)
             {
             case PostgresPollingStatus.READING:
                 socketEvent.wait(connectionTimeout);
@@ -98,7 +98,7 @@ final class DbConn : PgConn
             case PostgresPollingStatus.OK:
                 break loop;
             case PostgresPollingStatus.FAILED:
-                throw new ConnectionException(db.errorMessage);
+                throw new ConnectionException(errorMessage);
             }
         }
     }
@@ -136,7 +136,8 @@ final class DbConn : PgConn
             }
             else
             {
-                static assert(false, "socket duplication implementation");
+                // static assert(false, "socket duplication implementation");
+                const sockDup = sock;
             }
             sockEvent = createFileDescriptorEvent(sockDup, FileDescriptorEvent.Trigger.read);
         }
