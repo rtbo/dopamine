@@ -6,6 +6,8 @@ import std.exception;
 import std.file;
 import std.path;
 
+@safe:
+
 struct CachePackageDir
 {
     mixin CacheDir!();
@@ -32,7 +34,7 @@ struct CachePackageDir
         return versionDir(ver.toString());
     }
 
-    auto versionDirs() const
+    auto versionDirs() const @trusted
     {
         import std.algorithm : map;
 
@@ -75,7 +77,7 @@ struct CacheVersionDir
         return CacheRevisionDir(revDir);
     }
 
-    auto revisionDirs() const
+    auto revisionDirs() const @trusted
     {
         import std.algorithm : filter, map;
 
@@ -174,7 +176,7 @@ private mixin template CacheDir()
     }
 }
 
-package(dopamine) auto dirInputRange(string parent)
+package(dopamine) auto dirInputRange(string parent) @trusted
 {
     import std.algorithm : filter, map;
 
