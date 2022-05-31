@@ -232,7 +232,7 @@ void populateRegistry(PgConn db, string regDir)
                 const filename = format("%s-%s-%s.tar.xz", pkg.name, vdir.ver, rdir.revision);
                 const sha1 = sha1Of(recipeFileBlob);
 
-                const recId = db.transac({
+                const recId = db.transac(() @safe {
                     const recId = db.execScalar!int(
                         `
                             INSERT INTO "recipe" (

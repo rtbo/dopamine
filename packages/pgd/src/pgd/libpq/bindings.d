@@ -4,7 +4,7 @@ import pgd.libpq.defs;
 
 import core.stdc.stdio : FILE;
 
-extern (C) nothrow:
+extern (C) nothrow @system:
 
 /* === in fe-connect.c === */
 

@@ -4,7 +4,9 @@ import pgd.libpq;
 
 import std.string;
 
-string[string] breakdownConnString(string conninfo)
+@safe:
+
+string[string] breakdownConnString(string conninfo) @trusted
 {
     const conninfoz = conninfo.toStringz();
 

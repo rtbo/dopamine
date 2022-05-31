@@ -56,7 +56,7 @@ static assert(isRow!SomeRow);
 static assert(!isRow!NotSomeRow);
 static assert(!isScalar!SomeRow);
 
-package T convScalar(T)(int rowInd, int colInd, const(PGresult)* res)
+package T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @system
 {
     const len = PQgetlength(res, rowInd, colInd);
     const pval = PQgetvalue(res, rowInd, colInd);
@@ -75,7 +75,7 @@ package T convScalar(T)(int rowInd, int colInd, const(PGresult)* res)
     }
 }
 
-package R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res)
+package R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res) @system
 {
     R row = void;
     // dfmt off
@@ -94,40 +94,41 @@ private struct BinValue
     const(ubyte)[] val;
     Oid oid;
 
-    void check(Oid enforceOid, size_t enforceSize, string typename)
+    void check(Oid enforceOid, size_t enforceSize, string typename) @safe
     {
         enforce(oid == enforceOid, "FIXME: msg oid " ~ typename);
         enforce(val.length == enforceSize, "FIXME: msg size " ~ typename);
     }
 }
 
-private bool toScalar(T)(BinValue val) if (is(T == bool))
+private bool toScalar(T)(BinValue val) @safe if (is(T == bool))
 {
     val.check(BOOLOID, 1, "bool");
     return val.val[0] != 0;
 }
 
-private T toScalar(T)(BinValue val) if (isNumeric!T)
+private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 {
     val.check(typeOid!T, T.sizeof, T.stringof);
     const ubyte[T.sizeof] be = val.val[0 .. T.sizeof];
     return bigEndianToNative!T(be);
 }
 
-private T toScalar(T)(BinValue val) if (isString!T)
+// UTF-8 is not checked, hence @system
+private T toScalar(T)(BinValue val) @system if (isString!T)
 {
     enforce(val.oid == TEXTOID, "FIXME: msg oid string");
     return (cast(const(char)[])val.val).idup;
 }
 
-private T toScalar(T)(BinValue val) if (isByteArray!T && isStaticArray!T)
+private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isStaticArray!T)
 {
     val.check(BYTEAOID, T.length, "FIXME: msg oid ubyte[]");
     T arr = (cast(const(ElType!T)[])val.val)[0 .. T.length];
     return arr;
 }
 
-private T toScalar(T)(BinValue val) if (isByteArray!T && isDynamicArray!T)
+private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
 {
     enforce (val.oid == BYTEAOID, "FIXME: msg oid ubyte[]");
     return cast(ElType!T[])val.val.dup;
@@ -178,7 +179,7 @@ private template scalarBinSizeCt(TT) if (isScalar!TT)
         static assert(false, "unknown compile-time size");
 }
 
-private size_t scalarBinSize(T)(T val) if (isScalar!T)
+private size_t scalarBinSize(T)(T val) @safe if (isScalar!T)
 {
     static if (is(T == bool))
         return 1;
@@ -193,7 +194,7 @@ private size_t scalarBinSize(T)(T val) if (isScalar!T)
 }
 
 /// write binary representation in array and return offset advance
-private size_t emplaceScalar(T)(T val, ubyte[] buf)
+private size_t emplaceScalar(T)(T val, ubyte[] buf) @safe
 {
     assert(buf.length >= scalarBinSize(val));
 
@@ -209,7 +210,7 @@ private size_t emplaceScalar(T)(T val, ubyte[] buf)
     }
     else static if (isString!T || isByteArray!T)
     {
-        buf[0 .. val.length] = cast(immutable(ubyte)[]) val[]; // add [] to support static arrays
+        buf[0 .. val.length] = cast(const(ubyte)[]) val[]; // add [] to support static arrays
         return val.length;
     }
 }
@@ -233,7 +234,7 @@ package struct PgQueryParams
         return PgQueryParams(oids, values, lengths, formats);
     }
 
-    @property int num()
+    @property int num() @safe
     {
         assert(values.length == oids.length);
         assert(values.length == lengths.length);
@@ -243,7 +244,7 @@ package struct PgQueryParams
 }
 
 /// ditto
-package PgQueryParams pgQueryParams(Args...)(Args args)
+package PgQueryParams pgQueryParams(Args...)(Args args) @trusted
 {
     auto params = PgQueryParams.uninitialized(Args.length);
 
