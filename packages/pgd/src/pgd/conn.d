@@ -18,6 +18,8 @@ import core.exception;
 alias ConnStatus = pgd.libpq.ConnStatus;
 alias PostgresPollingStatus = pgd.libpq.PostgresPollingStatus;
 
+@safe:
+
 class ConnectionException : Exception
 {
     mixin basicExceptionCtors!();
@@ -48,6 +50,8 @@ struct ColName
     string name;
 }
 
+alias TransacHandler(T) = T delegate() @safe;
+
 /// An interface to a Postgresql connection.
 /// This interface is single threaded and cannot be shared among threads.
 /// It is safe however to use one PgConn instance per thread.
@@ -65,7 +69,7 @@ class PgConn
     // A provision of counters for results.
     private int[64] refCounts;
 
-    private this(const(char)* conninfo, Flag!"async" async = No.async)
+    private this(const(char)* conninfo, Flag!"async" async = No.async) @system
     {
         if (async)
         {
@@ -83,50 +87,50 @@ class PgConn
         }
     }
 
-    this(string conninfo, Flag!"async" async = No.async)
+    this(string conninfo, Flag!"async" async = No.async) @trusted
     {
         this(conninfo.toStringz(), async);
     }
 
-    @property final ConnStatus status() const
+    @property final ConnStatus status() const @trusted
     {
         return PQstatus(conn);
     }
 
-    @property final PostgresPollingStatus connectPoll()
+    @property final PostgresPollingStatus connectPoll() @trusted
     {
         return PQconnectPoll(conn);
     }
 
-    void finish()
+    void finish() @trusted
     {
         PQfinish(conn);
     }
 
-    final void resetStart()
+    final void resetStart() @trusted
     {
         if (!PQresetStart(conn))
             badConnection(conn);
     }
 
-    @property final PostgresPollingStatus resetPoll()
+    @property final PostgresPollingStatus resetPoll() @trusted
     {
         return PQresetPoll(conn);
     }
 
-    final void reset()
+    final void reset() @trusted
     {
         PQreset(conn);
     }
 
-    @property final string errorMessage() const
+    @property final string errorMessage() const @trusted
     {
         return PQerrorMessage(conn).fromStringz.idup;
     }
 
     /// The file descriptor of the socket that communicate with the server.
     /// Can be used for polling on the conneciton.
-    @property final int socket()
+    @property final int socket() @trusted
     {
         const sock = PQsocket(conn);
         if (sock == -1)
@@ -134,30 +138,30 @@ class PgConn
         return sock;
     }
 
-    @property final bool isBusy()
+    @property final bool isBusy() @trusted
     {
         return !!PQisBusy(conn);
     }
 
-    final void consumeInput()
+    final void consumeInput() @trusted
     {
         if (!PQconsumeInput(conn))
             badConnection(conn);
     }
 
-    final void trace(File dest)
+    final void trace(File dest) @trusted
     {
         PQtrace(conn, dest.getFP());
     }
 
-    final void untrace()
+    final void untrace() @trusted
     {
         PQuntrace(conn);
     }
 
     /// wait for result by polling on the socket
     /// default impl does nothing
-    protected void pollResult()
+    protected void pollResult() @safe
     {
     }
 
@@ -168,11 +172,10 @@ class PgConn
     /// `handler` must be a function or delegate accepting a scope PgTransac object.
     ///
     /// Nested transactions are also supported by use of savePoint
-    auto transac(H)(H handler)
+    auto transac(H)(H handler) @trusted if (isSomeFunction!H && isSafe!H)
     {
-        static assert(is(typeof(handler())), "function must not take any parameter");
-        alias Ret = typeof(handler());
-
+        alias T = ReturnType!H;
+        static assert (is(typeof(handler())), "handler must accept no parameter");
         const savePoint = transacSavePoint;
         const rootTransac = savePoint == 0;
 
@@ -187,7 +190,7 @@ class PgConn
 
         try
         {
-            static if (is(Ret == void))
+            static if (is(T == void))
                 handler();
             else
                 auto res = handler();
@@ -195,7 +198,7 @@ class PgConn
             if (rootTransac)
                 exec("COMMIT");
 
-            static if (!is(Ret == void))
+            static if (!is(T == void))
                 return res;
         }
         catch (ConnectionException connEx)
@@ -213,7 +216,7 @@ class PgConn
     }
 
     /// Execute a SQL statement expecting no result.
-    void exec(Args...)(string sql, Args args)
+    void exec(Args...)(string sql, Args args) @trusted
     {
         sendPriv!false(sql, args);
 
@@ -231,7 +234,7 @@ class PgConn
             badResultLayout("Expected an empty result", res);
     }
 
-    T execScalar(T, Args...)(string sql, Args args) if (isScalar!T)
+    T execScalar(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
     {
         sendPriv!true(sql, args);
 
@@ -251,7 +254,7 @@ class PgConn
         return convScalar!T(0, 0, res);
     }
 
-    T[] execScalars(T, Args...)(string sql, Args args) if (isScalar!T)
+    T[] execScalars(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
     {
         sendPriv!true(sql, args);
 
@@ -281,7 +284,7 @@ class PgConn
 
     /// Execute a SQL statement expecting a single row result.
     /// Result row is converted to the provided struct type.
-    R execRow(R, Args...)(string sql, Args args) if (isRow!R)
+    R execRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
     {
         sendPriv!true(sql, args);
 
@@ -335,7 +338,7 @@ class PgConn
         return rows;
     }
 
-    private void sendPriv(bool withResults, Args...)(string sql, Args args)
+    private void sendPriv(bool withResults, Args...)(string sql, Args args) @trusted
     {
         // PQsendQueryParams is needed to specify that we need results in binary format
         // The downside is that it does not allow to send multiple sql commands at once
@@ -366,7 +369,7 @@ class PgConn
             badConnection(conn);
     }
 
-    private PGresult* getLastResult()
+    private PGresult* getLastResult() @trusted
     {
         PGresult* last;
         PGresult* res = enforce!OutOfMemoryError(PQgetResult(conn));
@@ -386,7 +389,7 @@ class PgConn
 
     /// Get the (untyped) result for the current query
     /// if result casts to false, it means there is no more result
-    Result getResult()
+    Result getResult() @trusted
     {
         auto res = PQgetResult(conn);
         // FIXME: check for error
@@ -403,18 +406,7 @@ class PgConn
         return null;
     }
 
-    string escapeLiteral(T)(T val) if (isScalar!T)
-    {
-        string sval = val.to!string;
-
-        auto res = PQescapeLiteral(conn, sval.ptr, sval.length);
-        scope (exit)
-            PQfreemem(cast(void*) res);
-
-        return res.fromStringz.idup;
-    }
-
-    string escapeIdentifier(string ident)
+    string escapeIdentifier(string ident) @trusted
     {
         auto res = PQescapeIdentifier(conn, ident.ptr, ident.length);
         scope (exit)
@@ -439,6 +431,8 @@ private:
         return false;
     }
 }
+
+@system:
 
 noreturn badConnection(PGconn* conn)
 {
@@ -465,7 +459,7 @@ noreturn badResultLayout(string expectation, PGresult* res)
     throw new ResultLayoutException(msg);
 }
 
-string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args)
+string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args) @system
 {
     string msg = "Error during query execution.\n";
     msg ~= "SQL:\n" ~ sql ~ "\n";

@@ -106,7 +106,7 @@ final class DbConn : PgConn
         }
     }
 
-    override protected void pollResult()
+    override protected void pollResult() @safe
     {
         while (!isBusy)
         {
@@ -124,7 +124,7 @@ final class DbConn : PgConn
     // To avoid having to do this on every query we cache the FileDescriptorEvent
     // and rebuild it each time the postgres socket changes
     // (it is not guaranteed to remain the same, but hopefully doesn't change too often)
-    private FileDescriptorEvent socketEvent()
+    private FileDescriptorEvent socketEvent() @safe
     {
         const sock = super.socket;
 
