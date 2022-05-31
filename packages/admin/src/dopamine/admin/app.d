@@ -220,11 +220,14 @@ void populateRegistry(PgConn db, string regDir)
                 if (!exists(rdir.recipeFile))
                     continue;
 
-                const recipe = cast(string)read(rdir.recipeFile);
+                const recipe = cast(string) read(rdir.recipeFile);
 
-                auto recipeFileBlob = dirEntries(rdir.dir, SpanMode.breadth)
+                auto fileEntries = dirEntries(rdir.dir, SpanMode.breadth)
                     .filter!(e => !e.isDir)
                     .map!(e => fileEntry(e.name, rdir.dir))
+                    .array;
+
+                auto recipeFileBlob = fileEntries
                     .createTarArchive()
                     .compressXz()
                     .join();
@@ -232,7 +235,7 @@ void populateRegistry(PgConn db, string regDir)
                 const filename = format("%s-%s-%s.tar.xz", pkg.name, vdir.ver, rdir.revision);
                 const sha1 = sha1Of(recipeFileBlob);
 
-                const recId = db.transac(() @safe {
+                const recId = db.transac(() @trusted {
                     const recId = db.execScalar!int(
                         `
                             INSERT INTO "recipe" (
@@ -258,6 +261,13 @@ void populateRegistry(PgConn db, string regDir)
                         recId
                     );
                     enforce(dbSha1 == sha1);
+
+                    foreach (entry; fileEntries)
+                        db.exec(
+                            `INSERT INTO "recipe_file" ("recipe_id", "name", "size") VALUES ($1, $2, $3)`,
+                            recId, entry.path, entry.size,
+                        );
+
                     return recId;
                 });
 
