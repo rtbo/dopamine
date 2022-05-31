@@ -51,16 +51,19 @@ final class DbClient
         return db;
     }
 
-    void connect(alias fun)()
+    T connect(T)(T delegate(scope DbConn conn) dg)
     {
         auto lock = pool.lockConnection;
         // ensure to pass the object rather than the lock to the dg
-        auto conn = cast(DbConn) lock;
+        scope conn = cast(DbConn) lock;
 
         try
-            return fun(conn);
+            return dg(conn);
         catch (ConnectionException ex)
+        {
             conn.resetAsync();
+            throw ex;
+        }
     }
 }
 

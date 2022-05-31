@@ -1,5 +1,7 @@
 module dopamine.server.config;
 
+import std.conv;
+
 /// Server and configuration.
 /// Fields are read from environment variables.
 /// Defaults values should suit development environement.
@@ -15,7 +17,7 @@ struct Config
 
     /// Database connection pool size
     /// Read from $DOP_DB_POOLMAXSIZE
-    string dbPoolMaxSize;
+    uint dbPoolMaxSize;
 
     static @property Config get()
     {
@@ -35,7 +37,7 @@ struct Config
             );
             c.dbPoolMaxSize = environment.get(
                 "DOP_DB_POOLMAXSIZE", "1"
-            );
+            ).to!uint;
 
             initialized = true;
         }

@@ -33,7 +33,6 @@ if get_option('enable_server')
         libpq_dep = dependency('libpq',
             version: '>= 14.3',
             method: 'pkg-config',
-            required: pq_required,
         )
     endif
 endif

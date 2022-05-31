@@ -9,7 +9,6 @@ struct PackageResource
     string[] versions;
 }
 
-
 struct RecipeFile
 {
     string id;
