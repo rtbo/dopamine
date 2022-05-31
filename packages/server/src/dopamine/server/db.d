@@ -137,13 +137,22 @@ final class DbConn : PgConn
 
                 const sockDup = dup(sock);
             }
+            else version (Windows)
+            {
+                // declaration of _dup hereunder
+                const sockDup = _dup(sock);
+            }
             else
             {
-                // static assert(false, "socket duplication implementation");
-                const sockDup = sock;
+                static assert(false, "unsupported platform");
             }
+            enforce(sockDup != -1, "could not duplicate PostgreSQL socket");
             sockEvent = createFileDescriptorEvent(sockDup, FileDescriptorEvent.Trigger.read);
         }
         return sockEvent;
     }
 }
+
+// _dup is part of UCRT, available on Windows 10 onwards.
+// No such binding in druntime however
+version (Windows) extern (Windows) nothrow @nogc @system int _dup(int);
