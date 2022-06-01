@@ -19,7 +19,7 @@ final class DbClient
     ConnectionPool!DbConn pool;
 
     /// Create a connection pool with specfied size, each connection specified by connString
-    this(string connString, uint size)
+    this(string connString, uint size) @safe
     {
         pool = new ConnectionPool!DbConn(() @safe => createConnection(connString), size);
     }
@@ -33,7 +33,7 @@ final class DbClient
             final switch (db.connectPoll)
             {
             case PostgresPollingStatus.READING:
-                db.socketEvent.wait(connectionTimeout);
+                db.socketEvent().wait(connectionTimeout);
                 continue loop;
             case PostgresPollingStatus.WRITING:
                 // no implementation of waiting for write
@@ -51,7 +51,7 @@ final class DbClient
         return db;
     }
 
-    T connect(T)(T delegate(scope DbConn conn) dg)
+    T connect(T)(T delegate(scope DbConn conn) @safe dg) @safe
     {
         auto lock = pool.lockConnection;
         // ensure to pass the object rather than the lock to the dg
@@ -72,18 +72,18 @@ final class DbConn : PgConn
     private int lastSock = -1;
     private FileDescriptorEvent sockEvent;
 
-    this(string connString)
+    this(string connString) @safe
     {
         super(connString, Yes.async);
     }
 
-    override void finish()
+    override void finish() @safe
     {
         super.finish();
         destroy(sockEvent);
     }
 
-    void resetAsync()
+    void resetAsync() @safe
     {
         resetStart();
 
@@ -92,7 +92,7 @@ final class DbConn : PgConn
             final switch (connectPoll)
             {
             case PostgresPollingStatus.READING:
-                socketEvent.wait(connectionTimeout);
+                socketEvent().wait(connectionTimeout);
                 continue loop;
             case PostgresPollingStatus.WRITING:
                 // no implementation of waiting for write
@@ -113,7 +113,7 @@ final class DbConn : PgConn
             if (status == ConnStatus.BAD)
                 throw new ConnectionException(errorMessage);
 
-            socketEvent.wait(queryTimout);
+            socketEvent().wait(queryTimout);
             consumeInput();
         }
     }
