@@ -20,17 +20,27 @@ alias PostgresPollingStatus = pgd.libpq.PostgresPollingStatus;
 
 @safe:
 
+/// Exception thrown when the connection could not be made or appear lost
 class ConnectionException : Exception
 {
     mixin basicExceptionCtors!();
 }
 
+/// Exception thrown when the execution of a query returns an error from the server
 class ExecutionException : Exception
 {
     mixin basicExceptionCtors!();
 }
 
+/// Exception thrown when the layout of the received results (number of rows and columns)
+/// doesn't match with the expected call
 class ResultLayoutException : Exception
+{
+    mixin basicExceptionCtors!();
+}
+
+/// Exception thrown when a query expecting a row returns none.
+class ResourceNotFoundException : Exception
 {
     mixin basicExceptionCtors!();
 }
@@ -248,7 +258,11 @@ class PgConn
         if (status.isError)
             badExecution(res, sql, args);
 
-        if (PQntuples(res) != 1 || PQnfields(res) != 1)
+        if (PQnfields(res) != 1)
+            badResultLayout("Expected a single column", res);
+        if (PQntuples(res) == 0)
+            notFound();
+        if (PQntuples(res) > 1)
             badResultLayout("Expected a single row and single column", res);
 
         return convScalar!T(0, 0, res);
@@ -298,7 +312,9 @@ class PgConn
         if (status.isError)
             badExecution(res, sql, args);
 
-        if (PQntuples(res) != 1)
+        if (PQntuples(res) == 0)
+            notFound();
+        if (PQntuples(res) > 1)
             badResultLayout("Expected a single row", res);
 
         auto colInds = getColIndices!R(res);
@@ -457,6 +473,11 @@ noreturn badResultLayout(string expectation, PGresult* res)
         rowCount, rowPlural, colCount, colPlural
     );
     throw new ResultLayoutException(msg);
+}
+
+noreturn notFound()
+{
+    throw new ResourceNotFoundException("The expected resource could not be found");
 }
 
 string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args) @system
