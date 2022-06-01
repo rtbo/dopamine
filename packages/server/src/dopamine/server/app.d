@@ -37,6 +37,8 @@ version (DopServerMain) void main(string[] args)
     auto router = new URLRouter(prefix);
 
     setupRoute!GetPackage(router, &getPackage);
+    setupRoute!GetPackageByName(router, &getPackageByName);
+    setupRoute!GetPackageRecipe(router, &getPackageRecipe);
 
     auto listener = listenHTTP(settings, router);
     scope (exit)
@@ -45,14 +47,17 @@ version (DopServerMain) void main(string[] args)
     runApplication();
 }
 
+struct PackRow
+{
+    @ColInd(0)
+    string id;
+
+    @ColInd(1)
+    string name;
+}
+
 PackageResource getPackage(GetPackage req) @safe
 {
-    static struct PackRow
-    {
-        string id;
-        string name;
-    }
-
     return client.connect((scope DbConn db) {
         const pack = db.execRow!PackRow(
             `SELECT "id", "name" FROM "packages" WHERE "id" = $1`,
@@ -66,10 +71,90 @@ PackageResource getPackage(GetPackage req) @safe
     });
 }
 
-template RouteHandler(ReqT) if (isRequest!ReqT)
+PackageResource getPackageByName(GetPackageByName req) @safe
 {
-    alias RouteHandler = ResponseType!ReqT delegate(ReqT req) @safe;
+    return client.connect((scope DbConn db) {
+        const pack = db.execRow!PackRow(
+            `SELECT "id", "name" FROM "packages" WHERE "name" = $1`,
+            req.name
+        );
+        auto vers = db.execScalars!string(
+            `SELECT "version" FROM "recipe" WHERE "package_id" = $1`,
+            pack.id,
+        );
+        return PackageResource(pack.id, pack.name, vers);
+    });
 }
+
+struct PackRecipeRow
+{
+    @ColInd(0)
+    string recId;
+
+    @ColInd(1)
+    string maintainerId;
+
+    @ColInd(2)
+    string ver;
+
+    @ColInd(3)
+    string revision;
+
+    @ColInd(4)
+    string recipe;
+}
+
+PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
+{
+    return client.connect((scope DbConn db) {
+        PackRecipeRow row;
+        if (req.revision)
+            row = db.execRow!PackRecipeRow(
+                `
+                    SELECT "id", "maintainer_id", "version", "revision", "recipe"
+                    FROM "recipe" WHERE
+                        "package_id" = $1 AND
+                        "version" = $2 AND
+                        "revision" = $3
+                `
+            );
+        else
+            row = db.execRow!PackRecipeRow(
+                `
+                    SELECT "id", "maintainer_id", "version", "revision", "recipe"
+                    FROM "recipe" WHERE
+                        "package_id" = $1 AND
+                        "version" = $2
+                    LIMIT 1
+                `
+            );
+
+        const packName = db.execScalar!string(
+            `SELECT "name" FROM "packages" WHERE "id" = $1`,
+            req.id
+        );
+
+        auto files = db.execRows!RecipeFile(
+            `
+                SELECT "id", "name", "size"::bigint FROM "recipe_file"
+                WHERE "recipe_id" = $1
+            `,
+            row.recId
+        );
+
+        return PackageRecipeResource(
+            row.recId,
+            packName,
+            row.ver,
+            row.revision,
+            row.recipe,
+            row.maintainerId,
+            null,
+            files
+        );
+    });
+}
+
 
 void setupRoute(ReqT, H)(URLRouter router, H handler)
 {

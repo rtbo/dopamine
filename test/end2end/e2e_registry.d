@@ -80,7 +80,6 @@ void serveRecipe(CacheRevisionDir revDir, HTTPServerResponse res)
         "id",
         "dopamine.lua",
         getSize(revDir.recipeFile),
-        toHexString(sha1Of(payload.recipe)).idup,
     )];
 
     res.writeJsonBody(serializeToJson(payload));

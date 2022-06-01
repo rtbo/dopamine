@@ -20,7 +20,8 @@ CREATE TABLE "package" (
     "name"          text NOT NULL,
     "maintainer_id" integer,
 
-    FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL
+    FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,
+    UNIQUE("name")
 );
 
 CREATE TABLE "recipe" (

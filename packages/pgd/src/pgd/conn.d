@@ -325,7 +325,7 @@ class PgConn
 
     /// Execute a SQL statement expecting a zero or many row result.
     /// Result rows are converted to the provided struct type.
-    R[] execRows(R, Args...)(string sql, Args args) if (isRow!R)
+    R[] execRows(R, Args...)(string sql, Args args) @trusted if (isRow!R)
     {
         sendPriv!true(sql, args);
 

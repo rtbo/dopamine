@@ -14,7 +14,6 @@ struct RecipeFile
     string id;
     string name;
     size_t size;
-    string sha1;
 }
 
 struct PackageRecipeResource
