@@ -4,15 +4,18 @@ import dopamine.server.config;
 import dopamine.server.db;
 import dopamine.api.attrs;
 import dopamine.api.v1;
+import pgd.conn;
 
 import vibe.core.args;
 import vibe.core.core;
+import vibe.data.json;
 import vibe.http.router;
 import vibe.http.server;
 
 import std.conv;
 import std.format;
 import std.string;
+import std.traits;
 
 enum currentApiLevel = 1;
 
@@ -33,6 +36,8 @@ version (DopServerMain) void main(string[] args)
     const prefix = format("/api/v%s", currentApiLevel);
     auto router = new URLRouter(prefix);
 
+    setupRoute!GetPackage(router, &getPackage);
+
     auto listener = listenHTTP(settings, router);
     scope (exit)
         listener.stopListening();
@@ -40,7 +45,7 @@ version (DopServerMain) void main(string[] args)
     runApplication();
 }
 
-PackageResource getPackage(GetPackage req)
+PackageResource getPackage(GetPackage req) @safe
 {
     static struct PackRow
     {
@@ -63,16 +68,27 @@ PackageResource getPackage(GetPackage req)
 
 template RouteHandler(ReqT) if (isRequest!ReqT)
 {
-    alias RouteHandler = @safe ResponseType!ReqT delegate(ReqT req);
+    alias RouteHandler = ResponseType!ReqT delegate(ReqT req) @safe;
 }
 
-void setupRoute(ReqT)(URLRouter router, RouteHandler!ReqT handler)
+void setupRoute(ReqT, H)(URLRouter router, H handler)
 {
-    HTTPServerRequestDelegateS dg = (scope httpReq, httpResp) @safe
-    {
+    static assert(isSomeFunction!H);
+    static assert(isSafe!H);
+    static assert(is(typeof(handler(ReqT.init))));
+    static assert(is(ReturnType!H == ResponseType!ReqT));
+
+    HTTPServerRequestDelegateS dg = (scope httpReq, httpResp) @safe {
         auto req = adaptRequest!ReqT(httpReq);
-        auto resp = handler(req);
-        req.writeJsonBody(serializeToJson(resp));
+        try
+        {
+            auto resp = handler(req);
+            httpResp.writeJsonBody(serializeToJson(resp));
+        }
+        catch (ResourceNotFoundException ex)
+        {
+            // no response write = 404
+        }
     };
 
     enum reqAttr = RequestAttr!ReqT;
@@ -156,6 +172,6 @@ private ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
         }
     }}
     // dfmt on
+
+    return req;
 }
-
-
