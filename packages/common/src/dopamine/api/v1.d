@@ -4,26 +4,26 @@ import dopamine.api.attrs;
 
 struct PackageResource
 {
-    string id;
+    int id;
     string name;
     string[] versions;
 }
 
 struct RecipeFile
 {
-    string id;
+    int id;
     string name;
     size_t size;
 }
 
 struct PackageRecipeResource
 {
-    string packageId;
+    int packageId;
     string name;
     @Name("version") string ver;
     string revision;
     string recipe;
-    string maintainerId;
+    int maintainerId;
     string created;
     RecipeFile[] fileList;
 }
@@ -34,7 +34,7 @@ enum level = 1;
 @Response!PackageResource
 struct GetPackage
 {
-    string id;
+    int id;
 }
 
 @Request(Method.GET, "/packages/by-name/:name", level)
@@ -48,7 +48,8 @@ struct GetPackageByName
 @Response!PackageRecipeResource
 struct GetPackageRecipe
 {
-    string id;
+    @("id")
+    int packageId;
 
     @("version")
     string ver;

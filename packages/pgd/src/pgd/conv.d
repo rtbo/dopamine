@@ -35,14 +35,15 @@ enum PgType
 }
 
 package immutable(TypeOid[]) supportedTypes = [
-    TypeOid.BOOL, TypeOid.BYTEA, TypeOid.INT8, TypeOid.INT2, TypeOid.INT4, TypeOid.TEXT, TypeOid.FLOAT4, TypeOid.FLOAT8
+    TypeOid.BOOL, TypeOid.BYTEA, TypeOid.INT8, TypeOid.INT2, TypeOid.INT4,
+    TypeOid.TEXT, TypeOid.FLOAT4, TypeOid.FLOAT8
 ];
 
 package PgType enforceSupported(TypeOid oid)
 {
     if (!supportedTypes.canFind(oid))
         throw new UnsupportedTypeException(oid);
-    return cast(PgType)oid;
+    return cast(PgType) oid;
 }
 
 package bool isSupportedType(TypeOid oid)
@@ -135,28 +136,36 @@ private struct BinValue
     const(ubyte)[] val;
     PgType type;
 
-    void check(PgType enforceType, size_t enforceSize, string typename) @safe
+    void checkType(PgType expectedType, string typename) @safe
     {
         enforce(
-            type == enforceType,
-            format("Expected PostgreSQL type %s to build a %s but received %s", enforceType, typename, type)
+            type == expectedType,
+            format("Expected PostgreSQL type %s to build a %s but received %s", expectedType, typename, type)
         );
+
+    }
+
+    void checkSize(size_t expectedSize, string typename) @safe
+    {
         enforce(
-            val.length == enforceSize,
-            format("Expected a size of %s to build a %s but received %s", enforceSize, typename, val.length)
+            val.length == expectedSize,
+            format("Expected a size of %s to build a %s but received %s", expectedSize, typename, val
+                .length)
         );
     }
 }
 
 private bool toScalar(T)(BinValue val) @safe if (is(T == bool))
 {
-    val.check(PgType.boolean, 1, "bool");
+    val.checkType(PgType.boolean, "bool");
+    val.checkSize(1, "bool");
     return val.val[0] != 0;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 {
-    val.check(pgTypeOf!T, T.sizeof, T.stringof);
+    val.checkType(pgTypeOf!T, T.stringof);
+    val.checkSize(T.sizeof, T.stringof);
     const ubyte[T.sizeof] be = val.val[0 .. T.sizeof];
     return bigEndianToNative!T(be);
 }
@@ -164,20 +173,21 @@ private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 // UTF-8 is not checked, hence @system
 private T toScalar(T)(BinValue val) @system if (isString!T)
 {
-    enforce(val.type == PgType.text, "FIXME: msg oid string");
+    val.checkType(PgType.text, T.stringof);
     return (cast(const(char)[]) val.val).idup;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isStaticArray!T)
 {
-    val.check(PgType.bytea, T.length, "FIXME: msg oid ubyte[]");
+    val.checkType(PgType.bytea, T.stringof);
+    val.checkSize(T.length, T.stringof);
     T arr = (cast(const(ElType!T)[]) val.val)[0 .. T.length];
     return arr;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
 {
-    enforce(val.type == PgType.bytea, "FIXME: msg oid ubyte[]");
+    val.checkType(PgType.bytea, T.stringof);
     return cast(ElType!T[]) val.val.dup;
 }
 

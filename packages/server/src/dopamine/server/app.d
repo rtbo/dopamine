@@ -50,7 +50,7 @@ version (DopServerMain) void main(string[] args)
 struct PackRow
 {
     @ColInd(0)
-    string id;
+    int id;
 
     @ColInd(1)
     string name;
@@ -58,9 +58,9 @@ struct PackRow
 
 PackageResource getPackage(GetPackage req) @safe
 {
-    return client.connect((scope DbConn db) {
+    return client.connect((scope DbConn db) @safe {
         const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "packages" WHERE "id" = $1`,
+            `SELECT "id", "name" FROM "package" WHERE "id" = $1`,
             req.id
         );
         auto vers = db.execScalars!string(
@@ -75,7 +75,7 @@ PackageResource getPackageByName(GetPackageByName req) @safe
 {
     return client.connect((scope DbConn db) {
         const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "packages" WHERE "name" = $1`,
+            `SELECT "id", "name" FROM "package" WHERE "name" = $1`,
             req.name
         );
         auto vers = db.execScalars!string(
@@ -89,10 +89,10 @@ PackageResource getPackageByName(GetPackageByName req) @safe
 struct PackRecipeRow
 {
     @ColInd(0)
-    string recId;
+    int recId;
 
     @ColInd(1)
-    string maintainerId;
+    int maintainerId;
 
     @ColInd(2)
     string ver;
@@ -131,7 +131,7 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
 
         const packName = db.execScalar!string(
             `SELECT "name" FROM "packages" WHERE "id" = $1`,
-            req.id
+            req.packageId
         );
 
         auto files = db.execRows!RecipeFile(
@@ -209,11 +209,11 @@ private ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
             alias syms = getSymbolsByUDA!(ReqT, ident);
             static if (syms.length)
             {
-                __traits(getMember, req, __traits(identifier, syms[0])) = param;
+                __traits(getMember, req, __traits(identifier, syms[0])) = param.to!(typeof(__traits(getMember, req, __traits(identifier, syms[0]))));
             }
             else static if (__traits(hasMember, req, ident))
             {
-                __traits(getMember, req, ident) = param;
+                __traits(getMember, req, ident) = param.to!(typeof(__traits(getMember, req, ident)));
             }
             else static assert(false, "Could not find a " ~ ident ~ " parameter value in " ~ ReqT.stringof);
         }

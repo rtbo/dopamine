@@ -456,12 +456,12 @@ version (unittest)
 @("requestResource")
 unittest
 {
-    requestResource(GetPackage("pkgid"))
-        .shouldEqual("/api/v1/packages/pkgid");
+    requestResource(GetPackage(17))
+        .shouldEqual("/api/v1/packages/17");
     requestResource(GetPackageByName("pkgname"))
         .shouldEqual("/api/v1/packages/by-name/pkgname");
-    requestResource(GetPackageRecipe("pkgid", "1.0.0"))
-        .shouldEqual("/api/v1/packages/pkgid/recipes/1.0.0");
-    requestResource(GetPackageRecipe("pkgid", "1.0.0", "abcdef"))
-        .shouldEqual("/api/v1/packages/pkgid/recipes/1.0.0?revision=abcdef");
+    requestResource(GetPackageRecipe(123, "1.0.0"))
+        .shouldEqual("/api/v1/packages/123/recipes/1.0.0");
+    requestResource(GetPackageRecipe(432, "1.0.0", "abcdef"))
+        .shouldEqual("/api/v1/packages/432/recipes/1.0.0?revision=abcdef");
 }

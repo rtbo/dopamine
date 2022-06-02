@@ -855,9 +855,11 @@ class Registry
             throw new Exception(
                 format("dop-admin failed with code %s:\n%s", adminRes.status, adminRes.output)
             );
+        else
+            writeln("Run dop-admin:\n", adminRes.output);
 
         const cmd = [
-            exe, port.to!string
+            exe
         ];
         pid = spawnProcess(cmd, stdin, outFile, errFile, this.env, Config.none, regPath);
     }
