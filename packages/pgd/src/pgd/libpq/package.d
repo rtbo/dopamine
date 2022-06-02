@@ -17,27 +17,27 @@ public import pgd.libpq.defs;
 // pg_type_d.h
 
 /* Is a type OID a polymorphic pseudotype?	(Beware of multiple evaluation) */
-bool IsPolymorphicType(Oid typid)
+bool IsPolymorphicType(TypeOid typid)
 {
     return IsPolymorphicTypeFamily1(typid) || IsPolymorphicTypeFamily2(typid);
 }
 
 /* Code not part of polymorphic type resolution should not use these macros: */
-bool IsPolymorphicTypeFamily1(Oid typid)
+bool IsPolymorphicTypeFamily1(TypeOid typid)
 {
-    return typid == ANYELEMENTOID ||
-        typid == ANYARRAYOID ||
-        typid == ANYNONARRAYOID ||
-        typid == ANYENUMOID ||
-        typid == ANYRANGEOID ||
-        typid == ANYMULTIRANGEOID;
+    return typid == TypeOid.ANYELEMENT ||
+        typid == TypeOid.ANYARRAY ||
+        typid == TypeOid.ANYNONARRAY ||
+        typid == TypeOid.ANYENUM ||
+        typid == TypeOid.ANYRANGE ||
+        typid == TypeOid.ANYMULTIRANGE;
 }
 
-bool IsPolymorphicTypeFamily2(Oid typid)
+bool IsPolymorphicTypeFamily2(TypeOid typid)
 {
-    return typid == ANYCOMPATIBLEOID ||
-        typid == ANYCOMPATIBLEARRAYOID ||
-        typid == ANYCOMPATIBLENONARRAYOID ||
-        typid == ANYCOMPATIBLERANGEOID ||
-        typid == ANYCOMPATIBLEMULTIRANGEOID;
+    return typid == TypeOid.ANYCOMPATIBLE ||
+        typid == TypeOid.ANYCOMPATIBLEARRAY ||
+        typid == TypeOid.ANYCOMPATIBLENONARRAY ||
+        typid == TypeOid.ANYCOMPATIBLERANGE ||
+        typid == TypeOid.ANYCOMPATIBLEMULTIRANGE;
 }

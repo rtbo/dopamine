@@ -155,7 +155,6 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
     });
 }
 
-
 void setupRoute(ReqT, H)(URLRouter router, H handler)
 {
     static assert(isSomeFunction!H);

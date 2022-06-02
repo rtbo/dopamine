@@ -255,7 +255,7 @@ int PQfnumber(const(PGresult)* res, const(char)* field_name);
 Oid PQftable(const(PGresult)* res, int field_num);
 int PQftablecol(const(PGresult)* res, int field_num);
 int PQfformat(const(PGresult)* res, int field_num);
-Oid PQftype(const(PGresult)* res, int field_num);
+TypeOid PQftype(const(PGresult)* res, int field_num);
 int PQfsize(const(PGresult)* res, int field_num);
 int PQfmod(const(PGresult)* res, int field_num);
 char* PQcmdStatus(PGresult* res);
