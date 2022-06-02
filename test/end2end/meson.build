@@ -1,9 +1,9 @@
 
 
-e2e_registry_exe = executable('e2e-registry', 'e2e_registry.d',
-    install: false,
-    dependencies: [vibed_http_dep, dop_common_dep],
-)
+# e2e_registry_exe = executable('e2e-registry', 'e2e_registry.d',
+#     install: false,
+#     dependencies: [vibed_http_dep, dop_common_dep],
+# )
 
 e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
     install: false,
@@ -12,7 +12,8 @@ e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
 
 e2e_env = [
     'DOP='+dop_client_exe.full_path(),
-    'DOP_E2E_REG='+e2e_registry_exe.full_path(),
+    'DOP_SERVER='+dop_server_exe.full_path(),
+    'DOP_ADMIN='+dop_admin_exe.full_path(),
 ]
 
 e2e_tests = [

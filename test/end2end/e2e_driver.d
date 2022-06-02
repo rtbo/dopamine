@@ -643,7 +643,7 @@ struct Test
         }
     }
 
-    int perform(string dopExe, string regExe)
+    int perform(string dopExe, string regExe, string adminExe)
     {
         // we delete previous sandbox if any
         const sbDir = sandboxPath();
@@ -670,7 +670,7 @@ struct Test
 
             env["E2E_REGISTRY_PORT"] = port.to!string;
             env["DOP_REGISTRY"] = format("http://localhost:%s", port);
-            reg = new Registry(regExe, port, env, name);
+            reg = new Registry(regExe, adminExe, port, env, name);
         }
 
         foreach (preCmd; preCmds)
@@ -825,8 +825,9 @@ class Registry
     File errFile;
     string url;
     int port;
+    string[string] env;
 
-    this(string exe, int port, string[string] env, string testName)
+    this(string exe, string adminExe, int port, string[string] env, string testName)
     {
         import std.conv : to;
 
@@ -837,12 +838,28 @@ class Registry
         errFile = File(errPath, "w");
 
         this.port = port;
+        this.url = env["DOP_REGISTRY"];
+        this.env["DOP_SERVER_HOSTNAME"] = this.url.replace("http://", "").replace("https://", "");
+        this.env["DOP_DB_CONNSTRING"] = format!"postgres:///dop-test-%s"(port);
+
+        const regPath = e2ePath("sandbox", testName, "registry");
+
+        const adminCmd = [
+            adminExe,
+            "--create-db",
+            "--run-migration", "v1",
+            "--populate-from", regPath,
+        ];
+        auto adminRes = execute(adminCmd, this.env);
+        if (adminRes.status != 0)
+            throw new Exception(
+                format("dop-admin failed with code %s:\n%s", adminRes.status, adminRes.output)
+            );
 
         const cmd = [
             exe, port.to!string
         ];
-        pid = spawnProcess(cmd, stdin, outFile, errFile, env, Config.none, e2ePath("sandbox", testName, "registry"));
-        url = env["DOP_REGISTRY"];
+        pid = spawnProcess(cmd, stdin, outFile, errFile, this.env, Config.none, regPath);
     }
 
     int stop()
@@ -980,10 +997,9 @@ int main(string[] args)
         return usage(args, 1);
     }
 
-    const dopExe = absolutePath(
-        environment["DOP"]);
-
-    const regExe = absolutePath(environment["DOP_E2E_REG"]);
+    const dopExe = absolutePath(environment["DOP"]);
+    const regExe = absolutePath(environment["DOP_SERVER"]);
+    const adminExe = absolutePath(environment["DOP_ADMIN"]);
 
     try
     {
@@ -997,7 +1013,7 @@ int main(string[] args)
             return 77; // GNU skip return code
         }
 
-        return test.perform(dopExe, regExe);
+        return test.perform(dopExe, regExe, adminExe);
     }
     catch (Exception ex)
     {
