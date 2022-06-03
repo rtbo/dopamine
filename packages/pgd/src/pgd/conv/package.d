@@ -1,11 +1,13 @@
 module pgd.conv;
 
 import pgd.libpq;
+import pgd.conv.time;
 
 import std.algorithm;
 import std.array;
 import std.bitmanip;
 import std.conv;
+import std.datetime;
 import std.exception;
 import std.format;
 import std.meta;
@@ -22,36 +24,47 @@ class UnsupportedTypeException : Exception
     }
 }
 
+///
 enum PgType
 {
     boolean = 16,
     smallint = 21,
     integer = 23,
     bigint = 20,
-    real_ = 700,
-    doublePrecision = 701,
     bytea = 17,
     text = 25,
+    real_ = 700,
+    doublePrecision = 701,
+    date = 1082,
+    // time = 1083,
+    // timestamp = 1114,
+    // timestamptz = 1184,
+    // interval = 1186,
 }
 
-package immutable(TypeOid[]) supportedTypes = [
-    TypeOid.BOOL, TypeOid.BYTEA, TypeOid.INT8, TypeOid.INT2, TypeOid.INT4,
-    TypeOid.TEXT, TypeOid.FLOAT4, TypeOid.FLOAT8
-];
-
-package PgType enforceSupported(TypeOid oid)
+package(pgd) PgType enforceSupported(TypeOid oid)
 {
-    if (!supportedTypes.canFind(oid))
+    if (!isSupportedType(oid))
         throw new UnsupportedTypeException(oid);
     return cast(PgType) oid;
 }
 
-package bool isSupportedType(TypeOid oid)
+package(pgd) bool isSupportedType(TypeOid oid)
 {
-    return supportedTypes.canFind(oid);
+    static foreach (pgt; EnumMembers!PgType)
+    {
+        if (cast(int) oid == cast(int) pgt)
+            return true;
+    }
+    return false;
 }
 
-enum isScalar(T) = isString!T || isNumeric!T || is(T == bool) || isByteArray!T;
+enum isScalar(T) = is(T == bool) ||
+    isNumeric!T ||
+    isString!T ||
+    isByteArray!T ||
+    is(T == Date);
+
 enum isRow(R) = is(R == struct) && allSatisfy!(isScalar, Fields!R);
 
 private alias ElType(T) = Unqual!(typeof(T.init[0]));
@@ -74,6 +87,7 @@ static assert(isScalar!(ubyte[12]));
 static assert(isScalar!string);
 // FIXME: debug check at runtime that the encoding of the database is UTF-8
 static assert(!isScalar!wstring); // no UTF-16 support, user must convert to string before
+static assert(isScalar!Date);
 
 private struct SomeRow
 {
@@ -82,6 +96,7 @@ private struct SomeRow
     bool b;
     byte[] blob;
     string text;
+    Date date;
 }
 
 private struct NotSomeRow
@@ -98,7 +113,7 @@ static assert(isRow!SomeRow);
 static assert(!isRow!NotSomeRow);
 static assert(!isScalar!SomeRow);
 
-package T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @system
+package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @system
 {
     const len = PQgetlength(res, rowInd, colInd);
     const pval = PQgetvalue(res, rowInd, colInd);
@@ -112,12 +127,12 @@ package T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @system
     }
     else
     {
-        const binVal = BinValue(cast(const(ubyte)[]) val, enforceSupported(PQftype(res, colInd)));
+        const binVal = BinValue(cast(const(ubyte)[]) val, PQftype(res, colInd));
         return toScalar!T(binVal);
     }
 }
 
-package R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res) @system
+package(pgd) R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res) @system
 {
     R row = void;
     // dfmt off
@@ -134,13 +149,17 @@ package R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res) @system
 private struct BinValue
 {
     const(ubyte)[] val;
-    PgType type;
+    TypeOid type;
 
     void checkType(PgType expectedType, string typename) @safe
     {
+        import std.string : toLower;
+
         enforce(
-            type == expectedType,
-            format("Expected PostgreSQL type %s to build a %s but received %s", expectedType, typename, type)
+            type == cast(TypeOid) expectedType,
+            format(
+                "Expected PostgreSQL type %s to build a %s but received %s",
+                expectedType, typename, toLower(type.to!string))
         );
 
     }
@@ -149,8 +168,9 @@ private struct BinValue
     {
         enforce(
             val.length == expectedSize,
-            format("Expected a size of %s to build a %s but received %s", expectedSize, typename, val
-                .length)
+            format(
+                "Expected a size of %s to build a %s but received %s",
+                expectedSize, typename, val.length)
         );
     }
 }
@@ -191,6 +211,14 @@ private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
     return cast(ElType!T[]) val.val.dup;
 }
 
+private T toScalar(T)(BinValue val) @safe if (is(T == Date))
+{
+    val.checkType(PgType.date, "Date");
+    val.checkSize(4, "Date");
+    int julian = bigEndianToNative!uint(arr[0 .. 4]) + pgEpochJ;
+    return julianToDate(julian);
+}
+
 private template pgTypeOf(TT)
 {
     alias T = Unqual!TT;
@@ -211,6 +239,8 @@ private template pgTypeOf(TT)
         enum pgTypeOf = PgType.text;
     else static if (isByteArray!T)
         enum pgTypeOf = PgType.bytea;
+    else static if (is(T == Date))
+        enum pgTypeOf = PgType.date;
     else
         static assert(false, "unsupported scalar type: " ~ T.stringof);
 }
@@ -219,7 +249,10 @@ private template sizeKnownAtCt(TT) if (isScalar!TT)
 {
     alias T = Unqual!TT;
 
-    enum sizeKnownAtCt = is(T == bool) || isNumeric!T || isStaticArray!T;
+    enum sizeKnownAtCt = is(T == bool) ||
+        isNumeric!T ||
+        isStaticArray!T ||
+        is(T == Date);
 }
 
 private template scalarBinSizeCt(TT) if (isScalar!TT)
@@ -232,16 +265,16 @@ private template scalarBinSizeCt(TT) if (isScalar!TT)
         enum scalarBinSizeCt = T.sizeof;
     else static if (isStaticArray!T && isByte!(ElType!T))
         enum scalarBinSizeCt = T.length;
+    else static if (is(T == Date))
+        enum scalarBinSizeCt = 4;
     else
         static assert(false, "unknown compile-time size");
 }
 
 private size_t scalarBinSize(T)(T val) @safe if (isScalar!T)
 {
-    static if (is(T == bool))
-        return 1;
-    else static if (isNumeric!T)
-        return T.sizeof;
+    static if (sizeKnownAtCt!T)
+        return scalarBinSizeCt!T;
     else static if (isString!T)
         return val.length;
     else static if (isByteArray!T)
@@ -270,10 +303,16 @@ private size_t emplaceScalar(T)(T val, ubyte[] buf) @safe
         buf[0 .. val.length] = cast(const(ubyte)[]) val[]; // add [] to support static arrays
         return val.length;
     }
+    else static if (is(T == Date))
+    {
+        const julian = dateToJulian(val);
+        buf[0 .. 4] = nativeToBigEndian(julian - pgEpochJ);
+        return 4;
+    }
 }
 
 /// Bind query args to parameters to PQexecParams or similar
-package struct PgQueryParams
+package(pgd) struct PgQueryParams
 {
     Oid[] oids;
     const(char)*[] values;
@@ -301,7 +340,7 @@ package struct PgQueryParams
 }
 
 /// ditto
-package PgQueryParams pgQueryParams(Args...)(Args args) @trusted
+package(pgd) PgQueryParams pgQueryParams(Args...)(Args args) @trusted
 {
     auto params = PgQueryParams.uninitialized(Args.length);
 
