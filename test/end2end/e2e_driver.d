@@ -797,7 +797,7 @@ struct RunResult
     }
 }
 
-class Registry
+final class Registry
 {
     Pid pid;
     string outPath;
@@ -821,7 +821,7 @@ class Registry
         this.port = port;
         this.url = env["DOP_REGISTRY"];
         this.env["DOP_SERVER_HOSTNAME"] = this.url.replace("http://", "").replace("https://", "");
-        this.env["DOP_DB_CONNSTRING"] = format!"postgres:///dop-test-%s"(port);
+        this.env["DOP_DB_CONNSTRING"] = pgConnstring(port);
         this.env["DOP_TEST_STOPROUTE"] = "1";
 
         const regPath = e2ePath("sandbox", testName, "registry");
@@ -876,6 +876,14 @@ class Registry
         errFile.close();
 
         return ret;
+    }
+
+    string pgConnstring(int port)
+    {
+        const pgUser = environment.get("PGUSER", null);
+        const pgPswd = environment.get("PGPSWD", null);
+        const userSpec = pgUser ? pgUser ~ "@" ~ pgPswd : "";
+        return format!"postgres://%s/dop-test-%s"(userSpec, port);
     }
 
     void printOutput(File printFile)

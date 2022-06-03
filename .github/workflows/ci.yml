@@ -83,4 +83,6 @@ jobs:
 
       - name: Run dopamine tests
         run: meson test --print-errorlogs
+        env:
+          PGUSER: postgres
         working-directory: build

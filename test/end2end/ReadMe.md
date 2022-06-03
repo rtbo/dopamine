@@ -13,7 +13,10 @@ Lines starting with `#` are ignored and can be used for comments.
 ## Sandbox
 
 Each test is run in a sandboxed environment.
-The sandbox is meant to run the test in isolation from the running system.
+The sandbox system does its best to run the tests in isolation from the system,
+but is not a virual machine. It require some tools to be present on the system,
+as well as a running PostgreSQL instance.
+Depending on the tools installed and their version, the test results may differ.
 
 For each test a RECIPE and a HOME is defined, both of which refer to a directory
 in `recipes` and `homes` respectively.
@@ -21,17 +24,17 @@ Content of these two directories is copied in the sandbox dir:
  - `sandbox/[test name]/recipe` will be the `CWD` during.
  - `sandbox/[test name]/home` will correspond to `DOP_HOME`
 
-The sandbox is however not a virtual machine. The end-to-end tests require some
-tools to be present on the system, and the exact testing behavior can vary depending
-on what tools are installed on the system and in which versions they are installed.
-
 ## Registry
 
-TO BE DEFINED.
-The remote registry will also be sandboxed by being run as localhost mock server
-with the `$DOP_REGISTRY` environment variable. (one server instance per test)
+To communicate with the registry, the test specifies `REGISTRY=[identifier]` where `[identifier]`
+is one of the registry identifiers in `definitions.json`.
+A postgresql database is created and populated with the `dop-admin` tool.
+Environment variables `$PGUSER` and `$PGPSWD` can be defined to set postgresql user and password.
+The `dop-server` application is spawned and setup to connect to this database.
+The client is spawned with the `$DOP_REGISTRY` environment variable set
+to connect to the right server instance.
 
-## Assetions
+## Assertions
 
 The following assertions are supported.
 For each entry, `EXPECT` can be replaced by `ASSERT`.
