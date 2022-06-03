@@ -761,7 +761,7 @@ struct Test
         // otherwise we leave it here as it might be useful
         // to look at its content for debug
 
-        if (numFailed == 0 && !environment.get("E2E_KEEP_SANDBOX"))
+        if (numFailed == 0 && !environment.get("E2E_KEEPSANDBOX"))
             rmdirRecurse(sbDir);
 
         return numFailed;
