@@ -675,18 +675,20 @@ struct Test
 
         foreach (preCmd; preCmds)
         {
-            import std.conv : to;
-
             const cmd = expandEnvVars(preCmd, env);
             auto res = executeShell(cmd, env, Config.none, size_t.max, sandboxRecipePath);
             if (res.status != 0)
             {
-                string msg = "Pre-command failed.\n" ~ cmd ~ " returned " ~ res.status.to!string ~ ".";
+                stderr.writeln("Pre-command failed:");
+                stderr.writefln!"%s returned %s."(cmd, res.status);
                 if (res.output)
                 {
-                    msg ~= " Output:\n" ~ res.output;
+                    stderr.writeln("PRE-CMD STDOUT -------");
+                    stderr.write(res.output);
+                    stderr.writeln("----------------------");
                 }
-                throw new Exception(msg);
+                if (reg)
+                    reg.printOutput(stderr);
             }
         }
 
@@ -737,31 +739,14 @@ struct Test
                     stderr.writefln("STATUS:   %s", status);
                     stderr.writeln("STDOUT ---------------");
                     foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
-                    {
                         stderr.write(l);
-                    }
                     stderr.writeln("----------------------");
                     stderr.writeln("STDERR ---------------");
                     foreach (l; File(errPath, "r").byLine(Yes.keepTerminator))
-                    {
                         stderr.write(l);
-                    }
                     stderr.writeln("----------------------");
                     if (reg)
-                    {
-                        stderr.writeln("REGISTRY STDOUT ------");
-                        foreach (l; File(reg.outPath, "r").byLine(Yes.keepTerminator))
-                        {
-                            stderr.write(l);
-                        }
-                        stderr.writeln("----------------------");
-                        stderr.writeln("REGISTRY STDERR ------");
-                        foreach (l; File(reg.errPath, "r").byLine(Yes.keepTerminator))
-                        {
-                            stderr.write(l);
-                        }
-                        stderr.writeln("----------------------");
-                    }
+                        reg.printOutput(stderr);
                     outputShown = true;
                 }
                 stderr.writeln("ASSERTION FAILED: ", failMsg);
@@ -891,6 +876,18 @@ class Registry
         errFile.close();
 
         return ret;
+    }
+
+    void printOutput(File printFile)
+    {
+        printFile.writeln("REGISTRY STDOUT ------");
+        foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
+            printFile.write(l);
+        printFile.writeln("----------------------");
+        printFile.writeln("REGISTRY STDERR ------");
+        foreach (l; File(errPath, "r").byLine(Yes.keepTerminator))
+            printFile.write(l);
+        printFile.writeln("----------------------");
     }
 }
 
