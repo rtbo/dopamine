@@ -630,7 +630,7 @@ struct Test
     // to obtain a unique port for each instance
     Tuple!(File, int) acquireRegistryPort()
     {
-        int port = 3002;
+        int port = 3500;
         while (1)
         {
             auto fn = e2ePath("sandbox", format("%d.lock", port));
