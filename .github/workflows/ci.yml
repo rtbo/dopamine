@@ -21,6 +21,19 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Start PostgreSQL server Linux
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo systemctl start postgresql.service
+          pg_isready
+
+      - name: Start PostgreSQL server Windows
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          $pgService = Get-Service -Name postgresql*
+          Set-Service -InputObject $pgService -Status running -StartupType automatic
+          Start-Process -FilePath "$env:PGBIN\pg_isready" -Wait -PassThru
+
       - name: Install Meson
         run: |
           git clone --branch ${{ matrix.meson }} --depth 1 https://github.com/mesonbuild/meson $HOME/meson
