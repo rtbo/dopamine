@@ -695,10 +695,6 @@ struct Test
         const outPath = sandboxPath("stdout");
         const errPath = sandboxPath("stderr");
 
-        // FIXME: we'd better have a command parser that return an array of args
-        // in platform independent way instead of relying on native shell.
-        // This would allow portable CMD in test files.
-
         auto pid = spawnShell(
             cmd, stdin, File(outPath, "w"), File(errPath, "w"),
             env, Config.none, sandboxRecipePath
@@ -708,7 +704,7 @@ struct Test
 
         if (reg)
         {
-            assert(reg.stop() == 0, "registry did not close normally");
+            enforce(reg.stop() == 0, "registry did not close normally");
         }
 
         if (exists(sandboxPath("config.hash")))
@@ -841,6 +837,7 @@ class Registry
         this.url = env["DOP_REGISTRY"];
         this.env["DOP_SERVER_HOSTNAME"] = this.url.replace("http://", "").replace("https://", "");
         this.env["DOP_DB_CONNSTRING"] = format!"postgres:///dop-test-%s"(port);
+        this.env["DOP_TEST_STOPROUTE"] = "1";
 
         const regPath = e2ePath("sandbox", testName, "registry");
 

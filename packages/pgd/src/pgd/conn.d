@@ -102,17 +102,17 @@ class PgConn
         this(conninfo.toStringz(), async);
     }
 
-    @property final ConnStatus status() const @trusted
+    @property final ConnStatus status() const @trusted nothrow
     {
         return PQstatus(conn);
     }
 
-    @property final PostgresPollingStatus connectPoll() @trusted
+    @property final PostgresPollingStatus connectPoll() @trusted nothrow
     {
         return PQconnectPoll(conn);
     }
 
-    void finish() @trusted
+    void finish() @trusted nothrow
     {
         PQfinish(conn);
     }
@@ -123,12 +123,12 @@ class PgConn
             badConnection(conn);
     }
 
-    @property final PostgresPollingStatus resetPoll() @trusted
+    @property final PostgresPollingStatus resetPoll() @trusted nothrow
     {
         return PQresetPoll(conn);
     }
 
-    final void reset() @trusted
+    final void reset() @trusted nothrow
     {
         PQreset(conn);
     }
@@ -148,7 +148,7 @@ class PgConn
         return sock;
     }
 
-    @property final bool isBusy() @trusted
+    @property final bool isBusy() @trusted nothrow
     {
         return !!PQisBusy(conn);
     }
@@ -164,7 +164,7 @@ class PgConn
         PQtrace(conn, dest.getFP());
     }
 
-    final void untrace() @trusted
+    final void untrace() @trusted nothrow
     {
         PQuntrace(conn);
     }
