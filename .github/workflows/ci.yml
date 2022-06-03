@@ -26,6 +26,7 @@ jobs:
         run: |
           sudo systemctl start postgresql.service
           pg_isready
+          sudo -u postgres psql --command="CREATE USER runner CREATEDB PASSWORD NULL" --command="\du"
 
       - name: Start PostgreSQL server Windows
         if: ${{ matrix.os == 'windows-latest' }}
@@ -33,6 +34,7 @@ jobs:
           $pgService = Get-Service -Name postgresql*
           Set-Service -InputObject $pgService -Status running -StartupType automatic
           Start-Process -FilePath "$env:PGBIN\pg_isready" -Wait -PassThru
+          & $env:PGBIN\psql --command="CREATE USER runner CREATEDB PASSWORD NULL" --command="\du"
 
       - name: Install Meson
         run: |
@@ -83,6 +85,4 @@ jobs:
 
       - name: Run dopamine tests
         run: meson test --print-errorlogs
-        env:
-          PGUSER: postgres
         working-directory: build

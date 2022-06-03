@@ -821,7 +821,7 @@ final class Registry
         this.port = port;
         this.url = env["DOP_REGISTRY"];
         this.env["DOP_SERVER_HOSTNAME"] = this.url.replace("http://", "").replace("https://", "");
-        this.env["DOP_DB_CONNSTRING"] = pgConnstring(port);
+        this.env["DOP_DB_CONNSTRING"] = pgConnString(format("dop-test-%s", port));
         this.env["DOP_TEST_STOPROUTE"] = "1";
 
         const regPath = e2ePath("sandbox", testName, "registry");
@@ -832,7 +832,9 @@ final class Registry
             "--run-migration", "v1",
             "--populate-from", regPath,
         ];
-        auto adminRes = execute(adminCmd, this.env);
+        auto adminEnv = this.env.dup;
+        adminEnv["DOP_ADMIN_CONNSTRING"] = pgConnString("postgres");
+        auto adminRes = execute(adminCmd, adminEnv);
         if (adminRes.status != 0)
             throw new Exception(
                 format("dop-admin failed with code %s:\n%s", adminRes.status, adminRes.output)
@@ -878,12 +880,18 @@ final class Registry
         return ret;
     }
 
-    string pgConnstring(int port)
+    string pgConnString(string dbName)
     {
         const pgUser = environment.get("PGUSER", null);
         const pgPswd = environment.get("PGPSWD", null);
-        const userSpec = pgUser ? pgUser ~ "@" ~ pgPswd : "";
-        return format!"postgres://%s/dop-test-%s"(userSpec, port);
+        string query;
+        if (pgUser)
+        {
+            query ~= format!"?user=%s"(pgUser);
+            if (pgPswd)
+                query ~= format!"&password=%s"(pgPswd);
+        }
+        return format!"postgres:///%s%s"(dbName, query);
     }
 
     void printOutput(File printFile)
