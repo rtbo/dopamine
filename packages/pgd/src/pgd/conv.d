@@ -2,12 +2,54 @@ module pgd.conv;
 
 import pgd.libpq;
 
+import std.algorithm;
 import std.array;
 import std.bitmanip;
 import std.conv;
 import std.exception;
+import std.format;
 import std.meta;
 import std.traits;
+
+class UnsupportedTypeException : Exception
+{
+    Oid oid;
+
+    this(Oid oid, string file = __FILE__, size_t line = __LINE__)
+    {
+        super("Encountered PostgreSQL type not supported by PGD: " ~ oid.to!string, file, line);
+        this.oid = oid;
+    }
+}
+
+enum PgType
+{
+    boolean = 16,
+    smallint = 21,
+    integer = 23,
+    bigint = 20,
+    real_ = 700,
+    doublePrecision = 701,
+    bytea = 17,
+    text = 25,
+}
+
+package immutable(TypeOid[]) supportedTypes = [
+    TypeOid.BOOL, TypeOid.BYTEA, TypeOid.INT8, TypeOid.INT2, TypeOid.INT4,
+    TypeOid.TEXT, TypeOid.FLOAT4, TypeOid.FLOAT8
+];
+
+package PgType enforceSupported(TypeOid oid)
+{
+    if (!supportedTypes.canFind(oid))
+        throw new UnsupportedTypeException(oid);
+    return cast(PgType) oid;
+}
+
+package bool isSupportedType(TypeOid oid)
+{
+    return supportedTypes.canFind(oid);
+}
 
 enum isScalar(T) = isString!T || isNumeric!T || is(T == bool) || isByteArray!T;
 enum isRow(R) = is(R == struct) && allSatisfy!(isScalar, Fields!R);
@@ -70,7 +112,7 @@ package T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @system
     }
     else
     {
-        const binVal = BinValue(cast(const(ubyte)[])val, PQftype(res, colInd));
+        const binVal = BinValue(cast(const(ubyte)[]) val, enforceSupported(PQftype(res, colInd)));
         return toScalar!T(binVal);
     }
 }
@@ -92,24 +134,38 @@ package R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res) @system
 private struct BinValue
 {
     const(ubyte)[] val;
-    Oid oid;
+    PgType type;
 
-    void check(Oid enforceOid, size_t enforceSize, string typename) @safe
+    void checkType(PgType expectedType, string typename) @safe
     {
-        enforce(oid == enforceOid, "FIXME: msg oid " ~ typename);
-        enforce(val.length == enforceSize, "FIXME: msg size " ~ typename);
+        enforce(
+            type == expectedType,
+            format("Expected PostgreSQL type %s to build a %s but received %s", expectedType, typename, type)
+        );
+
+    }
+
+    void checkSize(size_t expectedSize, string typename) @safe
+    {
+        enforce(
+            val.length == expectedSize,
+            format("Expected a size of %s to build a %s but received %s", expectedSize, typename, val
+                .length)
+        );
     }
 }
 
 private bool toScalar(T)(BinValue val) @safe if (is(T == bool))
 {
-    val.check(BOOLOID, 1, "bool");
+    val.checkType(PgType.boolean, "bool");
+    val.checkSize(1, "bool");
     return val.val[0] != 0;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 {
-    val.check(typeOid!T, T.sizeof, T.stringof);
+    val.checkType(pgTypeOf!T, T.stringof);
+    val.checkSize(T.sizeof, T.stringof);
     const ubyte[T.sizeof] be = val.val[0 .. T.sizeof];
     return bigEndianToNative!T(be);
 }
@@ -117,43 +173,44 @@ private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 // UTF-8 is not checked, hence @system
 private T toScalar(T)(BinValue val) @system if (isString!T)
 {
-    enforce(val.oid == TEXTOID, "FIXME: msg oid string");
-    return (cast(const(char)[])val.val).idup;
+    val.checkType(PgType.text, T.stringof);
+    return (cast(const(char)[]) val.val).idup;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isStaticArray!T)
 {
-    val.check(BYTEAOID, T.length, "FIXME: msg oid ubyte[]");
-    T arr = (cast(const(ElType!T)[])val.val)[0 .. T.length];
+    val.checkType(PgType.bytea, T.stringof);
+    val.checkSize(T.length, T.stringof);
+    T arr = (cast(const(ElType!T)[]) val.val)[0 .. T.length];
     return arr;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
 {
-    enforce (val.oid == BYTEAOID, "FIXME: msg oid ubyte[]");
-    return cast(ElType!T[])val.val.dup;
+    val.checkType(PgType.bytea, T.stringof);
+    return cast(ElType!T[]) val.val.dup;
 }
 
-private template typeOid(TT)
+private template pgTypeOf(TT)
 {
     alias T = Unqual!TT;
 
     static if (is(T == bool))
-        enum typeOid = BOOLOID;
+        enum pgTypeOf = PgType.boolean;
     else static if (is(T == short) || is(T == ushort))
-        enum typeOid = INT2OID;
+        enum pgTypeOf = PgType.smallint;
     else static if (is(T == int) || is(T == uint))
-        enum typeOid = INT4OID;
+        enum pgTypeOf = PgType.integer;
     else static if (is(T == long) || is(T == ulong))
-        enum typeOid = INT8OID;
+        enum pgTypeOf = PgType.bigint;
     else static if (is(T == float))
-        enum typeOid = FLOAT4OID;
+        enum pgTypeOf = PgType.real_;
     else static if (is(T == double))
-        enum typeOid = FLOAT8OID;
+        enum pgTypeOf = PgType.doublePrecision;
     else static if (isString!T)
-        enum typeOid = TEXTOID;
+        enum pgTypeOf = PgType.text;
     else static if (isByteArray!T)
-        enum typeOid = BYTEAOID;
+        enum pgTypeOf = PgType.bytea;
     else
         static assert(false, "unsupported scalar type: " ~ T.stringof);
 }
@@ -262,7 +319,7 @@ package PgQueryParams pgQueryParams(Args...)(Args args) @trusted
         else
             const thisSz = scalarBinSize(arg);
 
-        params.oids[i] = typeOid!T;
+        params.oids[i] = cast(Oid)pgTypeOf!T;
         params.lengths[i] = cast(int)thisSz;
         params.formats[i] = 1; // binary
         valuesSize += thisSz;

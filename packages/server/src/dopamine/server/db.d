@@ -65,6 +65,13 @@ final class DbClient
             throw ex;
         }
     }
+
+    void finish() @safe
+    {
+        pool.removeUnused((DbConn conn) @safe nothrow {
+            conn.finish();
+        });
+    }
 }
 
 final class DbConn : PgConn
@@ -77,7 +84,7 @@ final class DbConn : PgConn
         super(connString, Yes.async);
     }
 
-    override void finish() @safe
+    override void finish() @safe nothrow
     {
         super.finish();
         destroy(sockEvent);

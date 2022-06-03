@@ -8,6 +8,7 @@ import pgd.conn;
 
 import vibe.core.args;
 import vibe.core.core;
+import vibe.core.log;
 import vibe.data.json;
 import vibe.http.router;
 import vibe.http.server;
@@ -29,6 +30,7 @@ static this()
 
 version (DopServerMain) void main(string[] args)
 {
+
     const conf = Config.get;
 
     auto settings = new HTTPServerSettings(conf.serverHostname);
@@ -40,6 +42,9 @@ version (DopServerMain) void main(string[] args)
     setupRoute!GetPackageByName(router, &getPackageByName);
     setupRoute!GetPackageRecipe(router, &getPackageRecipe);
 
+    if (conf.testStopRoute)
+        router.post("/stop", &stop);
+
     auto listener = listenHTTP(settings, router);
     scope (exit)
         listener.stopListening();
@@ -47,10 +52,17 @@ version (DopServerMain) void main(string[] args)
     runApplication();
 }
 
+void stop(HTTPServerRequest req, HTTPServerResponse res)
+{
+    res.writeBody("", 200);
+    client.finish();
+    exitEventLoop();
+}
+
 struct PackRow
 {
     @ColInd(0)
-    string id;
+    int id;
 
     @ColInd(1)
     string name;
@@ -58,9 +70,9 @@ struct PackRow
 
 PackageResource getPackage(GetPackage req) @safe
 {
-    return client.connect((scope DbConn db) {
+    return client.connect((scope DbConn db) @safe {
         const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "packages" WHERE "id" = $1`,
+            `SELECT "id", "name" FROM "package" WHERE "id" = $1`,
             req.id
         );
         auto vers = db.execScalars!string(
@@ -75,7 +87,7 @@ PackageResource getPackageByName(GetPackageByName req) @safe
 {
     return client.connect((scope DbConn db) {
         const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "packages" WHERE "name" = $1`,
+            `SELECT "id", "name" FROM "package" WHERE "name" = $1`,
             req.name
         );
         auto vers = db.execScalars!string(
@@ -89,10 +101,10 @@ PackageResource getPackageByName(GetPackageByName req) @safe
 struct PackRecipeRow
 {
     @ColInd(0)
-    string recId;
+    int recId;
 
     @ColInd(1)
-    string maintainerId;
+    int maintainerId;
 
     @ColInd(2)
     string ver;
@@ -116,7 +128,8 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
                         "package_id" = $1 AND
                         "version" = $2 AND
                         "revision" = $3
-                `
+                `,
+                req.packageId, req.ver, req.revision,
             );
         else
             row = db.execRow!PackRecipeRow(
@@ -126,12 +139,13 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
                         "package_id" = $1 AND
                         "version" = $2
                     LIMIT 1
-                `
+                `,
+                req.packageId, req.ver,
             );
 
         const packName = db.execScalar!string(
-            `SELECT "name" FROM "packages" WHERE "id" = $1`,
-            req.id
+            `SELECT "name" FROM "package" WHERE "id" = $1`,
+            req.packageId
         );
 
         auto files = db.execRows!RecipeFile(
@@ -139,7 +153,7 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
                 SELECT "id", "name", "size"::bigint FROM "recipe_file"
                 WHERE "recipe_id" = $1
             `,
-            row.recId
+            row.recId,
         );
 
         return PackageRecipeResource(
@@ -155,7 +169,6 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
     });
 }
 
-
 void setupRoute(ReqT, H)(URLRouter router, H handler)
 {
     static assert(isSomeFunction!H);
@@ -164,15 +177,30 @@ void setupRoute(ReqT, H)(URLRouter router, H handler)
     static assert(is(ReturnType!H == ResponseType!ReqT));
 
     HTTPServerRequestDelegateS dg = (scope httpReq, httpResp) @safe {
-        auto req = adaptRequest!ReqT(httpReq);
         try
         {
-            auto resp = handler(req);
-            httpResp.writeJsonBody(serializeToJson(resp));
+            auto req = adaptRequest!ReqT(httpReq);
+            () @trusted { logInfo("Parsed query %s", req); }();
+            try
+            {
+                auto resp = handler(req);
+                () @trusted { logInfo("Response %s", resp); }();
+                httpResp.writeJsonBody(serializeToJson(resp));
+            }
+            catch (ResourceNotFoundException ex)
+            {
+                () @trusted { logInfo("Not found error %s", ex.msg); }();
+                httpResp.statusCode = 404;
+            }
+            catch (Exception ex)
+            {
+                () @trusted { logError("Internal error: %s", ex.msg); }();
+                httpResp.statusCode = 500;
+            }
         }
-        catch (ResourceNotFoundException ex)
+        catch (Exception)
         {
-            // no response write = 404
+            httpResp.statusCode = 400;
         }
     };
 
@@ -210,11 +238,12 @@ private ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
             alias syms = getSymbolsByUDA!(ReqT, ident);
             static if (syms.length)
             {
-                __traits(getMember, req, __traits(identifier, syms[0])) = param;
+                __traits(getMember, req, __traits(identifier, syms[0])) =
+                    param.to!(typeof(__traits(getMember, req, __traits(identifier, syms[0]))));
             }
             else static if (__traits(hasMember, req, ident))
             {
-                __traits(getMember, req, ident) = param;
+                __traits(getMember, req, ident) = param.to!(typeof(__traits(getMember, req, ident)));
             }
             else static assert(false, "Could not find a " ~ ident ~ " parameter value in " ~ ReqT.stringof);
         }

@@ -35,7 +35,8 @@ CREATE TABLE "recipe" (
     "filedata"      bytea NOT NULL,
 
     FOREIGN KEY ("package_id") REFERENCES "package"("id") ON DELETE CASCADE,
-    FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL
+    FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,
+    UNIQUE("package_id", "version", "revision")
 );
 
 -- recipe file data is received compressed, therefore the following will save CPU time on the server.

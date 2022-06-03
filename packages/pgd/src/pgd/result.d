@@ -1,6 +1,7 @@
 module pgd.result;
 
 import pgd.libpq;
+import pgd.conv;
 
 import std.exception;
 import std.string;
@@ -47,10 +48,10 @@ struct Result
         return !!res;
     }
 
-    @property Header header()
+    @property Header header() return
     {
         assert(res);
-        return Header(this);
+        return Header(res);
     }
 
     /// number of rows
@@ -60,40 +61,45 @@ struct Result
             return 0;
         return PQntuples(res);
     }
+
+    Row opIndex(size_t ind) return
+    {
+        return Row(res, cast(int)ind);
+    }
 }
 
 struct Header
 {
-    private Result result;
+    private PGresult *res;
 
     /// number of columns
     @property size_t length() const
     {
-        return PQnfields(result.res);
+        return PQnfields(res);
     }
 
-    Column opIndex(size_t ind)
+    Column opIndex(size_t ind) return
     {
         assert(ind < length);
-        return Column(result, cast(int)ind);
+        return Column(res, cast(int)ind);
     }
 
-    Column opIndex(string name)
+    Column opIndex(string name) return
     {
-        auto number = PQfnumber(result.res, name.toStringz);
+        auto number = PQfnumber(res, name.toStringz);
         enforce(number >= 0, "could not find column " ~ name);
-        return Column(result, number);
+        return Column(res, number);
     }
 }
 
 struct Column
 {
-    private Result result;
+    private PGresult *res;
     private int ind;
 
     string name() const
     {
-        return PQfname(result.res, ind).fromStringz.idup;
+        return PQfname(res, ind).fromStringz.idup;
     }
 
     int number() const
@@ -103,43 +109,57 @@ struct Column
 
     int tableNumber() const
     {
-        return PQftablecol(result.res, ind);
+        return PQftablecol(res, ind);
+    }
+
+    PgType type() const
+    {
+        return enforceSupported(PQftype(res, ind));
     }
 }
 
 struct Row
 {
-    private Result result;
+    private PGresult *res;
     private int ind;
 
     /// number of columns
     @property size_t length() const
     {
-        return PQnfields(result.res);
+        return PQnfields(res);
     }
 
-    Cell opIndex(size_t col)
+    Cell opIndex(size_t col) return
     {
-        return Cell(result, ind, cast(int)col);
+        return Cell(res, ind, cast(int)col);
     }
 }
 
 struct Cell
 {
-    private Result result;
+    private PGresult *res;
     private int row;
     private int col;
 
     @property bool isNull() const
     {
-        return !!PQgetisnull(result.res, row, col);
+        return !!PQgetisnull(res, row, col);
     }
 
     @property string value() const
     in(!isNull)
     {
-        const len = PQgetlength(result.res, row, col);
-        const ptr = PQgetvalue(result.res, row, col);
+        const len = PQgetlength(res, row, col);
+        const ptr = PQgetvalue(res, row, col);
         return ptr[0 .. len].idup;
+    }
+
+    @property T to(T)() const
+    {
+        const len = PQgetlength(res, row, col);
+        const ptr = cast(ubyte*)PQgetvalue(res, row, col);
+        const type = enforceSupported(PQftype(res, ind));
+        const val = BinValue(ptr[0 .. len], type);
+        return toScalar!T(val);
     }
 }

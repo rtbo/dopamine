@@ -630,7 +630,7 @@ struct Test
     // to obtain a unique port for each instance
     Tuple!(File, int) acquireRegistryPort()
     {
-        int port = 3002;
+        int port = 3500;
         while (1)
         {
             auto fn = e2ePath("sandbox", format("%d.lock", port));
@@ -643,7 +643,7 @@ struct Test
         }
     }
 
-    int perform(string dopExe, string regExe)
+    int perform(string dopExe, string regExe, string adminExe)
     {
         // we delete previous sandbox if any
         const sbDir = sandboxPath();
@@ -670,23 +670,25 @@ struct Test
 
             env["E2E_REGISTRY_PORT"] = port.to!string;
             env["DOP_REGISTRY"] = format("http://localhost:%s", port);
-            reg = new Registry(regExe, port, env, name);
+            reg = new Registry(regExe, adminExe, port, env, name);
         }
 
         foreach (preCmd; preCmds)
         {
-            import std.conv : to;
-
             const cmd = expandEnvVars(preCmd, env);
             auto res = executeShell(cmd, env, Config.none, size_t.max, sandboxRecipePath);
             if (res.status != 0)
             {
-                string msg = "Pre-command failed.\n" ~ cmd ~ " returned " ~ res.status.to!string ~ ".";
+                stderr.writeln("Pre-command failed:");
+                stderr.writefln!"%s returned %s."(cmd, res.status);
                 if (res.output)
                 {
-                    msg ~= " Output:\n" ~ res.output;
+                    stderr.writeln("PRE-CMD STDOUT -------");
+                    stderr.write(res.output);
+                    stderr.writeln("----------------------");
                 }
-                throw new Exception(msg);
+                if (reg)
+                    reg.printOutput(stderr);
             }
         }
 
@@ -694,10 +696,6 @@ struct Test
 
         const outPath = sandboxPath("stdout");
         const errPath = sandboxPath("stderr");
-
-        // FIXME: we'd better have a command parser that return an array of args
-        // in platform independent way instead of relying on native shell.
-        // This would allow portable CMD in test files.
 
         auto pid = spawnShell(
             cmd, stdin, File(outPath, "w"), File(errPath, "w"),
@@ -708,7 +706,7 @@ struct Test
 
         if (reg)
         {
-            assert(reg.stop() == 0, "registry did not close normally");
+            enforce(reg.stop() == 0, "registry did not close normally");
         }
 
         if (exists(sandboxPath("config.hash")))
@@ -741,31 +739,14 @@ struct Test
                     stderr.writefln("STATUS:   %s", status);
                     stderr.writeln("STDOUT ---------------");
                     foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
-                    {
                         stderr.write(l);
-                    }
                     stderr.writeln("----------------------");
                     stderr.writeln("STDERR ---------------");
                     foreach (l; File(errPath, "r").byLine(Yes.keepTerminator))
-                    {
                         stderr.write(l);
-                    }
                     stderr.writeln("----------------------");
                     if (reg)
-                    {
-                        stderr.writeln("REGISTRY STDOUT ------");
-                        foreach (l; File(reg.outPath, "r").byLine(Yes.keepTerminator))
-                        {
-                            stderr.write(l);
-                        }
-                        stderr.writeln("----------------------");
-                        stderr.writeln("REGISTRY STDERR ------");
-                        foreach (l; File(reg.errPath, "r").byLine(Yes.keepTerminator))
-                        {
-                            stderr.write(l);
-                        }
-                        stderr.writeln("----------------------");
-                    }
+                        reg.printOutput(stderr);
                     outputShown = true;
                 }
                 stderr.writeln("ASSERTION FAILED: ", failMsg);
@@ -816,7 +797,7 @@ struct RunResult
     }
 }
 
-class Registry
+final class Registry
 {
     Pid pid;
     string outPath;
@@ -825,8 +806,9 @@ class Registry
     File errFile;
     string url;
     int port;
+    string[string] env;
 
-    this(string exe, int port, string[string] env, string testName)
+    this(string exe, string adminExe, int port, string[string] env, string testName)
     {
         import std.conv : to;
 
@@ -837,12 +819,33 @@ class Registry
         errFile = File(errPath, "w");
 
         this.port = port;
+        this.url = env["DOP_REGISTRY"];
+        this.env["DOP_SERVER_HOSTNAME"] = this.url.replace("http://", "").replace("https://", "");
+        this.env["DOP_DB_CONNSTRING"] = pgConnString(format("dop-test-%s", port));
+        this.env["DOP_TEST_STOPROUTE"] = "1";
+
+        const regPath = e2ePath("sandbox", testName, "registry");
+
+        const adminCmd = [
+            adminExe,
+            "--create-db",
+            "--run-migration", "v1",
+            "--populate-from", regPath,
+        ];
+        auto adminEnv = this.env.dup;
+        adminEnv["DOP_ADMIN_CONNSTRING"] = pgConnString("postgres");
+        auto adminRes = execute(adminCmd, adminEnv);
+        if (adminRes.status != 0)
+            throw new Exception(
+                format("dop-admin failed with code %s:\n%s", adminRes.status, adminRes.output)
+            );
+        else
+            writeln("Run dop-admin:\n", adminRes.output);
 
         const cmd = [
-            exe, port.to!string
+            exe
         ];
-        pid = spawnProcess(cmd, stdin, outFile, errFile, env, Config.none, e2ePath("sandbox", testName, "registry"));
-        url = env["DOP_REGISTRY"];
+        pid = spawnProcess(cmd, stdin, outFile, errFile, this.env, Config.none, regPath);
     }
 
     int stop()
@@ -875,6 +878,32 @@ class Registry
         errFile.close();
 
         return ret;
+    }
+
+    string pgConnString(string dbName)
+    {
+        const pgUser = environment.get("PGUSER", null);
+        const pgPswd = environment.get("PGPSWD", null);
+        string query;
+        if (pgUser)
+        {
+            query ~= format!"?user=%s"(pgUser);
+            if (pgPswd)
+                query ~= format!"&password=%s"(pgPswd);
+        }
+        return format!"postgres:///%s%s"(dbName, query);
+    }
+
+    void printOutput(File printFile)
+    {
+        printFile.writeln("REGISTRY STDOUT ------");
+        foreach (l; File(outPath, "r").byLine(Yes.keepTerminator))
+            printFile.write(l);
+        printFile.writeln("----------------------");
+        printFile.writeln("REGISTRY STDERR ------");
+        foreach (l; File(errPath, "r").byLine(Yes.keepTerminator))
+            printFile.write(l);
+        printFile.writeln("----------------------");
     }
 }
 
@@ -980,10 +1009,9 @@ int main(string[] args)
         return usage(args, 1);
     }
 
-    const dopExe = absolutePath(
-        environment["DOP"]);
-
-    const regExe = absolutePath(environment["DOP_E2E_REG"]);
+    const dopExe = absolutePath(environment["DOP"]);
+    const regExe = absolutePath(environment["DOP_SERVER"]);
+    const adminExe = absolutePath(environment["DOP_ADMIN"]);
 
     try
     {
@@ -997,7 +1025,7 @@ int main(string[] args)
             return 77; // GNU skip return code
         }
 
-        return test.perform(dopExe, regExe);
+        return test.perform(dopExe, regExe, adminExe);
     }
     catch (Exception ex)
     {

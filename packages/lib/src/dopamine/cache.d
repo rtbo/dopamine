@@ -11,7 +11,6 @@ import std.exception;
 import std.file;
 import std.path;
 
-
 /// A local package cache
 class PackageCache
 {
@@ -111,14 +110,15 @@ class PackageCache
         mkdirRecurse(revDir.dir);
         auto recDir = RecipeDir(revDir.dir);
 
-        if (resp.payload.fileList.length == 1)
-        {
+        debug { import std.stdio : writefln; try { writefln!"FIXME recipe download %s:%s"(__FILE__, __LINE__); } catch (Exception) {} }
+        // if (resp.payload.fileList.length == 1)
+        // {
             write(recDir.recipeFile, resp.payload.recipe);
-        }
-        else
-        {
-            assert(false, "unimplemented");
-        }
+        // }
+        // else
+        // {
+        //     assert(false, "unimplemented");
+        // }
 
         return revDir;
     }

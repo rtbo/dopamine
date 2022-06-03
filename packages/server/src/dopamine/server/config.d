@@ -19,6 +19,11 @@ struct Config
     /// Read from $DOP_DB_POOLMAXSIZE
     uint dbPoolMaxSize;
 
+    /// Whether to setup a stop route
+    /// Only used in testing
+    /// Read from $DOP_TEST_STOPROUTE
+    bool testStopRoute;
+
     static @property Config get()
     {
         import std.process : environment;
@@ -38,6 +43,8 @@ struct Config
             c.dbPoolMaxSize = environment.get(
                 "DOP_DB_POOLMAXSIZE", "1"
             ).to!uint;
+
+            c.testStopRoute = environment.get("DOP_TEST_STOPROUTE", null) !is null;
 
             initialized = true;
         }
