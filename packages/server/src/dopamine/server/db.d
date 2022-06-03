@@ -125,12 +125,6 @@ final class DbConn : PgConn
         }
     }
 
-    // current impl of FileDescriptorEvent has the flaw
-    // that it closes the file descriptor during descruction.
-    // So we need to duplicate the socket descriptor.
-    // To avoid having to do this on every query we cache the FileDescriptorEvent
-    // and rebuild it each time the postgres socket changes
-    // (it is not guaranteed to remain the same, but hopefully doesn't change too often)
     private FileDescriptorEvent socketEvent() @safe
     {
         const sock = super.socket;
@@ -138,28 +132,9 @@ final class DbConn : PgConn
         if (sock != lastSock)
         {
             lastSock = sock;
-            version (Posix)
-            {
-                import core.sys.posix.unistd : dup;
-
-                const sockDup = dup(sock);
-            }
-            else version (Windows)
-            {
-                // declaration of _dup hereunder
-                const sockDup = _dup(sock);
-            }
-            else
-            {
-                static assert(false, "unsupported platform");
-            }
-            enforce(sockDup != -1, "could not duplicate PostgreSQL socket");
-            sockEvent = createFileDescriptorEvent(sockDup, FileDescriptorEvent.Trigger.read);
+            sockEvent = createFileDescriptorEvent(sock, FileDescriptorEvent.Trigger.read);
         }
         return sockEvent;
     }
 }
 
-// _dup is part of UCRT, available on Windows 10 onwards.
-// No such binding in druntime however
-version (Windows) extern (Windows) nothrow @nogc @system int _dup(int);
