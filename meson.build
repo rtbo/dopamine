@@ -13,7 +13,9 @@ endif
 
 subdir('3rdparty')
 
-squiz_proj = subproject('squiz-box')
+squiz_proj = subproject('squiz-box',
+    default_options: ['enable_zstd=false'],
+)
 squiz_dep = squiz_proj.get_variable('squiz_dep')
 
 vibed_version = '0.9.4'
