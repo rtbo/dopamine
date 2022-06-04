@@ -33,6 +33,7 @@ CREATE TABLE "recipe" (
     "recipe"        text NOT NULL,
     "filename"      text NOT NULL,
     "filedata"      bytea NOT NULL,
+    "created"       timestamptz NOT NULL,
 
     FOREIGN KEY ("package_id") REFERENCES "package"("id") ON DELETE CASCADE,
     FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,

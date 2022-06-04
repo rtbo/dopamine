@@ -38,8 +38,7 @@ enum PgType
     date = 1082,
     // time = 1083,
     // timestamp = 1114,
-    // timestamptz = 1184,
-    // interval = 1186,
+    timestamptz = 1184,// interval = 1186,
 }
 
 package(pgd) PgType enforceSupported(TypeOid oid)
@@ -63,7 +62,8 @@ enum isScalar(T) = is(T == bool) ||
     isNumeric!T ||
     isString!T ||
     isByteArray!T ||
-    is(T == Date);
+    is(T == Date) ||
+    is(T == SysTime);
 
 enum isRow(R) = is(R == struct) && allSatisfy!(isScalar, Fields!R);
 
@@ -88,6 +88,7 @@ static assert(isScalar!string);
 // FIXME: debug check at runtime that the encoding of the database is UTF-8
 static assert(!isScalar!wstring); // no UTF-16 support, user must convert to string before
 static assert(isScalar!Date);
+static assert(isScalar!SysTime);
 
 private struct SomeRow
 {
@@ -123,11 +124,17 @@ package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @syst
     if (text)
     {
         // FIXME: probably not suited to all conversions (e.g. bin encoding)
-        return val.to!T;
+        static if (is(typeof(val.to!T)))
+            return val.to!T;
+        else
+            assert(false, "unimplemented for " ~ T.stringof);
     }
     else
     {
         const binVal = BinValue(cast(const(ubyte)[]) val, PQftype(res, colInd));
+        binVal.checkType(pgTypeOf!T, T.stringof);
+        static if (sizeKnownAtCt!T)
+            binVal.checkSize(scalarBinSizeCt!T, T.stringof);
         return toScalar!T(binVal);
     }
 }
@@ -151,7 +158,7 @@ private struct BinValue
     const(ubyte)[] val;
     TypeOid type;
 
-    void checkType(PgType expectedType, string typename) @safe
+    void checkType(PgType expectedType, string typename) const @safe
     {
         import std.string : toLower;
 
@@ -164,7 +171,7 @@ private struct BinValue
 
     }
 
-    void checkSize(size_t expectedSize, string typename) @safe
+    void checkSize(size_t expectedSize, string typename) const @safe
     {
         enforce(
             val.length == expectedSize,
@@ -177,15 +184,11 @@ private struct BinValue
 
 private bool toScalar(T)(BinValue val) @safe if (is(T == bool))
 {
-    val.checkType(PgType.boolean, "bool");
-    val.checkSize(1, "bool");
     return val.val[0] != 0;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 {
-    val.checkType(pgTypeOf!T, T.stringof);
-    val.checkSize(T.sizeof, T.stringof);
     const ubyte[T.sizeof] be = val.val[0 .. T.sizeof];
     return bigEndianToNative!T(be);
 }
@@ -193,30 +196,29 @@ private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 // UTF-8 is not checked, hence @system
 private T toScalar(T)(BinValue val) @system if (isString!T)
 {
-    val.checkType(PgType.text, T.stringof);
     return (cast(const(char)[]) val.val).idup;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isStaticArray!T)
 {
-    val.checkType(PgType.bytea, T.stringof);
-    val.checkSize(T.length, T.stringof);
     T arr = (cast(const(ElType!T)[]) val.val)[0 .. T.length];
     return arr;
 }
 
 private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
 {
-    val.checkType(PgType.bytea, T.stringof);
     return cast(ElType!T[]) val.val.dup;
 }
 
 private T toScalar(T)(BinValue val) @safe if (is(T == Date))
 {
-    val.checkType(PgType.date, "Date");
-    val.checkSize(4, "Date");
-    int julian = bigEndianToNative!uint(arr[0 .. 4]) + pgEpochJ;
-    return julianToDate(julian);
+    return pgToDate(bigEndianToNative!uint(val.val[0 .. 4]));
+}
+
+private T toScalar(T)(BinValue val) @safe if (is(T == SysTime))
+{
+    const stdTime = pgToStdTime(bigEndianToNative!long(val.val[0 .. 8]));
+    return SysTime(stdTime);
 }
 
 private template pgTypeOf(TT)
@@ -241,6 +243,8 @@ private template pgTypeOf(TT)
         enum pgTypeOf = PgType.bytea;
     else static if (is(T == Date))
         enum pgTypeOf = PgType.date;
+    else static if (is(T == SysTime))
+        enum pgTypeOf = PgType.timestamptz;
     else
         static assert(false, "unsupported scalar type: " ~ T.stringof);
 }
@@ -252,7 +256,8 @@ private template sizeKnownAtCt(TT) if (isScalar!TT)
     enum sizeKnownAtCt = is(T == bool) ||
         isNumeric!T ||
         isStaticArray!T ||
-        is(T == Date);
+        is(T == Date) ||
+        is(T == SysTime);
 }
 
 private template scalarBinSizeCt(TT) if (isScalar!TT)
@@ -267,6 +272,8 @@ private template scalarBinSizeCt(TT) if (isScalar!TT)
         enum scalarBinSizeCt = T.length;
     else static if (is(T == Date))
         enum scalarBinSizeCt = 4;
+    else static if (is(T == SysTime))
+        enum scalarBinSizeCt = 8;
     else
         static assert(false, "unknown compile-time size");
 }
@@ -305,9 +312,18 @@ private size_t emplaceScalar(T)(T val, ubyte[] buf) @safe
     }
     else static if (is(T == Date))
     {
-        const julian = dateToJulian(val);
-        buf[0 .. 4] = nativeToBigEndian(julian - pgEpochJ);
+        buf[0 .. 4] = nativeToBigEndian(dateToPg(val));
         return 4;
+    }
+    else static if (is(T == SysTime))
+    {
+        const pgTime = stdTimeToPg(val.stdTime);
+        buf[0 .. 8] = nativeToBigEndian(pgTime);
+        return 8;
+    }
+    else
+    {
+        static assert(false, "unimplemented");
     }
 }
 

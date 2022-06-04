@@ -14,6 +14,7 @@ import vibe.http.router;
 import vibe.http.server;
 
 import std.conv;
+import std.datetime.systime;
 import std.format;
 import std.string;
 import std.traits;
@@ -114,6 +115,9 @@ struct PackRecipeRow
 
     @ColInd(4)
     string recipe;
+
+    @ColInd(5)
+    SysTime created;
 }
 
 PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
@@ -123,7 +127,7 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
         if (req.revision)
             row = db.execRow!PackRecipeRow(
                 `
-                    SELECT "id", "maintainer_id", "version", "revision", "recipe"
+                    SELECT "id", "maintainer_id", "version", "revision", "recipe", "created"
                     FROM "recipe" WHERE
                         "package_id" = $1 AND
                         "version" = $2 AND
@@ -134,7 +138,7 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
         else
             row = db.execRow!PackRecipeRow(
                 `
-                    SELECT "id", "maintainer_id", "version", "revision", "recipe"
+                    SELECT "id", "maintainer_id", "version", "revision", "recipe", "created"
                     FROM "recipe" WHERE
                         "package_id" = $1 AND
                         "version" = $2
@@ -163,7 +167,7 @@ PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
             row.revision,
             row.recipe,
             row.maintainerId,
-            null,
+            row.created.toUTC(),
             files
         );
     });

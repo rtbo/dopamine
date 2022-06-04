@@ -1,22 +1,30 @@
 module pgd.conv.time;
 
-package:
-
 import std.datetime;
-
-enum pgEpoch = Date(2000, 1, 1);
-enum pgEpochJ = cast(int)pgEpoch.julianDay();
-static assert(pgEpochJ == 2_451_545);
 
 // postgres date is a int representing days since Date(2000, 1, 1)
 // we use the julian routines from postgresql for conversions because
 // they are more efficient than the gregorian based routines of phobos.
 
+private enum pgEpochDate = Date(2000, 1, 1);
+private enum pgEpochDateJ = cast(int)pgEpochDate.julianDay();
+static assert(pgEpochDateJ == 2_451_545);
+
+package Date pgToDate(int pgDate) @safe
+{
+    return julianToDate(pgDate + pgEpochDateJ);
+}
+
+package int dateToPg(Date date) @safe
+{
+    return dateToJulian(date) - pgEpochDateJ;
+}
+
 // FIXME check bounds
 
 // this is from j2date from PostgreSQL source
 // src/backend/utils/adt/datetime.c
-Date julianToDate(uint julian) @safe
+private Date julianToDate(uint julian) @safe
 {
     julian += 32_044;
     uint quad = julian / 146_097;
@@ -37,7 +45,7 @@ Date julianToDate(uint julian) @safe
     );
 }
 
-uint dateToJulian(Date date) @safe
+private uint dateToJulian(Date date) @safe
 {
     int y = date.year;
     int m = cast(int)date.month();
@@ -60,4 +68,20 @@ uint dateToJulian(Date date) @safe
     julian += 7834 * m / 256 + d;
 
     return julian;
+}
+
+// postgres timestamptz is the number of microseconds since 01/01/2000 midnight UTC
+// stdTime is hnsecs since 01/01/0001 at midnight UTC
+
+private enum long pgEpochStdTime = 630_822_816_000_000_000;
+private enum long pgEpochUsecs =  pgEpochStdTime/ 10;
+
+package long pgToStdTime(long pgTime) @safe
+{
+    return (pgTime + pgEpochUsecs) * 10;
+}
+
+package long stdTimeToPg(long stdTime) @safe
+{
+    return (stdTime / 10) - pgEpochUsecs;
 }

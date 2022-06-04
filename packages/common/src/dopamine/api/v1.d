@@ -2,6 +2,8 @@ module dopamine.api.v1;
 
 import dopamine.api.attrs;
 
+import std.datetime.systime;
+
 struct PackageResource
 {
     int id;
@@ -24,7 +26,7 @@ struct PackageRecipeResource
     string revision;
     string recipe;
     int maintainerId;
-    string created;
+    SysTime created;
     RecipeFile[] fileList;
 }
 
