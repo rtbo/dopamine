@@ -12,7 +12,7 @@ import core.time;
 private alias vibeSleep = vibe.core.core.sleep;
 
 private enum connectionTimeout = dur!"seconds"(10);
-private enum queryTimout = dur!"seconds"(30);
+private enum queryTimeout = dur!"seconds"(30);
 
 final class DbClient
 {
@@ -33,7 +33,13 @@ final class DbClient
             final switch (db.connectPoll)
             {
             case PostgresPollingStatus.READING:
-                db.socketEvent().wait(connectionTimeout);
+                version (Posix)
+                    db.socketEvent()
+                        .wait(connectionTimeout);
+                else version (Windows) // wait not implemented on Windows
+                    vibeSleep(dur!"msecs"(50));
+                else
+                    static assert(false, "unsupported platform");
                 continue loop;
             case PostgresPollingStatus.WRITING:
                 // no implementation of waiting for write
@@ -68,9 +74,7 @@ final class DbClient
 
     void finish() @safe
     {
-        pool.removeUnused((DbConn conn) @safe nothrow {
-            conn.finish();
-        });
+        pool.removeUnused((DbConn conn) @safe nothrow{ conn.finish(); });
     }
 }
 
@@ -99,7 +103,12 @@ final class DbConn : PgConn
             final switch (connectPoll)
             {
             case PostgresPollingStatus.READING:
-                socketEvent().wait(connectionTimeout);
+                version (Posix)
+                    socketEvent().wait(connectionTimeout);
+                else version (Windows) // wait not implemented on Windows
+                    vibeSleep(dur!"msecs"(50));
+                else
+                    static assert(false, "unsupported platform");
                 continue loop;
             case PostgresPollingStatus.WRITING:
                 // no implementation of waiting for write
@@ -120,7 +129,13 @@ final class DbConn : PgConn
             if (status == ConnStatus.BAD)
                 throw new ConnectionException(errorMessage);
 
-            socketEvent().wait(queryTimout);
+            version (Posix)
+                socketEvent().wait(queryTimeout);
+            else version (Windows) // wait not implemented on Windows
+                vibeSleep(dur!"msecs"(50));
+            else
+                static assert(false, "unsupported platform");
+
             consumeInput();
         }
     }
@@ -137,4 +152,3 @@ final class DbConn : PgConn
         return sockEvent;
     }
 }
-
