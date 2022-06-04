@@ -6,7 +6,8 @@ pgd_src = files([
 
     'src/pgd/conn.d',
     'src/pgd/connstring.d',
-    'src/pgd/conv.d',
+    'src/pgd/conv/package.d',
+    'src/pgd/conv/time.d',
     'src/pgd/result.d',
 ])
 

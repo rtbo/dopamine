@@ -8,6 +8,7 @@ import squiz_box;
 
 import std.algorithm;
 import std.array;
+import std.datetime;
 import std.digest.sha;
 import std.exception;
 import std.getopt;
@@ -245,9 +246,10 @@ void populateRegistry(PgConn db, string regDir)
                                 "revision",
                                 "recipe",
                                 "filename",
-                                "filedata"
+                                "filedata",
+                                "created"
                             ) VALUES(
-                                $1, $2, $3, $4, $5, $6, $7
+                                $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP
                             )
                             RETURNING "id"
                         `,
