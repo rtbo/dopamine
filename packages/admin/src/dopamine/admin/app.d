@@ -205,15 +205,14 @@ void populateRegistry(PgConn db, string regDir)
             continue;
         }
 
-        const pkgId = db.execScalar!int(
+        db.exec(
             `
-                INSERT INTO "package" ("name", "maintainer_id")
-                VALUES ($1, $2)
-                RETURNING "id"
+                INSERT INTO "package" ("name", "maintainer_id", "created")
+                VALUES ($1, $2, CURRENT_TIMESTAMP)
             `,
             pkg.name, adminId
         );
-        writefln("Created package %s (%s)", pkg.name, pkgId);
+        writefln("Created package %s", pkg.name);
 
         foreach (vdir; pkg.versionDirs)
             foreach (rdir; vdir.revisionDirs)
@@ -240,24 +239,24 @@ void populateRegistry(PgConn db, string regDir)
                     const recId = db.execScalar!int(
                         `
                             INSERT INTO "recipe" (
-                                "package_id",
+                                "package_name",
                                 "maintainer_id",
                                 "version",
                                 "revision",
                                 "recipe",
-                                "filename",
-                                "filedata",
+                                "archivename",
+                                "archivedata",
                                 "created"
                             ) VALUES(
                                 $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP
                             )
                             RETURNING "id"
                         `,
-                        pkgId, adminId, vdir.ver, rdir.revision, recipe, filename, recipeFileBlob
+                        pkg.name, adminId, vdir.ver, rdir.revision, recipe, filename, recipeFileBlob
                     );
                     auto dbSha1 = db.execScalar!(ubyte[20])(
                         `
-                            SELECT digest("filedata", 'sha1') FROM "recipe"
+                            SELECT DIGEST("archivedata", 'sha1') FROM "recipe"
                             WHERE "id" = $1
                         `,
                         recId

@@ -66,22 +66,22 @@ class PackageCache
             logInfo("Fetching recipe %s/%s from registry", info(pack.name), info(ver));
         }
 
-        auto req = GetPackageRecipe(pack.id, ver, revision);
-        auto resp = registry.sendRequest(req);
+        Response!RecipeResource resp;
+        if (revision)
+            resp = registry.sendRequest(GetRecipeRevision(pack.name, ver, revision));
+        else
+            resp = registry.sendRequest(GetLatestRecipeRevision(pack.name, ver));
+
         enforce(resp.code < 400, new ErrorLogException(
                 "Could not fetch %s/%s%s%s: registry returned %s",
                 info(pack.name), info(ver), revision ? "/" : "", info(revision ? revision : ""),
                 error(resp.code.to!string)
         ));
 
-        enforce(resp.payload.name == pack.name, new Exception(
-                "Registry returned a package that do not match request"
-        ));
-
         enforce(resp.payload.ver == ver, new Exception(
                 "Registry returned a package version that do not match request:\n" ~
                 format("  - requested %s/%s\n", pack.name, ver) ~
-                format("  - obtained %s/%s", resp.payload.name, resp.payload.ver)
+                format("  - obtained %s/%s", pack.name, resp.payload.ver)
         ));
 
         if (revision)
@@ -91,14 +91,7 @@ class PackageCache
         else
             revision = resp.payload.revision;
 
-        enforce(resp.payload.fileList.length >= 1, new Exception(
-                "Registry returned a recipe without file"
-        ));
-        enforce(resp.payload.fileList.map!(rf => rf.name).canFind("dopamine.lua"), new Exception(
-                "Registry returned a recipe without main recipe file"
-        ));
-
-        auto revDir = packageDir(resp.payload.name)
+        auto revDir = packageDir(pack.name)
             .versionDir(resp.payload.ver)
             .revisionDir(resp.payload.revision);
 

@@ -5,6 +5,8 @@ import dopamine.login;
 
 import vibe.data.json;
 
+import std.exception;
+
 @safe:
 
 /// Exception thrown when constructing a registry with invalid registry host
@@ -84,6 +86,12 @@ class ErrorResponseException : Exception
         this.error = error;
         super(format("Server response is %s - %s: %s", code, reason, error), file, line);
     }
+}
+
+/// Thrown if the request could not be parsed into a resource
+class WrongRequestException : Exception
+{
+    mixin basicExceptionCtors!();
 }
 
 /// Response returned by the Registry
@@ -265,6 +273,12 @@ private string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT
                 const value = __traits(getMember, req, leftover);
             }
             else static assert(false, "Could not find a " ~ leftover ~ " parameter value in " ~ ReqT.stringof);
+
+            const comp = encodeComponent(value.to!string);
+            if (!comp)
+                throw new WrongRequestException(
+                    "could not associate a value to '" ~ part ~ "' for request " ~ ReqT.stringof
+                );
 
             resource ~= encodeComponent(value.to!string);
         }
@@ -456,12 +470,15 @@ version (unittest)
 @("requestResource")
 unittest
 {
-    requestResource(GetPackage(17))
-        .shouldEqual("/api/v1/packages/17");
-    requestResource(GetPackageByName("pkgname"))
-        .shouldEqual("/api/v1/packages/by-name/pkgname");
-    requestResource(GetPackageRecipe(123, "1.0.0"))
-        .shouldEqual("/api/v1/packages/123/recipes/1.0.0");
-    requestResource(GetPackageRecipe(432, "1.0.0", "abcdef"))
-        .shouldEqual("/api/v1/packages/432/recipes/1.0.0?revision=abcdef");
+    requestResource(GetPackage("pkga"))
+        .shouldEqual("/api/v1/packages/pkga");
+
+    requestResource(GetLatestRecipeRevision("pkga", "1.0.0"))
+        .shouldEqual("/api/v1/packages/pkga/1.0.0/latest");
+
+    requestResource(GetRecipeRevision("pkga", "1.0.0", "somerev"))
+        .shouldEqual("/api/v1/packages/pkga/1.0.0/somerev");
+
+    requestResource(GetRecipeRevision("pkga", "1.0.0", null))
+        .shouldThrow();
 }

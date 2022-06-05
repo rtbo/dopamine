@@ -31,7 +31,6 @@ static this()
 
 version (DopServerMain) void main(string[] args)
 {
-
     const conf = Config.get;
 
     auto settings = new HTTPServerSettings(conf.serverHostname);
@@ -40,11 +39,16 @@ version (DopServerMain) void main(string[] args)
     auto router = new URLRouter(prefix);
 
     setupRoute!GetPackage(router, &getPackage);
-    setupRoute!GetPackageByName(router, &getPackageByName);
-    setupRoute!GetPackageRecipe(router, &getPackageRecipe);
+    setupRoute!GetLatestRecipeRevision(router, &getLatestRecipeRevision);
+    setupRoute!GetRecipeRevision(router, &getRecipeRevision);
+    setupRoute!GetRecipe(router, &getRecipe);
+    setupRoute!GetRecipeFiles(router, &getRecipeFiles);
+    setupRoute!GetRecipeArchive(router, &getRecipeArchive);
 
     if (conf.testStopRoute)
         router.post("/stop", &stop);
+
+    router.get("*", &fallback);
 
     auto listener = listenHTTP(settings, router);
     scope (exit)
@@ -53,123 +57,167 @@ version (DopServerMain) void main(string[] args)
     runApplication();
 }
 
-void stop(HTTPServerRequest req, HTTPServerResponse res)
+void stop(HTTPServerRequest req, HTTPServerResponse resp)
 {
-    res.writeBody("", 200);
+    resp.writeBody("", 200);
     client.finish();
     exitEventLoop();
+}
+
+void fallback(HTTPServerRequest req, HTTPServerResponse resp)
+{
+    logInfo("fallback for %s", req.requestURI);
 }
 
 struct PackRow
 {
     @ColInd(0)
-    int id;
-
-    @ColInd(1)
     string name;
-}
-
-PackageResource getPackage(GetPackage req) @safe
-{
-    return client.connect((scope DbConn db) @safe {
-        const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "package" WHERE "id" = $1`,
-            req.id
-        );
-        auto vers = db.execScalars!string(
-            `SELECT "version" FROM "recipe" WHERE "package_id" = $1`,
-            pack.id,
-        );
-        return PackageResource(pack.id, pack.name, vers);
-    });
-}
-
-PackageResource getPackageByName(GetPackageByName req) @safe
-{
-    return client.connect((scope DbConn db) {
-        const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "package" WHERE "name" = $1`,
-            req.name
-        );
-        auto vers = db.execScalars!string(
-            `SELECT "version" FROM "recipe" WHERE "package_id" = $1`,
-            pack.id,
-        );
-        return PackageResource(pack.id, pack.name, vers);
-    });
-}
-
-struct PackRecipeRow
-{
-    @ColInd(0)
-    int recId;
 
     @ColInd(1)
     int maintainerId;
 
     @ColInd(2)
-    string ver;
-
-    @ColInd(3)
-    string revision;
-
-    @ColInd(4)
-    string recipe;
-
-    @ColInd(5)
     SysTime created;
+
+    PackageResource toResource(string[] versions) const @safe
+    {
+        return PackageResource(name, maintainerId, created.toUTC(), versions);
+    }
 }
 
-PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
+PackageResource getPackage(GetPackage req) @safe
+{
+    return client.connect((scope DbConn db) @safe {
+        const row = db.execRow!PackRow(
+            `SELECT "name", "maintainer_id", "created" FROM "package" WHERE "name" = $1`,
+            req.name
+        );
+        auto vers = db.execScalars!string(
+            `SELECT DISTINCT "version" FROM "recipe" WHERE "package_name" = $1`,
+            row.name,
+        );
+        return row.toResource(vers);
+    });
+}
+
+struct RecipeRow
+{
+    @ColInd(0)
+    int id;
+
+    @ColInd(1)
+    int maintainerId;
+
+    @ColInd(2)
+    SysTime created;
+
+    @ColInd(3)
+    string ver;
+
+    @ColInd(4)
+    string revision;
+
+    @ColInd(5)
+    string recipe;
+
+    RecipeResource toResource() const @safe
+    {
+        return RecipeResource(
+            id, ver, revision, recipe, maintainerId, created.toUTC()
+        );
+    }
+}
+
+RecipeResource getLatestRecipeRevision(GetLatestRecipeRevision req) @safe
 {
     return client.connect((scope DbConn db) {
-        PackRecipeRow row;
-        if (req.revision)
-            row = db.execRow!PackRecipeRow(
-                `
-                    SELECT "id", "maintainer_id", "version", "revision", "recipe", "created"
-                    FROM "recipe" WHERE
-                        "package_id" = $1 AND
-                        "version" = $2 AND
-                        "revision" = $3
-                `,
-                req.packageId, req.ver, req.revision,
-            );
-        else
-            row = db.execRow!PackRecipeRow(
-                `
-                    SELECT "id", "maintainer_id", "version", "revision", "recipe", "created"
-                    FROM "recipe" WHERE
-                        "package_id" = $1 AND
-                        "version" = $2
-                    LIMIT 1
-                `,
-                req.packageId, req.ver,
-            );
-
-        const packName = db.execScalar!string(
-            `SELECT "name" FROM "package" WHERE "id" = $1`,
-            req.packageId
-        );
-
-        auto files = db.execRows!RecipeFile(
+        const row = db.execRow!RecipeRow(
             `
-                SELECT "id", "name", "size"::bigint FROM "recipe_file"
+                SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
+                FROM "recipe" WHERE
+                    "package_name" = $1 AND
+                    "version" = $2
+                ORDER BY "created" DESC
+                LIMIT 1
+            `,
+            req.name, req.ver,
+        );
+        return row.toResource();
+    });
+}
+
+RecipeResource getRecipeRevision(GetRecipeRevision req) @safe
+{
+    return client.connect((scope DbConn db) {
+        const row = db.execRow!RecipeRow(
+            `
+                SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
+                FROM "recipe" WHERE
+                    "package_name" = $1 AND
+                    "version" = $2 AND
+                    "revision" = $3
+            `,
+            req.name, req.ver, req.revision,
+        );
+        return row.toResource();
+    });
+}
+
+RecipeResource getRecipe(GetRecipe req) @safe
+{
+    return client.connect((scope DbConn db) {
+        const row = db.execRow!RecipeRow(
+            `
+                SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
+                FROM "recipe" WHERE "id" = $1
+            `,
+            req.id
+        );
+        return row.toResource();
+    });
+}
+
+const(RecipeFile)[] getRecipeFiles(GetRecipeFiles req) @safe
+{
+    return client.connect((scope DbConn db) {
+        return db.execRows!RecipeFile(
+            `
+                SELECT "name", "size"::bigint FROM "recipe_file"
                 WHERE "recipe_id" = $1
             `,
-            row.recId,
+            req.id,
         );
+    });
 
-        return PackageRecipeResource(
-            row.recId,
-            packName,
-            row.ver,
-            row.revision,
-            row.recipe,
-            row.maintainerId,
-            row.created.toUTC(),
-            files
+}
+
+struct DownloadRow
+{
+    string filename;
+    ulong size;
+    string sha1;
+
+    DownloadInfo toResource(string url) const @safe
+    {
+        return DownloadInfo(filename, cast(size_t)size, sha1, url);
+    }
+}
+
+DownloadInfo getRecipeArchive(GetRecipeArchive req) @safe
+{
+    return client.connect((scope DbConn db) {
+        const row = db.execRow!DownloadRow(
+            `
+                SELECT
+                    "archivename",
+                    LENGTH("archivedata") AS "size",
+                    ENCODE(DIGEST("archivedata", 'sha1'), 'hex') AS "sha1"
+                FROM "recipe" WHERE "id" = $1
+            `,
+            req.id,
         );
+        return row.toResource("TODO");
     });
 }
 

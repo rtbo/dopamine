@@ -16,9 +16,9 @@ CREATE TABLE "user_clikey" (
 );
 
 CREATE TABLE "package" (
-    "id"            serial PRIMARY KEY,
-    "name"          text NOT NULL,
+    "name"          text PRIMARY KEY,
     "maintainer_id" integer,
+    "created"       timestamptz NOT NULL,
 
     FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,
     UNIQUE("name")
@@ -26,29 +26,29 @@ CREATE TABLE "package" (
 
 CREATE TABLE "recipe" (
     "id"            serial PRIMARY KEY,
-    "package_id"    integer NOT NULL,
+    "package_name"  text NOT NULL,
     "maintainer_id" integer,
+    "created"       timestamptz NOT NULL,
     "version"       text NOT NULL,
     "revision"      text NOT NULL,
     "recipe"        text NOT NULL,
-    "filename"      text NOT NULL,
-    "filedata"      bytea NOT NULL,
-    "created"       timestamptz NOT NULL,
+    "archivename"   text NOT NULL,
+    "archivedata"   bytea NOT NULL,
 
-    FOREIGN KEY ("package_id") REFERENCES "package"("id") ON DELETE CASCADE,
+    FOREIGN KEY ("package_name") REFERENCES "package"("name") ON DELETE CASCADE,
     FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,
-    UNIQUE("package_id", "version", "revision")
+    UNIQUE("package_name", "version", "revision")
 );
 
 -- recipe file data is received compressed, therefore the following will save CPU time on the server.
 -- See https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/
-ALTER TABLE "recipe" ALTER COLUMN "filedata" SET STORAGE EXTERNAL;
+ALTER TABLE "recipe" ALTER COLUMN "archivedata" SET STORAGE EXTERNAL;
 
 CREATE TABLE "recipe_file" (
-    "id"            serial PRIMARY KEY,
-    "recipe_id"     integer NOT NULL,
-    "name"          text NOT NULL,
+    "recipe_id"     integer,
+    "name"          text,
     "size"          integer NOT NULL,
 
-    FOREIGN KEY ("recipe_id") REFERENCES "recipe"("id") ON DELETE CASCADE
+    FOREIGN KEY ("recipe_id") REFERENCES "recipe"("id") ON DELETE CASCADE,
+    PRIMARY KEY("recipe_id", "name")
 );
