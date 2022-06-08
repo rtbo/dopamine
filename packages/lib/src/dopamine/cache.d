@@ -5,6 +5,7 @@ import dopamine.cache_dirs;
 import dopamine.log;
 import dopamine.registry;
 import dopamine.paths;
+import dopamine.util;
 
 import squiz_box;
 
@@ -97,9 +98,34 @@ class PackageCache
         else
             revision = recipeRes.revision;
 
+        auto dig = makeDigest!SHA256();
         auto downloadReq = DownloadRecipeArchive(recipeRes.id);
         DownloadMetadata archiveMetadata;
-        auto archiveDownload = registry.download(downloadReq, archiveMetadata);
+        auto archiveData = registry.download(downloadReq, archiveMetadata)
+            .tee(&dig)
+            .join();
+
+        // keep filename creation lazy
+        const filenameFun = (() => archiveMetadata.filename ?
+                archiveMetadata.filename
+                : format!"%s-%s-%s.tar.xz"(pack.name, ver, revision));
+
+        if (archiveMetadata.sha256.length)
+        {
+            enforce(
+                dig.finish() == archiveMetadata.sha256,
+                "Could not verify integrity of " ~ filenameFun(),
+            );
+        }
+        else
+        {
+            logWarningH(
+                "Cannot verify integrity of %s: No digest received from registry",
+                info(filenameFun())
+            );
+        }
+
+        // now that archive is verified, proceed filesystem modifications and decompression
 
         auto revDir = packageDir(pack.name)
             .versionDir(recipeRes.ver)
@@ -112,23 +138,7 @@ class PackageCache
 
         mkdirRecurse(revDir.dir);
 
-        // TODO: digest with range filter, without join
-        auto data = archiveDownload.join();
-
-        if (archiveMetadata.sha256.length)
-        {
-            auto sha256 = sha256Of(data);
-            enforce(
-                sha256[] == archiveMetadata.sha256,
-                "Could not verify integrity of " ~ archiveMetadata.filename,
-            );
-        }
-        else
-        {
-            logWarningH("Cannot verify integrity of recipe archive: No digest received from registry");
-        }
-
-        only(data)
+        only(archiveData)
             .decompressXz()
             .readTarArchive()
             .each!(e => e.extractTo(revDir.dir));
