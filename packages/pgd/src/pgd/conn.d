@@ -45,6 +45,11 @@ class ResourceNotFoundException : Exception
     mixin basicExceptionCtors!();
 }
 
+/// enum attached at UDA on a row struct
+/// to indicate at compile time that the result columns
+/// are in the same order than the row struct fields
+enum OrderedCols;
+
 /// struct attached as UDA to provide at compile time
 /// the column index in a query result.
 /// If not supplied, the column index is fetched at run time from the member name.
@@ -185,7 +190,7 @@ class PgConn
     auto transac(H)(H handler) @trusted if (isSomeFunction!H && isSafe!H)
     {
         alias T = ReturnType!H;
-        static assert (is(typeof(handler())), "handler must accept no parameter");
+        static assert(is(typeof(handler())), "handler must accept no parameter");
         const savePoint = transacSavePoint;
         const rootTransac = savePoint == 0;
 
@@ -532,42 +537,54 @@ auto getColIndices(R)(const(PGresult)* res)
     mixin(generateColIndexStruct!R());
     mixin(generateColNameStruct!R());
 
+    enum expectedCount = (Fields!R).length;
+    const colCount = PQnfields(res);
+
+    enforce(colCount == expectedCount, format!"Expected %s columns, but result has %s"(
+            expectedCount, colCount));
+
     _ColIndices inds = void;
-    _ColNames names = void;
 
-    static foreach (f; FieldNameTuple!R)
+    static if (hasUDA!(R, OrderedCols))
     {
-        __traits(getMember, inds, f) = -1;
-        __traits(getMember, names, f) = f;
+        static foreach (i, f; FieldNameTuple!R)
+            __traits(getMember, inds, f) = cast(int) i;
     }
-
-    alias colIndUDAs = getSymbolsByUDA!(R, ColInd);
-    static foreach (indUDA; colIndUDAs)
+    else
     {
-        __traits(getMember, inds, indUDA.stringof) = getUDAs!(indUDA, ColInd)[0].ind;
-    }
-
-    alias colNameUDAs = getSymbolsByUDA!(R, ColName);
-    static foreach (nameUDA; colNameUDAs)
-    {
-        __traits(getMember, names, nameUDA.stringof) = getUDAs!(nameUDA, ColName)[0].name;
-    }
-
-    int ncols = PQnfields(res);
-
-    // dfmt off
-    static foreach (f; FieldNameTuple!R)
-    {{
-        if (__traits(getMember, inds, f) == -1)
+        _ColNames names = void;
+        static foreach (f; FieldNameTuple!R)
         {
-            const name = __traits(getMember, names, f);
-            __traits(getMember, inds, f) = PQfnumber(res, name.toStringz);
+            __traits(getMember, inds, f) = -1;
+            __traits(getMember, names, f) = f;
         }
 
-        const ind = __traits(getMember, inds, f);
-        enforce(ind >= 0 && ind < ncols, "Cannot lookup column index for " ~ R.stringof ~ "." ~ f);
-    }}
-    // dfmt on
+        alias colIndUDAs = getSymbolsByUDA!(R, ColInd);
+        static foreach (indUDA; colIndUDAs)
+        {
+            __traits(getMember, inds, indUDA.stringof) = getUDAs!(indUDA, ColInd)[0].ind;
+        }
+
+        alias colNameUDAs = getSymbolsByUDA!(R, ColName);
+        static foreach (nameUDA; colNameUDAs)
+        {
+            __traits(getMember, names, nameUDA.stringof) = getUDAs!(nameUDA, ColName)[0].name;
+        }
+
+        // dfmt off
+        static foreach (f; FieldNameTuple!R)
+        {{
+            if (__traits(getMember, inds, f) == -1)
+            {
+                const name = __traits(getMember, names, f);
+                __traits(getMember, inds, f) = PQfnumber(res, name.toStringz);
+            }
+
+            const ind = __traits(getMember, inds, f);
+            enforce(ind >= 0 && ind < colCount, "Cannot lookup column index for " ~ R.stringof ~ "." ~ f);
+        }}
+        // dfmt on
+    }
 
     return inds;
 }

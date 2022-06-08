@@ -100,11 +100,12 @@ class DopRegistry
         logInfo("fallback for %s", req.requestURI);
     }
 
+    @OrderedCols
     static struct PackRow
     {
-        @ColInd(0) string name;
-        @ColInd(1) int maintainerId;
-        @ColInd(2) SysTime created;
+        string name;
+        int maintainerId;
+        SysTime created;
 
         PackageResource toResource(string[] versions) const @safe
         {
@@ -131,14 +132,15 @@ class DopRegistry
         });
     }
 
+    @OrderedCols
     static struct RecipeRow
     {
-        @ColInd(0) int id;
-        @ColInd(1) int maintainerId;
-        @ColInd(2) SysTime created;
-        @ColInd(3) string ver;
-        @ColInd(4) string revision;
-        @ColInd(5) string recipe;
+        int id;
+        int maintainerId;
+        SysTime created;
+        string ver;
+        string revision;
+        string recipe;
 
         RecipeResource toResource() const @safe
         {
@@ -220,11 +222,12 @@ class DopRegistry
                 )
         );
 
+        @OrderedCols
         static struct Info
         {
-            @ColInd(0) string pkgName;
-            @ColInd(1) string ver;
-            @ColInd(2) string revision;
+            string pkgName;
+            string ver;
+            string revision;
         }
 
         const info = client.connect(db => db.execRow!Info(
