@@ -1,15 +1,19 @@
 module dopamine.cache;
 
 import dopamine.api.v1;
+import dopamine.cache_dirs;
 import dopamine.log;
 import dopamine.registry;
 import dopamine.paths;
 
-import dopamine.cache_dirs;
+import squiz_box;
 
+import std.array;
+import std.digest.sha;
 import std.exception;
 import std.file;
 import std.path;
+import std.range;
 
 /// A local package cache
 class PackageCache
@@ -45,7 +49,7 @@ class PackageCache
         string revision = null)
     out (res; res.exists)
     {
-        import std.algorithm : canFind, map;
+        import std.algorithm : canFind, each, map;
         import std.conv : to;
         import std.format : format;
         import std.stdio : File;
@@ -78,22 +82,28 @@ class PackageCache
                 error(resp.code.to!string)
         ));
 
-        enforce(resp.payload.ver == ver, new Exception(
+        const recipeRes = resp.payload;
+
+        enforce(recipeRes.ver == ver, new Exception(
                 "Registry returned a package version that do not match request:\n" ~
                 format("  - requested %s/%s\n", pack.name, ver) ~
-                format("  - obtained %s/%s", pack.name, resp.payload.ver)
+                format("  - obtained %s/%s", pack.name, recipeRes.ver)
         ));
 
         if (revision)
-            enforce(resp.payload.revision == revision, new Exception(
+            enforce(recipeRes.revision == revision, new Exception(
                     "Registry returned a revision that do not match request"
             ));
         else
-            revision = resp.payload.revision;
+            revision = recipeRes.revision;
+
+        auto downloadReq = DownloadRecipeArchive(recipeRes.id);
+        DownloadMetadata archiveMetadata;
+        auto archiveDownload = registry.download(downloadReq, archiveMetadata);
 
         auto revDir = packageDir(pack.name)
-            .versionDir(resp.payload.ver)
-            .revisionDir(resp.payload.revision);
+            .versionDir(recipeRes.ver)
+            .revisionDir(recipeRes.revision);
 
         mkdirRecurse(revDir.versionDir.dir);
 
@@ -101,17 +111,29 @@ class PackageCache
         lock.lock();
 
         mkdirRecurse(revDir.dir);
-        auto recDir = RecipeDir(revDir.dir);
 
-        debug { import std.stdio : writefln; try { writefln!"FIXME recipe download %s:%s"(__FILE__, __LINE__); } catch (Exception) {} }
-        // if (resp.payload.fileList.length == 1)
-        // {
-            write(recDir.recipeFile, resp.payload.recipe);
-        // }
-        // else
-        // {
-        //     assert(false, "unimplemented");
-        // }
+        // TODO: digest with range filter, without join
+        auto data = archiveDownload.join();
+
+        if (archiveMetadata.sha256.length)
+        {
+            auto sha256 = sha256Of(data);
+            enforce(
+                sha256[] == archiveMetadata.sha256,
+                "Could not verify integrity of " ~ archiveMetadata.filename,
+            );
+        }
+        else
+        {
+            logWarningH("Cannot verify integrity of recipe archive: No digest received from registry");
+        }
+
+        only(data)
+            .decompressXz()
+            .readTarArchive()
+            .each!(e => e.extractTo(revDir.dir));
+
+        RecipeDir.enforced(revDir.dir);
 
         return revDir;
     }

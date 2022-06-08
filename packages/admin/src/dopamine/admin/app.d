@@ -244,8 +244,8 @@ void populateRegistry(PgConn db, string regDir)
                                 "version",
                                 "revision",
                                 "recipe",
-                                "archivename",
-                                "archivedata",
+                                "archive_name",
+                                "archive_data",
                                 "created"
                             ) VALUES(
                                 $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP
@@ -256,7 +256,7 @@ void populateRegistry(PgConn db, string regDir)
                     );
                     auto dbSha1 = db.execScalar!(ubyte[20])(
                         `
-                            SELECT DIGEST("archivedata", 'sha1') FROM "recipe"
+                            SELECT digest("archive_data", 'sha1') FROM "recipe"
                             WHERE "id" = $1
                         `,
                         recId

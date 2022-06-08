@@ -36,10 +36,18 @@ enum JsonBody;
 /// A Decorator to change the name of a Json field
 alias Name = vibe.data.serialization.name;
 
-/// Decorator to specify the type of response expected by a request
-struct Response(T=ubyte[])
+/// Decorator to specify the type of response expected by a request.
+/// The response is encoded in Json.
+struct Response(T)
 {
     private T _ = T.init;
+}
+
+/// Decorator to specify that the request is an endpoint
+/// to download files. Download end-points have several additional
+/// features such as Content-Range, Digest, Content-Disposition, ...
+struct DownloadEndpoint
+{
 }
 
 /// Checks whether `ReqT` is a request type
@@ -79,4 +87,12 @@ template ResponseType(ReqT)
     {
         alias ResponseType = void;
     }
+}
+
+/// Checks whether the request is a download endpoint
+template isDownloadEndpoint(ReqT)
+{
+    static assert(isRequest!ReqT, ReqT.stringof ~ " do not appear to be a valid Request type");
+
+    enum isDownloadEndpoint = hasUDA!(ReqT, DownloadEndpoint);
 }

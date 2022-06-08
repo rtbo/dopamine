@@ -58,6 +58,12 @@ struct GetRecipe
     int id;
 }
 
+struct RecipeFile
+{
+    string name;
+    uint size;
+}
+
 @Request(Method.GET, "/recipes/:id/files", level)
 @Response!(const(RecipeFile)[])
 struct GetRecipeFiles
@@ -66,22 +72,8 @@ struct GetRecipeFiles
 }
 
 @Request(Method.GET, "/recipes/:id/archive", level)
-@Response!(DownloadInfo)
-struct GetRecipeArchive
+@DownloadEndpoint
+struct DownloadRecipeArchive
 {
     int id;
-}
-
-struct RecipeFile
-{
-    string name;
-    ulong size;
-}
-
-struct DownloadInfo
-{
-    string filename;
-    ulong size;
-    string sha1;
-    string url;
 }

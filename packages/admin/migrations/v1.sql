@@ -32,8 +32,8 @@ CREATE TABLE "recipe" (
     "version"       text NOT NULL,
     "revision"      text NOT NULL,
     "recipe"        text NOT NULL,
-    "archivename"   text NOT NULL,
-    "archivedata"   bytea NOT NULL,
+    "archive_name"  text NOT NULL,
+    "archive_data"  bytea NOT NULL,
 
     FOREIGN KEY ("package_name") REFERENCES "package"("name") ON DELETE CASCADE,
     FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,
@@ -42,7 +42,7 @@ CREATE TABLE "recipe" (
 
 -- recipe file data is received compressed, therefore the following will save CPU time on the server.
 -- See https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/
-ALTER TABLE "recipe" ALTER COLUMN "archivedata" SET STORAGE EXTERNAL;
+ALTER TABLE "recipe" ALTER COLUMN "archive_data" SET STORAGE EXTERNAL;
 
 CREATE TABLE "recipe_file" (
     "recipe_id"     integer,

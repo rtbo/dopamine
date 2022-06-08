@@ -4,6 +4,7 @@ import dopamine.server.config;
 import dopamine.server.db;
 import dopamine.api.attrs;
 import dopamine.api.v1;
+import dopamine.semver;
 import pgd.conn;
 
 import vibe.core.args;
@@ -13,11 +14,27 @@ import vibe.data.json;
 import vibe.http.router;
 import vibe.http.server;
 
+import std.base64;
 import std.conv;
 import std.datetime.systime;
+import std.exception;
 import std.format;
 import std.string;
 import std.traits;
+import std.typecons;
+
+class StatusException : Exception
+{
+    int statusCode;
+    string statusPhrase;
+
+    this(int statusCode, string statusPhrase = null, string file = __FILE__, size_t line = __LINE__) @safe
+    {
+        super(format!"Status %s%s"(statusCode, statusPhrase ? ": " ~ statusPhrase : ""), file, line);
+        this.statusCode = statusCode;
+        this.statusPhrase = statusPhrase;
+    }
+}
 
 enum currentApiLevel = 1;
 
@@ -36,6 +53,7 @@ class DopRegistry
     HTTPServerSettings settings;
     DbClient client;
     URLRouter router;
+    string downloadUrlBase;
 
     this()
     {
@@ -52,7 +70,12 @@ class DopRegistry
         setupRoute!GetRecipeRevision(router, &getRecipeRevision);
         setupRoute!GetRecipe(router, &getRecipe);
         setupRoute!GetRecipeFiles(router, &getRecipeFiles);
-        setupRoute!GetRecipeArchive(router, &getRecipeArchive);
+
+        const protocol = settings.tlsContext ? "https" : "http";
+        downloadUrlBase = format!"%s://%s%s/download"(protocol, conf.serverHostname, prefix);
+
+        router.match(HTTPMethod.HEAD, "/recipes/:id/archive", &downloadRecipeArchive);
+        router.match(HTTPMethod.GET, "/recipes/:id/:archive", &downloadRecipeArchive);
 
         if (conf.testStopRoute)
             router.post("/stop", &stop);
@@ -100,6 +123,10 @@ class DopRegistry
                 `SELECT DISTINCT "version" FROM "recipe" WHERE "package_name" = $1`,
                 row.name,
             );
+            // sorting descending order (latest versions first)
+            import std.algorithm : sort;
+
+            vers.sort!((a, b) => Semver(a) > Semver(b));
             return row.toResource(vers);
         });
     }
@@ -174,43 +201,198 @@ class DopRegistry
     {
         return client.connect((scope DbConn db) {
             return db.execRows!RecipeFile(
-                `
-                    SELECT "name", "size"::bigint FROM "recipe_file"
-                    WHERE "recipe_id" = $1
-                `,
-                req.id,
+                `SELECT "name", "size" FROM "recipe_file" WHERE "recipe_id" = $1`, req.id,
             );
         });
     }
 
-    static struct DownloadRow
+    void downloadRecipeArchive(scope HTTPServerRequest req, scope HTTPServerResponse resp) @safe
     {
-        string filename;
-        ulong size;
-        string sha1;
+        const id = convParam!int(req, "id");
 
-        DownloadInfo toResource(string url) const @safe
+        auto rng = parseRangeHeader(req);
+        if (rng.length > 1)
+            throw new StatusException(400, "Bad Request: multipart ranges are not supported");
+
+        const totalLength = client.connect(db =>
+                db.execScalar!uint(
+                    `SELECT length(archive_data) FROM recipe WHERE id = $1`, id
+                )
+        );
+
+        static struct Info
         {
-            return DownloadInfo(filename, cast(size_t) size, sha1, url);
+            @ColInd(0) string pkgName;
+            @ColInd(1) string ver;
+            @ColInd(2) string revision;
+        }
+
+        const info = client.connect(db => db.execRow!Info(
+                `SELECT package_name, version, revision FROM recipe WHERE id = $1`,
+                id
+        ));
+        resp.headers["Content-Disposition"] = format!"attachment; filename=%s-%s-%s.tar.xz"(
+            info.pkgName, info.ver, info.revision
+        );
+
+        if (reqWantDigestSha256(req))
+        {
+            const sha = client.connect(db => db.execScalar!(ubyte[32])(
+                    `SELECT sha256(archive_data) FROM recipe WHERE id = $1`,
+                    id,
+            ));
+            resp.headers["Digest"] = () @trusted {
+                return assumeUnique("sha-256=" ~ Base64.encode(sha));
+            }();
+        }
+
+        resp.headers["Accept-Ranges"] = "bytes";
+
+        const slice = rng.length ?
+            rng[0].slice(totalLength) : ContentSlice(0, totalLength - 1, totalLength);
+
+        if (slice.last < slice.first)
+            throw new StatusException(400, "Invalid range: " ~ req.headers["range"]);
+        if (slice.end > totalLength)
+            throw new StatusException(400, "Invalid range: exceeds content bounds");
+
+        resp.headers["Content-Length"] = slice.sliceLength.to!string;
+        if (rng.length)
+            resp.headers["Content-Range"] = format!"bytes %s-%s/%s"(slice.first, slice.last, totalLength);
+
+        if (req.method == HTTPMethod.HEAD)
+        {
+            resp.writeVoidBody();
+            return;
+        }
+
+        const(ubyte)[] data;
+        if (rng.length)
+        {
+            data = client.connect((scope db) {
+                // substring index is one based
+                return db.execScalar!(const(ubyte)[])(
+                    `SELECT substring(archive_data FROM $1 FOR $2) FROM recipe WHERE id = $3`,
+                    slice.first + 1, slice.sliceLength, id,
+                );
+            });
+            resp.statusCode = 206;
+        }
+        else
+        {
+            data = client.connect((scope db) {
+                return db.execScalar!(const(ubyte)[])(
+                    `SELECT archive_data FROM recipe WHERE id = $1`, id,
+                );
+            });
+        }
+        enforce(slice.sliceLength == data.length, "No match of data length and content length");
+
+        resp.writeBody(data);
+    }
+}
+
+T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
+{
+    try
+    {
+        return req.params[paramName].to!T;
+    }
+    catch (ConvException ex)
+    {
+        throw new StatusException(400, "Bad Request: invalid " ~ paramName ~ " parameter");
+    }
+}
+
+bool reqWantDigestSha256(scope HTTPServerRequest req) @safe
+{
+    return req.headers.get("want-digest") == "sha-256";
+}
+
+struct Rng
+{
+    enum Mode
+    {
+        normal,
+        suffix,
+    }
+
+    Mode mode;
+    uint first;
+    uint last;
+
+    ContentSlice slice(uint totalLength) const @safe
+    {
+        final switch (mode)
+        {
+        case Mode.normal:
+            return ContentSlice(
+                first, last ? last : totalLength - 1, totalLength
+            );
+        case Mode.suffix:
+            return ContentSlice(
+                totalLength - last, totalLength - 1, totalLength
+            );
         }
     }
+}
 
-    DownloadInfo getRecipeArchive(GetRecipeArchive req) @safe
+struct ContentSlice
+{
+    uint first;
+    uint last;
+    uint totalLength;
+
+    @property uint end() const @safe
     {
-        return client.connect((scope DbConn db) {
-            const row = db.execRow!DownloadRow(
-                `
-                    SELECT
-                        "archivename",
-                        LENGTH("archivedata") AS "size",
-                        ENCODE(DIGEST("archivedata", 'sha1'), 'hex') AS "sha1"
-                    FROM "recipe" WHERE "id" = $1
-                `,
-                req.id,
-            );
-            return row.toResource("TODO");
-        });
+        return last + 1;
     }
+
+    @property uint sliceLength() const @safe
+    {
+        return last - first + 1;
+    }
+}
+
+Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
+{
+    auto header = req.headers.get("Range").strip();
+    if (!header.length)
+        return [];
+
+    logInfo("range header: %s", header);
+
+    if (!header.startsWith("bytes="))
+    {
+        throw new StatusException(
+            400,
+            "Bad request: Bad format of range header",
+        );
+    }
+    Rng[] res;
+    const parts = header["bytes=".length .. $].split(",");
+    foreach (string part; parts)
+    {
+        part = part.strip();
+        const indices = part.split("-");
+        if (indices.length != 2 || (!indices[0].length && !indices[1].length))
+        {
+            throw new StatusException(
+                400,
+                "Bad request: Bad format of range header",
+            );
+        }
+        Rng rng;
+        if (indices[0].length)
+            rng.first = indices[0].to!uint;
+        else
+            rng.mode = Rng.Mode.suffix;
+
+        if (indices[1].length)
+            rng.last = indices[1].to!uint;
+        res ~= rng;
+    }
+    return res;
 }
 
 void setupRoute(ReqT, H)(URLRouter router, H handler)
@@ -235,6 +417,13 @@ void setupRoute(ReqT, H)(URLRouter router, H handler)
             {
                 () @trusted { logInfo("Not found error %s", ex.msg); }();
                 httpResp.statusCode = 404;
+            }
+            catch (StatusException ex)
+            {
+                () @trusted { logInfo("Status error %s", ex.msg); }();
+                httpResp.statusCode = ex.statusCode;
+                if (ex.statusPhrase)
+                    httpResp.statusPhrase = ex.statusPhrase;
             }
             catch (Exception ex)
             {
