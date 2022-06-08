@@ -26,14 +26,28 @@ import std.typecons;
 class StatusException : Exception
 {
     int statusCode;
-    string statusPhrase;
+    string reason;
 
-    this(int statusCode, string statusPhrase = null, string file = __FILE__, size_t line = __LINE__) @safe
+    this(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
     {
-        super(format!"Status %s%s"(statusCode, statusPhrase ? ": " ~ statusPhrase : ""), file, line);
+        super(format!"%s: %s%s"(statusCode, httpStatusText(statusCode), reason ? "\n" ~ reason : ""), file, line);
         this.statusCode = statusCode;
-        this.statusPhrase = statusPhrase;
+        this.reason = reason;
     }
+}
+
+T enforceStatus(T)(T condition, int statusCode, string reason = null,
+    string file = __FILE__, size_t line = __LINE__) @safe
+{
+    static assert(is(typeof(!condition)), "condition must cast to bool");
+    if (!condition)
+        throw new StatusException(statusCode, reason, file, line);
+    return condition;
+}
+
+noreturn statusError(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
+{
+    throw new StatusException(statusCode, reason, file, line);
 }
 
 enum currentApiLevel = 1;
@@ -53,7 +67,6 @@ class DopRegistry
     HTTPServerSettings settings;
     DbClient client;
     URLRouter router;
-    string downloadUrlBase;
 
     this()
     {
@@ -71,11 +84,7 @@ class DopRegistry
         setupRoute!GetRecipe(router, &getRecipe);
         setupRoute!GetRecipeFiles(router, &getRecipeFiles);
 
-        const protocol = settings.tlsContext ? "https" : "http";
-        downloadUrlBase = format!"%s://%s%s/download"(protocol, conf.serverHostname, prefix);
-
-        router.match(HTTPMethod.HEAD, "/recipes/:id/archive", &downloadRecipeArchive);
-        router.match(HTTPMethod.GET, "/recipes/:id/:archive", &downloadRecipeArchive);
+        setupDownloadRoute!DownloadRecipeArchive(router, &downloadRecipeArchive);
 
         if (conf.testStopRoute)
             router.post("/stop", &stop);
@@ -213,14 +222,7 @@ class DopRegistry
         const id = convParam!int(req, "id");
 
         auto rng = parseRangeHeader(req);
-        if (rng.length > 1)
-            throw new StatusException(400, "Bad Request: multipart ranges are not supported");
-
-        const totalLength = client.connect(db =>
-                db.execScalar!uint(
-                    `SELECT length(archive_data) FROM recipe WHERE id = $1`, id
-                )
-        );
+        enforceStatus(rng.length <= 1, 400, "Multi-part ranges not supported");
 
         @OrderedCols
         static struct Info
@@ -228,12 +230,15 @@ class DopRegistry
             string pkgName;
             string ver;
             string revision;
+            uint totalLength;
         }
 
         const info = client.connect(db => db.execRow!Info(
-                `SELECT package_name, version, revision FROM recipe WHERE id = $1`,
+                `SELECT package_name, version, revision, length(archive_data) FROM recipe WHERE id = $1`,
                 id
         ));
+        const totalLength = info.totalLength;
+
         resp.headers["Content-Disposition"] = format!"attachment; filename=%s-%s-%s.tar.xz"(
             info.pkgName, info.ver, info.revision
         );
@@ -253,11 +258,8 @@ class DopRegistry
 
         const slice = rng.length ?
             rng[0].slice(totalLength) : ContentSlice(0, totalLength - 1, totalLength);
-
-        if (slice.last < slice.first)
-            throw new StatusException(400, "Invalid range: " ~ req.headers["range"]);
-        if (slice.end > totalLength)
-            throw new StatusException(400, "Invalid range: exceeds content bounds");
+        enforceStatus(slice.last >= slice.first, 400, "Invalid range: " ~ req.headers.get("Range"));
+        enforceStatus(slice.end <= totalLength, 400, "Invalid range: content bounds exceeded");
 
         resp.headers["Content-Length"] = slice.sliceLength.to!string;
         if (rng.length)
@@ -303,7 +305,11 @@ T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
     }
     catch (ConvException ex)
     {
-        throw new StatusException(400, "Bad Request: invalid " ~ paramName ~ " parameter");
+        statusError(400, "Invalid " ~ paramName ~ " parameter");
+    }
+    catch (Exception ex)
+    {
+        statusError(400, "Missing " ~ paramName ~ " parameter");
     }
 }
 
@@ -363,15 +369,7 @@ Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
     if (!header.length)
         return [];
 
-    logInfo("range header: %s", header);
-
-    if (!header.startsWith("bytes="))
-    {
-        throw new StatusException(
-            400,
-            "Bad request: Bad format of range header",
-        );
-    }
+    enforceStatus(header.startsWith("bytes="), 400, "Bad format of range header");
     Rng[] res;
     const parts = header["bytes=".length .. $].split(",");
     foreach (string part; parts)
@@ -380,10 +378,7 @@ Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
         const indices = part.split("-");
         if (indices.length != 2 || (!indices[0].length && !indices[1].length))
         {
-            throw new StatusException(
-                400,
-                "Bad request: Bad format of range header",
-            );
+            statusError(400, "Bad format of range header");
         }
         Rng rng;
         if (indices[0].length)
@@ -398,56 +393,70 @@ Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
     return res;
 }
 
-void setupRoute(ReqT, H)(URLRouter router, H handler)
+HTTPServerRequestDelegateS genericHandler(H)(H handler) @safe
 {
     static assert(isSomeFunction!H);
     static assert(isSafe!H);
-    static assert(is(typeof(handler(ReqT.init))));
-    static assert(is(ReturnType!H == ResponseType!ReqT));
+    static assert(is(typeof(handler(HTTPServerRequest.init, HTTPServerResponse.init)) == void));
 
-    HTTPServerRequestDelegateS dg = (scope httpReq, httpResp) @safe {
+    return (scope req, scope resp) @safe {
         try
         {
-            auto req = adaptRequest!ReqT(httpReq);
-            () @trusted { logInfo("Parsed query %s", req); }();
-            try
-            {
-                auto resp = handler(req);
-                () @trusted { logInfo("Response %s", resp); }();
-                httpResp.writeJsonBody(serializeToJson(resp));
-            }
-            catch (ResourceNotFoundException ex)
-            {
-                () @trusted { logInfo("Not found error %s", ex.msg); }();
-                httpResp.statusCode = 404;
-            }
-            catch (StatusException ex)
-            {
-                () @trusted { logInfo("Status error %s", ex.msg); }();
-                httpResp.statusCode = ex.statusCode;
-                if (ex.statusPhrase)
-                    httpResp.statusPhrase = ex.statusPhrase;
-            }
-            catch (Exception ex)
-            {
-                () @trusted { logError("Internal error: %s", ex.msg); }();
-                httpResp.statusCode = 500;
-            }
+            logInfo("--> %s %s", req.method, req.requestURI);
+            handler(req, resp);
         }
-        catch (Exception)
+        catch (ResourceNotFoundException ex)
         {
-            httpResp.statusCode = 400;
+            () @trusted { logError("Not found error: %s", ex.msg); }();
+            resp.statusCode = 404;
+            resp.writeBody(ex.msg);
         }
+        catch (StatusException ex)
+        {
+            () @trusted { logError("Status error: %s", ex.msg); }();
+            resp.statusCode = ex.statusCode;
+            resp.writeBody(ex.msg);
+        }
+        catch (Exception ex)
+        {
+            () @trusted { logError("Internal error: %s", ex.msg); }();
+            resp.statusCode = 500;
+            resp.writeBody("Internal Server Error");
+        }
+        logInfo("<-- %s", resp.statusCode);
     };
+}
+
+private void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
+{
+    static assert(isSomeFunction!H);
+    static assert(isSafe!H);
+    static assert(is(typeof(handler(ReqT.init)) == ResponseType!ReqT));
+
+    auto routeHandler = genericHandler((scope HTTPServerRequest httpReq, scope HTTPServerResponse httpResp) @safe {
+        auto req = adaptRequest!ReqT(httpReq);
+        auto resp = handler(req);
+        httpResp.writeJsonBody(serializeToJson(resp));
+    });
 
     enum reqAttr = RequestAttr!ReqT;
 
     static if (reqAttr.method == Method.GET)
-        router.get(reqAttr.resource, dg);
+        router.get(reqAttr.resource, routeHandler);
     else static if (reqAttr.method == Method.POST)
-        router.post(reqAttr.resource, dg);
+        router.post(reqAttr.resource, routeHandler);
     else
         static assert(false);
+}
+
+private void setupDownloadRoute(ReqT, H)(URLRouter router, H handler) @safe
+{
+    auto downloadHandler = genericHandler(handler);
+
+    enum reqAttr = RequestAttr!ReqT;
+
+    router.match(HTTPMethod.HEAD, reqAttr.resource, downloadHandler);
+    router.match(HTTPMethod.GET, reqAttr.resource, downloadHandler);
 }
 
 private ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
@@ -469,19 +478,29 @@ private ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
         static if (isParam)
         {
             enum ident = part[1 .. $];
-            const param = httpReq.params[ident];
+            try {
+                const param = httpReq.params[ident];
 
-            alias syms = getSymbolsByUDA!(ReqT, ident);
-            static if (syms.length)
-            {
-                __traits(getMember, req, __traits(identifier, syms[0])) =
-                    param.to!(typeof(__traits(getMember, req, __traits(identifier, syms[0]))));
+                alias syms = getSymbolsByUDA!(ReqT, ident);
+                static if (syms.length)
+                {
+                    __traits(getMember, req, __traits(identifier, syms[0])) =
+                        param.to!(typeof(__traits(getMember, req, __traits(identifier, syms[0]))));
+                }
+                else static if (__traits(hasMember, req, ident))
+                {
+                    __traits(getMember, req, ident) = param.to!(typeof(__traits(getMember, req, ident)));
+                }
+                else static assert(false, "Could not find a " ~ ident ~ " parameter value in " ~ ReqT.stringof);
             }
-            else static if (__traits(hasMember, req, ident))
+            catch (ConvException ex)
             {
-                __traits(getMember, req, ident) = param.to!(typeof(__traits(getMember, req, ident)));
+                throw new StatusException(400, "Invalid parameter: " ~ ident);
             }
-            else static assert(false, "Could not find a " ~ ident ~ " parameter value in " ~ ReqT.stringof);
+            catch (Exception ex)
+            {
+                throw new StatusException(400, "Missing parameter: " ~ ident);
+            }
         }
     }}
     // dfmt on
@@ -506,19 +525,29 @@ private ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
 
         enum queryName = symName ? symName : __traits(identifier, sym);
 
-        const value = httpReq.query.get(queryName);
-
-        static if (is(T == bool))
+        try
         {
-            // empty string means true
-            if (value == "")
-                __traits(getMember, req, __traits(identifier,  sym)) = true;
+            const value = httpReq.query[queryName];
+            static if (is(T == bool))
+            {
+                // empty string means true
+                if (value == "")
+                    __traits(getMember, req, __traits(identifier,  sym)) = true;
+                else
+                    __traits(getMember, req, __traits(identifier,  sym)) = value.to!bool;
+            }
             else
-                __traits(getMember, req, __traits(identifier,  sym)) = value.to!bool;
+            {
+                __traits(getMember, req, __traits(identifier,  sym)) = value.to!T;
+            }
         }
-        else
+        catch (ConvException ex)
         {
-            __traits(getMember, req, __traits(identifier,  sym)) = value.to!T;
+            throw new StatusException(400, "Invalid query parameter: " ~ queryName);
+        }
+        catch (Exception ex)
+        {
+            throw new StatusException(400, "Missing query parameter: " ~ queryName);
         }
     }}
     // dfmt on
