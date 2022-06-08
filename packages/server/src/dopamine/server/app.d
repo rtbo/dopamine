@@ -4,6 +4,7 @@ import dopamine.server.config;
 import dopamine.server.db;
 import dopamine.api.attrs;
 import dopamine.api.v1;
+import dopamine.semver;
 import pgd.conn;
 
 import vibe.core.args;
@@ -13,164 +14,385 @@ import vibe.data.json;
 import vibe.http.router;
 import vibe.http.server;
 
+import std.base64;
 import std.conv;
 import std.datetime.systime;
+import std.exception;
 import std.format;
 import std.string;
 import std.traits;
+import std.typecons;
+
+class StatusException : Exception
+{
+    int statusCode;
+    string statusPhrase;
+
+    this(int statusCode, string statusPhrase = null, string file = __FILE__, size_t line = __LINE__) @safe
+    {
+        super(format!"Status %s%s"(statusCode, statusPhrase ? ": " ~ statusPhrase : ""), file, line);
+        this.statusCode = statusCode;
+        this.statusPhrase = statusPhrase;
+    }
+}
 
 enum currentApiLevel = 1;
 
-DbClient client;
-
-static this()
-{
-    const conf = Config.get;
-    client = new DbClient(conf.dbConnString, conf.dbPoolMaxSize);
-}
-
 version (DopServerMain) void main(string[] args)
 {
-
-    const conf = Config.get;
-
-    auto settings = new HTTPServerSettings(conf.serverHostname);
-
-    const prefix = format("/api/v%s", currentApiLevel);
-    auto router = new URLRouter(prefix);
-
-    setupRoute!GetPackage(router, &getPackage);
-    setupRoute!GetPackageByName(router, &getPackageByName);
-    setupRoute!GetPackageRecipe(router, &getPackageRecipe);
-
-    if (conf.testStopRoute)
-        router.post("/stop", &stop);
-
-    auto listener = listenHTTP(settings, router);
+    auto registry = new DopRegistry();
+    auto listener = registry.listen();
     scope (exit)
         listener.stopListening();
 
     runApplication();
 }
 
-void stop(HTTPServerRequest req, HTTPServerResponse res)
+class DopRegistry
 {
-    res.writeBody("", 200);
-    client.finish();
-    exitEventLoop();
-}
+    HTTPServerSettings settings;
+    DbClient client;
+    URLRouter router;
+    string downloadUrlBase;
 
-struct PackRow
-{
-    @ColInd(0)
-    int id;
+    this()
+    {
+        const conf = Config.get;
 
-    @ColInd(1)
-    string name;
-}
+        client = new DbClient(conf.dbConnString, conf.dbPoolMaxSize);
+        settings = new HTTPServerSettings(conf.serverHostname);
 
-PackageResource getPackage(GetPackage req) @safe
-{
-    return client.connect((scope DbConn db) @safe {
-        const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "package" WHERE "id" = $1`,
-            req.id
-        );
-        auto vers = db.execScalars!string(
-            `SELECT "version" FROM "recipe" WHERE "package_id" = $1`,
-            pack.id,
-        );
-        return PackageResource(pack.id, pack.name, vers);
-    });
-}
+        const prefix = format("/api/v%s", currentApiLevel);
+        router = new URLRouter(prefix);
 
-PackageResource getPackageByName(GetPackageByName req) @safe
-{
-    return client.connect((scope DbConn db) {
-        const pack = db.execRow!PackRow(
-            `SELECT "id", "name" FROM "package" WHERE "name" = $1`,
-            req.name
-        );
-        auto vers = db.execScalars!string(
-            `SELECT "version" FROM "recipe" WHERE "package_id" = $1`,
-            pack.id,
-        );
-        return PackageResource(pack.id, pack.name, vers);
-    });
-}
+        setupRoute!GetPackage(router, &getPackage);
+        setupRoute!GetLatestRecipeRevision(router, &getLatestRecipeRevision);
+        setupRoute!GetRecipeRevision(router, &getRecipeRevision);
+        setupRoute!GetRecipe(router, &getRecipe);
+        setupRoute!GetRecipeFiles(router, &getRecipeFiles);
 
-struct PackRecipeRow
-{
-    @ColInd(0)
-    int recId;
+        const protocol = settings.tlsContext ? "https" : "http";
+        downloadUrlBase = format!"%s://%s%s/download"(protocol, conf.serverHostname, prefix);
 
-    @ColInd(1)
-    int maintainerId;
+        router.match(HTTPMethod.HEAD, "/recipes/:id/archive", &downloadRecipeArchive);
+        router.match(HTTPMethod.GET, "/recipes/:id/:archive", &downloadRecipeArchive);
 
-    @ColInd(2)
-    string ver;
+        if (conf.testStopRoute)
+            router.post("/stop", &stop);
 
-    @ColInd(3)
-    string revision;
+        router.get("*", &fallback);
+    }
 
-    @ColInd(4)
-    string recipe;
+    HTTPListener listen()
+    {
+        return listenHTTP(settings, router);
+    }
 
-    @ColInd(5)
-    SysTime created;
-}
+    void stop(HTTPServerRequest req, HTTPServerResponse resp)
+    {
+        resp.writeBody("", 200);
+        client.finish();
+        exitEventLoop();
+    }
 
-PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
-{
-    return client.connect((scope DbConn db) {
-        PackRecipeRow row;
-        if (req.revision)
-            row = db.execRow!PackRecipeRow(
+    void fallback(HTTPServerRequest req, HTTPServerResponse resp)
+    {
+        logInfo("fallback for %s", req.requestURI);
+    }
+
+    static struct PackRow
+    {
+        @ColInd(0) string name;
+        @ColInd(1) int maintainerId;
+        @ColInd(2) SysTime created;
+
+        PackageResource toResource(string[] versions) const @safe
+        {
+            return PackageResource(name, maintainerId, created.toUTC(), versions);
+        }
+    }
+
+    PackageResource getPackage(GetPackage req) @safe
+    {
+        return client.connect((scope DbConn db) @safe {
+            const row = db.execRow!PackRow(
+                `SELECT "name", "maintainer_id", "created" FROM "package" WHERE "name" = $1`,
+                req.name
+            );
+            auto vers = db.execScalars!string(
+                `SELECT DISTINCT "version" FROM "recipe" WHERE "package_name" = $1`,
+                row.name,
+            );
+            // sorting descending order (latest versions first)
+            import std.algorithm : sort;
+
+            vers.sort!((a, b) => Semver(a) > Semver(b));
+            return row.toResource(vers);
+        });
+    }
+
+    static struct RecipeRow
+    {
+        @ColInd(0) int id;
+        @ColInd(1) int maintainerId;
+        @ColInd(2) SysTime created;
+        @ColInd(3) string ver;
+        @ColInd(4) string revision;
+        @ColInd(5) string recipe;
+
+        RecipeResource toResource() const @safe
+        {
+            return RecipeResource(
+                id, ver, revision, recipe, maintainerId, created.toUTC()
+            );
+        }
+    }
+
+    RecipeResource getLatestRecipeRevision(GetLatestRecipeRevision req) @safe
+    {
+        return client.connect((scope DbConn db) {
+            const row = db.execRow!RecipeRow(
                 `
-                    SELECT "id", "maintainer_id", "version", "revision", "recipe", "created"
+                    SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
                     FROM "recipe" WHERE
-                        "package_id" = $1 AND
+                        "package_name" = $1 AND
+                        "version" = $2
+                    ORDER BY "created" DESC
+                    LIMIT 1
+                `,
+                req.name, req.ver,
+            );
+            return row.toResource();
+        });
+    }
+
+    RecipeResource getRecipeRevision(GetRecipeRevision req) @safe
+    {
+        return client.connect((scope DbConn db) {
+            const row = db.execRow!RecipeRow(
+                `
+                    SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
+                    FROM "recipe" WHERE
+                        "package_name" = $1 AND
                         "version" = $2 AND
                         "revision" = $3
                 `,
-                req.packageId, req.ver, req.revision,
+                req.name, req.ver, req.revision,
             );
-        else
-            row = db.execRow!PackRecipeRow(
+            return row.toResource();
+        });
+    }
+
+    RecipeResource getRecipe(GetRecipe req) @safe
+    {
+        return client.connect((scope DbConn db) {
+            const row = db.execRow!RecipeRow(
                 `
-                    SELECT "id", "maintainer_id", "version", "revision", "recipe", "created"
-                    FROM "recipe" WHERE
-                        "package_id" = $1 AND
-                        "version" = $2
-                    LIMIT 1
+                    SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
+                    FROM "recipe" WHERE "id" = $1
                 `,
-                req.packageId, req.ver,
+                req.id
             );
+            return row.toResource();
+        });
+    }
 
-        const packName = db.execScalar!string(
-            `SELECT "name" FROM "package" WHERE "id" = $1`,
-            req.packageId
+    const(RecipeFile)[] getRecipeFiles(GetRecipeFiles req) @safe
+    {
+        return client.connect((scope DbConn db) {
+            return db.execRows!RecipeFile(
+                `SELECT "name", "size" FROM "recipe_file" WHERE "recipe_id" = $1`, req.id,
+            );
+        });
+    }
+
+    void downloadRecipeArchive(scope HTTPServerRequest req, scope HTTPServerResponse resp) @safe
+    {
+        const id = convParam!int(req, "id");
+
+        auto rng = parseRangeHeader(req);
+        if (rng.length > 1)
+            throw new StatusException(400, "Bad Request: multipart ranges are not supported");
+
+        const totalLength = client.connect(db =>
+                db.execScalar!uint(
+                    `SELECT length(archive_data) FROM recipe WHERE id = $1`, id
+                )
         );
 
-        auto files = db.execRows!RecipeFile(
-            `
-                SELECT "id", "name", "size"::bigint FROM "recipe_file"
-                WHERE "recipe_id" = $1
-            `,
-            row.recId,
+        static struct Info
+        {
+            @ColInd(0) string pkgName;
+            @ColInd(1) string ver;
+            @ColInd(2) string revision;
+        }
+
+        const info = client.connect(db => db.execRow!Info(
+                `SELECT package_name, version, revision FROM recipe WHERE id = $1`,
+                id
+        ));
+        resp.headers["Content-Disposition"] = format!"attachment; filename=%s-%s-%s.tar.xz"(
+            info.pkgName, info.ver, info.revision
         );
 
-        return PackageRecipeResource(
-            row.recId,
-            packName,
-            row.ver,
-            row.revision,
-            row.recipe,
-            row.maintainerId,
-            row.created.toUTC(),
-            files
+        if (reqWantDigestSha256(req))
+        {
+            const sha = client.connect(db => db.execScalar!(ubyte[32])(
+                    `SELECT sha256(archive_data) FROM recipe WHERE id = $1`,
+                    id,
+            ));
+            resp.headers["Digest"] = () @trusted {
+                return assumeUnique("sha-256=" ~ Base64.encode(sha));
+            }();
+        }
+
+        resp.headers["Accept-Ranges"] = "bytes";
+
+        const slice = rng.length ?
+            rng[0].slice(totalLength) : ContentSlice(0, totalLength - 1, totalLength);
+
+        if (slice.last < slice.first)
+            throw new StatusException(400, "Invalid range: " ~ req.headers["range"]);
+        if (slice.end > totalLength)
+            throw new StatusException(400, "Invalid range: exceeds content bounds");
+
+        resp.headers["Content-Length"] = slice.sliceLength.to!string;
+        if (rng.length)
+            resp.headers["Content-Range"] = format!"bytes %s-%s/%s"(slice.first, slice.last, totalLength);
+
+        if (req.method == HTTPMethod.HEAD)
+        {
+            resp.writeVoidBody();
+            return;
+        }
+
+        const(ubyte)[] data;
+        if (rng.length)
+        {
+            data = client.connect((scope db) {
+                // substring index is one based
+                return db.execScalar!(const(ubyte)[])(
+                    `SELECT substring(archive_data FROM $1 FOR $2) FROM recipe WHERE id = $3`,
+                    slice.first + 1, slice.sliceLength, id,
+                );
+            });
+            resp.statusCode = 206;
+        }
+        else
+        {
+            data = client.connect((scope db) {
+                return db.execScalar!(const(ubyte)[])(
+                    `SELECT archive_data FROM recipe WHERE id = $1`, id,
+                );
+            });
+        }
+        enforce(slice.sliceLength == data.length, "No match of data length and content length");
+
+        resp.writeBody(data);
+    }
+}
+
+T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
+{
+    try
+    {
+        return req.params[paramName].to!T;
+    }
+    catch (ConvException ex)
+    {
+        throw new StatusException(400, "Bad Request: invalid " ~ paramName ~ " parameter");
+    }
+}
+
+bool reqWantDigestSha256(scope HTTPServerRequest req) @safe
+{
+    return req.headers.get("want-digest") == "sha-256";
+}
+
+struct Rng
+{
+    enum Mode
+    {
+        normal,
+        suffix,
+    }
+
+    Mode mode;
+    uint first;
+    uint last;
+
+    ContentSlice slice(uint totalLength) const @safe
+    {
+        final switch (mode)
+        {
+        case Mode.normal:
+            return ContentSlice(
+                first, last ? last : totalLength - 1, totalLength
+            );
+        case Mode.suffix:
+            return ContentSlice(
+                totalLength - last, totalLength - 1, totalLength
+            );
+        }
+    }
+}
+
+struct ContentSlice
+{
+    uint first;
+    uint last;
+    uint totalLength;
+
+    @property uint end() const @safe
+    {
+        return last + 1;
+    }
+
+    @property uint sliceLength() const @safe
+    {
+        return last - first + 1;
+    }
+}
+
+Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
+{
+    auto header = req.headers.get("Range").strip();
+    if (!header.length)
+        return [];
+
+    logInfo("range header: %s", header);
+
+    if (!header.startsWith("bytes="))
+    {
+        throw new StatusException(
+            400,
+            "Bad request: Bad format of range header",
         );
-    });
+    }
+    Rng[] res;
+    const parts = header["bytes=".length .. $].split(",");
+    foreach (string part; parts)
+    {
+        part = part.strip();
+        const indices = part.split("-");
+        if (indices.length != 2 || (!indices[0].length && !indices[1].length))
+        {
+            throw new StatusException(
+                400,
+                "Bad request: Bad format of range header",
+            );
+        }
+        Rng rng;
+        if (indices[0].length)
+            rng.first = indices[0].to!uint;
+        else
+            rng.mode = Rng.Mode.suffix;
+
+        if (indices[1].length)
+            rng.last = indices[1].to!uint;
+        res ~= rng;
+    }
+    return res;
 }
 
 void setupRoute(ReqT, H)(URLRouter router, H handler)
@@ -195,6 +417,13 @@ void setupRoute(ReqT, H)(URLRouter router, H handler)
             {
                 () @trusted { logInfo("Not found error %s", ex.msg); }();
                 httpResp.statusCode = 404;
+            }
+            catch (StatusException ex)
+            {
+                () @trusted { logInfo("Status error %s", ex.msg); }();
+                httpResp.statusCode = ex.statusCode;
+                if (ex.statusPhrase)
+                    httpResp.statusPhrase = ex.statusPhrase;
             }
             catch (Exception ex)
             {

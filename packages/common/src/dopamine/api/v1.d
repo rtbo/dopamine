@@ -4,58 +4,76 @@ import dopamine.api.attrs;
 
 import std.datetime.systime;
 
+enum level = 1;
+
 struct PackageResource
 {
-    int id;
     string name;
+    int maintainerId;
+    SysTime created;
     string[] versions;
 }
 
-struct RecipeFile
+@Request(Method.GET, "/packages/:name", level)
+@Response!PackageResource
+struct GetPackage
 {
-    int id;
     string name;
-    size_t size;
 }
 
-struct PackageRecipeResource
+struct RecipeResource
 {
-    int packageId;
-    string name;
+    int id;
     @Name("version") string ver;
     string revision;
     string recipe;
     int maintainerId;
     SysTime created;
-    RecipeFile[] fileList;
 }
 
-enum level = 1;
+@Request(Method.GET, "/packages/:name/:version/latest", level)
+@Response!RecipeResource
+struct GetLatestRecipeRevision
+{
+    string name;
+    @("version")
+    string ver;
+}
 
-@Request(Method.GET, "/packages/:id", level)
-@Response!PackageResource
-struct GetPackage
+@Request(Method.GET, "/packages/:name/:version/:revision", level)
+@Response!RecipeResource
+struct GetRecipeRevision
+{
+    string name;
+    @("version")
+    string ver;
+    string revision;
+}
+
+
+@Request(Method.GET, "/recipes/:id", level)
+@Response!RecipeResource
+struct GetRecipe
 {
     int id;
 }
 
-@Request(Method.GET, "/packages/by-name/:name", level)
-@Response!PackageResource
-struct GetPackageByName
+struct RecipeFile
 {
     string name;
+    uint size;
 }
 
-@Request(Method.GET, "/packages/:id/recipes/:version", level)
-@Response!PackageRecipeResource
-struct GetPackageRecipe
+@Request(Method.GET, "/recipes/:id/files", level)
+@Response!(const(RecipeFile)[])
+struct GetRecipeFiles
 {
-    @("id")
-    int packageId;
+    int id;
+}
 
-    @("version")
-    string ver;
-
-    @Query
-    string revision;
+@Request(Method.GET, "/recipes/:id/archive", level)
+@DownloadEndpoint
+struct DownloadRecipeArchive
+{
+    int id;
 }

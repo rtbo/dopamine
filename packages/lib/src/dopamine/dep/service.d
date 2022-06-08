@@ -359,7 +359,7 @@ final class DependencyService : DepService
         if (auto p = packname in _packMem)
             return *p;
 
-        auto req = GetPackageByName(packname);
+        auto req = GetPackage(packname);
         auto resp = _registry.sendRequest(req);
         enforce(resp.code != 404, new NoSuchPackageException(packname));
         auto pack = resp.payload;

@@ -3,7 +3,11 @@ module dopamine.registry;
 import dopamine.api.attrs;
 import dopamine.login;
 
-import vibe.data.json;
+import std.algorithm;
+import std.conv;
+import std.exception;
+import std.format;
+import std.string;
 
 @safe:
 
@@ -86,6 +90,12 @@ class ErrorResponseException : Exception
     }
 }
 
+/// Thrown if the request could not be parsed into a resource
+class WrongRequestException : Exception
+{
+    mixin basicExceptionCtors!();
+}
+
 /// Response returned by the Registry
 struct Response(T)
 {
@@ -145,6 +155,13 @@ private template mapResp(alias pred)
     }
 }
 
+/// Metadata returned when downloading a file
+struct DownloadMetadata
+{
+    string filename;
+    ubyte[] sha256;
+}
+
 /// The URL of default registry the client connects to.
 enum defaultRegistry = "http://localhost:3000";
 
@@ -178,7 +195,8 @@ class Registry
         return _key;
     }
 
-    Response!(ResponseType!ReqT) sendRequest(ReqT)(auto ref const ReqT req) if (isRequest!ReqT)
+    Response!(ResponseType!ReqT) sendRequest(ReqT)(auto ref const ReqT req) @safe
+            if (isRequest!ReqT)
     {
         import std.conv : to;
         import std.traits : hasUDA;
@@ -187,29 +205,179 @@ class Registry
         enum method = reqAttr.method;
         enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
 
-        static if (requiresAuth)
-        {
-            enforce(_key, new AuthRequiredException(reqAttr.url));
-        }
-
         static assert(reqAttr.apiLevel >= 1, "Invalid API Level: " ~ reqAttr.apiLevel.to!string);
 
         const resource = requestResource(req);
-        auto res = rawReq(method, _key.key, host, resource, null, null);
+
+        RawRequest raw;
+        raw.method = method.toCurl();
+        raw.host = host;
+        raw.resource = resource;
+        static if (requiresAuth)
+        {
+            enforce(_key, new AuthRequiredException(reqAttr.url));
+            raw.headers["Authorization"] = format!"Bearer %s"(_key.key);
+        }
+
+        auto res = perform(raw).asResponse();
 
         static if (hasResponse!ReqT)
         {
             alias ResT = ResponseType!ReqT;
-            return res.mapResp!(raw => toJson(raw).deserializeJson!(ResT)());
+            // res.payload is unique because allocated in perform and not shared
+            return res.mapResp!((data) @trusted => toJson(assumeUnique(data)).deserializeJson!(ResT)());
         }
         else
         {
             return res.toVoid;
         }
     }
+
+    /// Return an input range of const(ubyte)[].
+    /// First a HEAD request is sent to check the data length and to
+    /// check if the server supports Range requests.
+    /// Then the returned range perform a data request each time the popFront is called.
+    /// Throws ErrorResponseException if a status code >= 400 is returned.
+    auto download(ReqT)(auto ref const ReqT req, out DownloadMetadata metadata)
+            if (isDownloadEndpoint!ReqT)
+    {
+        import std.traits : hasUDA;
+
+        enum reqAttr = RequestAttr!ReqT;
+        static assert(
+            reqAttr.method == Method.GET,
+            "Download end-points are only valid for GET requests"
+        );
+        static assert(reqAttr.apiLevel >= 1, "Invalid API Level: " ~ reqAttr.apiLevel.to!string);
+
+        enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
+        static if (requiresAuth)
+        {
+            enforce(_key, new AuthRequiredException(reqAttr.url));
+        }
+
+        // HEAD request
+        RawRequest raw;
+        raw.method = HTTP.Method.head;
+        raw.host = host;
+        raw.resource = requestResource(req);
+        static if (requiresAuth)
+            raw.headers["Authorization"] = format!"Bearer %s"(_key.key);
+        raw.headers["Want-Digest"] = "sha-256";
+
+        RawResponse resp = perform(raw);
+        if (resp.status.code >= 400)
+            throw new ErrorResponseException(
+                resp.status.code, resp.status.reason, cast(string)(resp.body_.idup)
+            );
+
+        size_t contentLength;
+        if (auto p = "content-length" in resp.headers)
+            contentLength = (*p).to!size_t;
+
+        bool acceptRanges;
+        if (auto p = "accept-ranges" in resp.headers)
+            acceptRanges = *p == "bytes" && contentLength > 0;
+
+        if (auto p = "content-disposition" in resp.headers)
+        {
+            auto head = *p;
+            if (head.startsWith("attachment;"))
+            {
+                head = head["attachment;".length .. $].strip();
+                if (head.startsWith("filename="))
+                    metadata.filename = head["filename=".length .. $];
+            }
+        }
+
+        if (auto p = "digest" in resp.headers)
+        {
+            auto head = *p;
+            if (head.startsWith("sha-256="))
+            {
+                import std.base64;
+                metadata.sha256 = Base64.decode(head["sha-256=".length .. $].strip());
+            }
+        }
+
+        // enum size_t chunkSize = 1024 * 1024;
+        enum size_t chunkSize = 256;
+
+        const chunkData = acceptRanges && contentLength > chunkSize;
+
+        // GET request
+        raw.method = HTTP.Method.get;
+        if (contentLength > 0)
+            raw.respBuf = new ubyte[min(contentLength, chunkSize)];
+
+        raw.headers.remove("Want-Digest");
+        if (chunkData)
+            raw.headers["Range"] = format!"bytes=0-%s"(chunkSize - 1);
+
+        resp = perform(raw);
+
+        if (resp.status.code >= 400)
+            throw new ErrorResponseException(
+                resp.status.code, resp.status.reason, cast(string)(resp.body_.idup)
+            );
+
+        if (chunkData)
+        {
+            enforce(
+                resp.headers["content-range"] == format!"bytes 0-%s/%s"(chunkSize - 1, contentLength)
+            );
+        }
+
+        static struct DownloadRange
+        {
+            size_t received;
+            size_t contentLength;
+            const(ubyte)[] data;
+            RawRequest rawReq;
+
+            @property const(ubyte)[] front()
+            {
+                return data;
+            }
+
+            @property bool empty()
+            {
+                return data.length == 0;
+            }
+
+            void popFront()
+            {
+                received += data.length;
+                data = null;
+
+                if (received == contentLength)
+                    return;
+
+                const sz = min(chunkSize, contentLength - received);
+                const end = received + sz - 1;
+                rawReq.headers["Range"] = format!"bytes=%s-%s"(received, end);
+                auto resp = perform(rawReq);
+                if (resp.status.code >= 400)
+                    throw new ErrorResponseException(
+                        resp.status.code, resp.status.reason, cast(string)(resp.body_.idup)
+                    );
+                enforce(
+                    resp.headers["content-range"] == format!"bytes %s-%s/%s"(received, end, contentLength)
+                );
+                data = resp.body_;
+            }
+        }
+
+        return DownloadRange(0, contentLength, resp.body_, raw);
+    }
 }
 
-private string checkHost(string host)
+private:
+
+import vibe.data.json;
+import std.net.curl : CurlException, HTTP;
+
+string checkHost(string host)
 {
     import std.exception : enforce;
     import std.string : endsWith, startsWith;
@@ -225,7 +393,7 @@ private string checkHost(string host)
     return host;
 }
 
-private string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT)
+string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT)
 {
     import std.array : split;
     import std.conv : to;
@@ -265,6 +433,12 @@ private string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT
                 const value = __traits(getMember, req, leftover);
             }
             else static assert(false, "Could not find a " ~ leftover ~ " parameter value in " ~ ReqT.stringof);
+
+            const comp = encodeComponent(value.to!string);
+            if (!comp)
+                throw new WrongRequestException(
+                    "could not associate a value to '" ~ part ~ "' for request " ~ ReqT.stringof
+                );
 
             resource ~= encodeComponent(value.to!string);
         }
@@ -331,15 +505,13 @@ private string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT
     return resource;
 }
 
-private Json toJson(ubyte[] raw) @trusted
+Json toJson(immutable(ubyte)[] raw) @safe
 {
-    import std.exception : assumeUnique;
-
-    const str = cast(string) assumeUnique(raw);
+    const str = cast(immutable(char)[]) raw;
     return parseJsonString(str);
 }
 
-private string fromJson(const ref Json json)
+string fromJson(const ref Json json)
 {
     debug
     {
@@ -351,75 +523,121 @@ private string fromJson(const ref Json json)
     }
 }
 
-private string methodString(Method method)
+string methodString(HTTP.Method method)
 {
-    final switch (method)
+    switch (method)
     {
-    case Method.GET:
+    case HTTP.Method.get:
         return "GET  ";
-    case Method.POST:
+    case HTTP.Method.post:
         return "POST ";
+    case HTTP.Method.head:
+        return "HEAD ";
+    default:
+        assert(false);
     }
 }
 
-private Response!(ubyte[]) rawReq(Method method, string loginKey, string host, string resource,
-    const(ubyte)[] reqBody, string contentType = null) @trusted
+HTTP.Method toCurl(Method method)
 {
-    import std.algorithm : equal, min;
-    import std.conv : to;
-    import std.format : format;
-    import std.net.curl : CurlException, HTTP;
-    import std.uni : asLowerCase;
-
-    const url = host ~ resource;
-
-    auto http = HTTP();
-    http.url = url;
-
     final switch (method)
     {
     case Method.GET:
-        http.method = HTTP.Method.get;
-        break;
+        return HTTP.Method.get;
     case Method.POST:
-        http.method = HTTP.Method.post;
-        break;
+        return HTTP.Method.post;
     }
+}
 
-    if (loginKey)
+struct RawRequest
+{
+    HTTP.Method method;
+    string host;
+    string resource;
+    string[string] headers;
+    const(ubyte)[] body_;
+    ubyte[] respBuf;
+
+    @property string url() const @safe
     {
-        http.addRequestHeader("Authorization", format("Bearer %s", loginKey));
+        return host ~ resource;
     }
-    if (reqBody.length)
+}
+
+struct RawResponse
+{
+    HTTP.StatusLine status;
+    // headers are provided with lowercase keys
+    string[string] headers;
+    const(ubyte)[] body_;
+
+    Response!(const(ubyte)[]) asResponse() const
     {
-        assert(method != Method.GET);
+        Response!(const(ubyte)[]) resp;
+        resp.code = status.code;
+        resp.reason = status.reason;
 
-        if (contentType)
-        {
-            http.addRequestHeader("Content-Type", contentType);
-        }
+        if (resp.code >= 400)
+            resp.error = cast(string) body_.idup;
+        else
+            resp._payload = body_;
 
-        http.contentLength = reqBody.length;
+        return resp;
+    }
+}
+
+RawResponse perform(RawRequest req) @trusted
+{
+    import dopamine.log;
+
+    import std.uni : asLowerCase;
+    import std.utf : toUTF8;
+
+    auto http = HTTP();
+    http.url = req.url;
+    http.method = req.method;
+
+    foreach (k, v; req.headers)
+        http.addRequestHeader(k, v);
+
+    if (req.body_.length)
+    {
+        assert(req.method != HTTP.Method.get);
+
         size_t sent = 0;
         http.onSend = (void[] buf) {
-            auto b = cast(const(void)[]) reqBody;
+            auto b = cast(const(void)[]) req.body_;
             const len = min(b.length - sent, buf.length);
             buf[0 .. len] = b[sent .. sent + len];
             return len;
         };
     }
 
-    ubyte[] data;
+    auto buf = req.respBuf;
+    RawResponse resp;
+
+    http.onReceiveStatusLine = (HTTP.StatusLine sl) { resp.status = sl; };
+
     http.onReceiveHeader = (in char[] key, in char[] value) {
-        if (equal(key.asLowerCase(), "content-length"))
+        const ikey = assumeUnique(key.asLowerCase().toUTF8());
+        const ival = value.idup;
+        resp.headers[ikey] = ival;
+        if (ikey == "content-length" && req.method != HTTP.Method.head)
         {
-            data.reserve(value.to!size_t);
+            const len = ival.to!size_t;
+            if (buf.length < len)
+                buf = new ubyte[len];
         }
     };
-    http.onReceive = (ubyte[] rcv) { data ~= rcv; return rcv.length; };
 
-    HTTP.StatusLine status;
-    http.onReceiveStatusLine = (HTTP.StatusLine sl) { status = sl; };
+    http.onReceive = (ubyte[] rcv) {
+        const len = resp.body_.length + rcv.length;
+        if (buf.length < len)
+            buf.length = len;
+        buf[resp.body_.length .. len] = rcv;
+        resp.body_ = buf[0 .. len];
+        return rcv.length;
+    };
 
     try
     {
@@ -427,24 +645,17 @@ private Response!(ubyte[]) rawReq(Method method, string loginKey, string host, s
     }
     catch (CurlException ex)
     {
-        throw new ServerDownException(host, ex.msg);
+        throw new ServerDownException(req.host, ex.msg);
     }
 
+    if (LogLevel.verbose >= minLogLevel)
     {
-        import dopamine.log : logVerbose, info, success, error;
-
-        const codeText = format("%s", status.code);
-        logVerbose("%s%s ... %s", info(methodString(method)), url,
-            status.code >= 400 ? error(codeText) : success(codeText));
+        const codeText = resp.status.code.to!string;
+        logVerbose("%s%s ... %s", info(methodString(req.method)), req.url,
+            resp.status.code >= 400 ? error(codeText) : success(codeText));
     }
 
-    string error;
-    if (status.code >= 400)
-    {
-        error = cast(string) data.idup;
-    }
-
-    return Response!(ubyte[])(data, status.code, status.reason, error);
+    return resp;
 }
 
 version (unittest)
@@ -456,12 +667,15 @@ version (unittest)
 @("requestResource")
 unittest
 {
-    requestResource(GetPackage(17))
-        .shouldEqual("/api/v1/packages/17");
-    requestResource(GetPackageByName("pkgname"))
-        .shouldEqual("/api/v1/packages/by-name/pkgname");
-    requestResource(GetPackageRecipe(123, "1.0.0"))
-        .shouldEqual("/api/v1/packages/123/recipes/1.0.0");
-    requestResource(GetPackageRecipe(432, "1.0.0", "abcdef"))
-        .shouldEqual("/api/v1/packages/432/recipes/1.0.0?revision=abcdef");
+    requestResource(GetPackage("pkga"))
+        .shouldEqual("/api/v1/packages/pkga");
+
+    requestResource(GetLatestRecipeRevision("pkga", "1.0.0"))
+        .shouldEqual("/api/v1/packages/pkga/1.0.0/latest");
+
+    requestResource(GetRecipeRevision("pkga", "1.0.0", "somerev"))
+        .shouldEqual("/api/v1/packages/pkga/1.0.0/somerev");
+
+    requestResource(GetRecipeRevision("pkga", "1.0.0", null))
+        .shouldThrow();
 }
