@@ -36,6 +36,8 @@ e2e_tests = [
     'build-zlib-win',
 
     'stage-lib2',
+
+    'publish-lib1',
 ]
 
 foreach e2e_test : e2e_tests

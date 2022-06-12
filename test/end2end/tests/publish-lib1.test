@@ -1,0 +1,9 @@
+SKIP_NOPROG=meson
+
+PRE_CMD=$DOP profile --discover
+CMD=$DOP publish --skip-cvs-clean
+RECIPE=lib1
+
+EXPECT_MATCH=Recipe: OK - lib1-1.0.0
+EXPECT_MATCH=Publish: New package - lib1
+EXPECT_MATCH=Publish: OK - lib1/1.0.0/1
