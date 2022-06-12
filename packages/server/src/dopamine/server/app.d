@@ -7,6 +7,8 @@ import dopamine.api.v1;
 import dopamine.semver;
 import pgd.conn;
 
+import squiz_box;
+
 import vibe.core.args;
 import vibe.core.core;
 import vibe.core.log;
@@ -17,8 +19,10 @@ import vibe.http.server;
 import std.base64;
 import std.conv;
 import std.datetime.systime;
+import std.digest.sha;
 import std.exception;
 import std.format;
+import std.range;
 import std.string;
 import std.traits;
 import std.typecons;
@@ -83,8 +87,8 @@ class DopRegistry
         setupRoute!GetRecipeRevision(router, &getRecipeRevision);
         setupRoute!GetRecipe(router, &getRecipe);
         setupRoute!GetRecipeFiles(router, &getRecipeFiles);
-
         setupDownloadRoute!DownloadRecipeArchive(router, &downloadRecipeArchive);
+        setupRoute!PostRecipe(router, &postRecipe);
 
         if (conf.testStopRoute)
             router.post("/stop", &stop);
@@ -295,6 +299,138 @@ class DopRegistry
 
         resp.writeBody(data);
     }
+
+    PackageResource createPackageIfNotExist(scope DbConn db, int userId, string packName, out bool newPkg) @safe
+    {
+        auto prows = db.execRows!PackRow(
+            `SELECT name, maintainer_id, created FROM package WHERE name = $1`, packName
+        );
+        string[] vers;
+        newPkg = prows.length == 0;
+        if (prows.length == 0)
+        {
+            prows = db.execRows!PackRow(
+                `
+                    INSERT INTO package (name, maintainer_id, created)
+                    VALUES ($1, $2, CURRENT_TIMESTAMP)
+                    RETURNING (name, maintainer_id, created)
+                `,
+                packName, userId
+            );
+        }
+        else
+        {
+            import std.algorithm : sort;
+
+            vers = db.execScalars!string(
+                `SELECT version FROM recipe WHERE package_name = $1`, packName
+            );
+            vers.sort!((a, b) => Semver(a) > Semver(b));
+        }
+        return prows[0].toResource(vers);
+    }
+
+    RecipeFile[] checkAndReadRecipeArchive(const(ubyte)[] archiveData,
+        const(ubyte)[] archiveSha256,
+        out string recipe) @trusted
+    {
+        enum szLimit = 1 * 1024 * 1024;
+
+        enforceStatus(
+            archiveData.length <= szLimit, 400,
+            "Recipe archive is too big. Ensure to not leave unneeded data."
+        );
+
+        const sha256 = sha256Of(archiveData);
+        enforceStatus(
+            sha256[] == archiveSha256, 400, "Could not verify archive integrity (invalid SHA256 checksum)"
+        );
+
+        RecipeFile[] files;
+        auto entries = only(archiveData)
+            .decompressXz()
+            .readTarArchive();
+
+        bool seenRecipe;
+        foreach (e; entries)
+        {
+            enforceStatus(!e.isBomb(10 * szLimit), 400, "Archive bomb detected!");
+
+            if (e.path == "dopamine.lua")
+            {
+                enforceStatus(e.size <= szLimit, 400, "dopamine.lua file is too big!");
+                recipe = cast(string) e.byChunk().join().idup;
+                seenRecipe = true;
+            }
+            files ~= RecipeFile(e.path, cast(uint) e.size);
+        }
+        enforceStatus(
+            seenRecipe, 400, "Recipe archive do not contain dopamine.lua file"
+        );
+        return files;
+    }
+
+    NewRecipeResp postRecipe(int userId, PostRecipe req) @safe
+    {
+        // FIXME: package name rules
+        enforceStatus(
+            Semver.isValid(req.ver), 400, "Invalid package version (not Semver compliant)"
+        );
+        enforceStatus(
+            req.revision.length, 400, "Invalid package revision"
+        );
+
+        string recipe;
+        auto files = checkAndReadRecipeArchive(req.archive, req.archiveSha256, recipe);
+
+        return client.transac((scope db) @safe {
+            bool newPkg;
+            auto pkg = createPackageIfNotExist(db, userId, req.name, newPkg);
+            const recExists = db.execScalar!bool(
+                `
+                    SELECT count(id) <> 0 FROM recipe
+                    WHERE package_name = $1 AND version = $2 AND revision = $3
+                `,
+                req.name, req.ver, req.revision
+            );
+            enforceStatus(
+                !recExists, 400,
+                format!"recipe %s/%s/%s already exists!"(req.name, req.ver, req.revision)
+            );
+
+            const recipeRow = db.execRow!RecipeRow(
+                `
+                    INSERT INTO recipe (
+                        package_name,
+                        maintainer_id,
+                        created,
+                        version,
+                        revision,
+                        recipe,
+                        archive_data
+                    ) VALUES (
+                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7
+                    )
+                    RETURNING (
+                        id,
+                        maintainer_id,
+                        created,
+                        version,
+                        revision,
+                        recipe
+                    )
+                `, req.name, userId, req.ver, req.revision, req.archive
+            );
+            foreach (f; files)
+                db.exec(
+                    `INSERT INTO recipe_file (recipe_id, name, size) VALUES ($1, $2, $3)`,
+                    recipeRow.id, f.name, f.size
+                );
+            return NewRecipeResp(
+                newPkg, pkg, recipeRow.toResource()
+            );
+        });
+    }
 }
 
 T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
@@ -431,11 +567,32 @@ private void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
 {
     static assert(isSomeFunction!H);
     static assert(isSafe!H);
-    static assert(is(typeof(handler(ReqT.init)) == ResponseType!ReqT));
+
+    enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
+    static if (requiresAuth)
+    {
+        static assert(is(typeof(handler(1, ReqT.init)) == ResponseType!ReqT));
+    }
+    else
+    {
+        static assert(is(typeof(handler(ReqT.init)) == ResponseType!ReqT));
+    }
 
     auto routeHandler = genericHandler((scope HTTPServerRequest httpReq, scope HTTPServerResponse httpResp) @safe {
+        static if (requiresAuth)
+        {
+            // const userId = enforceAuth(httpReq);
+            const userId = 1;
+        }
         auto req = adaptRequest!ReqT(httpReq);
-        auto resp = handler(req);
+        static if (requiresAuth)
+        {
+            auto resp = handler(userId, req);
+        }
+        else
+        {
+            auto resp = handler(req);
+        }
         httpResp.writeJsonBody(serializeToJson(resp));
     });
 
@@ -459,7 +616,35 @@ private void setupDownloadRoute(ReqT, H)(URLRouter router, H handler) @safe
     router.match(HTTPMethod.GET, reqAttr.resource, downloadHandler);
 }
 
-private ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
+private int enforceAuth(scope HTTPServerRequest req)
+{
+    const head = enforceStatus(
+        req.headers.get("authorization"), 401, "Authorization required"
+    );
+    const bearer = "bearer ";
+    enforceStatus(
+        head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
+        400, "Ill-formed authorization header"
+    );
+    const jwt = head[bearer.length .. $].strip();
+    return enforceJwtValid(jwt);
+}
+
+private int enforceJwtValid(string jwt)
+{
+    const parts = jwt.split('.');
+    enforceStatus(
+        parts.length == 3, 400, "Ill-formed authorization header"
+    );
+
+    // FIXME: validate JWT
+    const payload = parts[1];
+    const str = cast(string) Base64URLNoPadding.decode(payload);
+    const json = parseJsonString(str);
+    return json["sub"].get!int;
+}
+
+private ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
 {
     enum reqAttr = RequestAttr!ReqT;
     static assert(
