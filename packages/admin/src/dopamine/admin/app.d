@@ -232,7 +232,6 @@ void populateRegistry(PgConn db, string regDir)
                     .compressXz()
                     .join();
 
-                const filename = format("%s-%s-%s.tar.xz", pkg.name, vdir.ver, rdir.revision);
                 const sha1 = sha1Of(recipeFileBlob);
 
                 const recId = db.transac(() @trusted {
@@ -244,15 +243,14 @@ void populateRegistry(PgConn db, string regDir)
                                 "version",
                                 "revision",
                                 "recipe",
-                                "archive_name",
                                 "archive_data",
                                 "created"
                             ) VALUES(
-                                $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP
+                                $1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP
                             )
                             RETURNING "id"
                         `,
-                        pkg.name, adminId, vdir.ver, rdir.revision, recipe, filename, recipeFileBlob
+                        pkg.name, adminId, vdir.ver, rdir.revision, recipe, recipeFileBlob
                     );
                     auto dbSha1 = db.execScalar!(ubyte[20])(
                         `
