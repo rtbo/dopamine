@@ -4,6 +4,85 @@ import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
 
+import std.array;
+import std.exception;
+import std.file;
+import std.path;
+import std.process;
+import std.string;
+
+enum Cvs
+{
+    none,
+    git,
+    hg,
+}
+
+Cvs getCvs(string dir=getcwd())
+{
+    dir = buildNormalizedPath(absolutePath(dir));
+
+    while (true)
+    {
+        const git = buildPath(dir, ".git");
+        if (exists(git) && isDir(git))
+            return Cvs.git;
+
+        const hg = buildPath(dir, ".hg");
+        if (exists(hg) && isDir(hg))
+            return Cvs.hg;
+
+        string parent = dirName(dir);
+        if (parent == dir)
+            return Cvs.none;
+
+        dir = parent;
+    }
+}
+
+bool isRepoClean(Cvs cvs, string dir = getcwd())
+in (cvs != Cvs.none)
+{
+    import std.array;
+
+    const cmd = cvs == Cvs.git ?
+        ["git", "status", "--porcelain"] : ["hg", "status"];
+
+    const res = execute(cmd, null, Config.none, size_t.max, dir);
+    enforce(
+        res.status == 0,
+        new ErrorLogException("Could not run %s: %s", info(cmd.join(" ")), res.output)
+    );
+    return res.output.strip().length == 0;
+}
+
+string[] listRepoFiles(Cvs cvs, string dir = getcwd())
+in (cvs != Cvs.none)
+{
+    import std.algorithm;
+
+    const cmd = cvs == Cvs.git ?
+        ["git", "ls-files"] : ["hg", "locate"];
+
+    auto res = execute(cmd, null, Config.none, size_t.max, dir);
+    enforce(
+        res.status == 0,
+        new ErrorLogException("Could not run %s: %s", info(cmd.join(" ")), res.output)
+    );
+    return lineSplitter(res.output)
+        .map!(l => buildPath(dir, l))
+        .array;
+}
+
+bool isCvsRoot(Cvs cvs, string dir = getcwd())
+{
+    if (cvs == Cvs.none)
+        return false;
+
+    const cvsDir = buildPath(dir, cvs == Cvs.git ? ".git" : ".hg");
+    return exists(cvsDir) && isDir(cvsDir);
+}
+
 Recipe parseRecipe(RecipeDir dir)
 {
     import std.format : format;
@@ -21,8 +100,6 @@ Recipe parseRecipe(RecipeDir dir)
 private auto acquireSomeLockFile(string path, string desc)
 {
     import dopamine.util : acquireLockFile, tryAcquireLockFile;
-    import std.file : mkdirRecurse;
-    import std.path : dirName;
 
     mkdirRecurse(dirName(path));
     auto lock = tryAcquireLockFile(path);

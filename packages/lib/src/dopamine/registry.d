@@ -215,7 +215,7 @@ class Registry
         raw.resource = resource;
         static if (requiresAuth)
         {
-            enforce(_key, new AuthRequiredException(reqAttr.url));
+            enforce(_key, new AuthRequiredException(reqAttr.resource));
             raw.headers["Authorization"] = format!"Bearer %s"(_key.key);
         }
 

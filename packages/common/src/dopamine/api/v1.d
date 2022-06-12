@@ -77,3 +77,23 @@ struct DownloadRecipeArchive
 {
     int id;
 }
+
+struct NewRecipeResp
+{
+    @Name("new") bool newPkg;
+    @Name("package") PackageResource pkg;
+    RecipeResource recipe;
+}
+
+@Request(Method.POST, "/recipes", level)
+@Response!NewRecipeResp
+@RequiresAuth
+struct PostRecipe
+{
+    string name;
+    @("version")
+    string ver;
+    string revision;
+    const(ubyte)[] archiveSha256;
+    const(ubyte)[] archive;
+}

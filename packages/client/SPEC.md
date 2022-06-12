@@ -93,6 +93,7 @@ state of the package between successive invocations of `dop`.
 | `depinstall` | Install dependencies.                            |
 | `source`     | Download package source.                         |
 | `build`      | Build package with selected compilation profile. |
+| `stage`      | Stage a package in a specified directory.        |
 | `package`    | Package binary for distribution.                 |
 | `cache`      | Add a package in the local cache.                |
 | `publish`    | Publish a package recipe on a repository.        |

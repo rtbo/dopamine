@@ -3,6 +3,7 @@ module dopamine.client.app;
 import dopamine.client.build;
 import dopamine.client.login;
 import dopamine.client.profile;
+import dopamine.client.publish;
 import dopamine.client.resolve;
 import dopamine.client.source;
 import dopamine.client.stage;
@@ -37,6 +38,7 @@ int main(string[] args)
         Command("source", &sourceMain, "Download and prepare the source code"),
         Command("build", &buildMain, "Build the package"),
         Command("stage", &stageMain, "Stage the package"),
+        Command("publish", &publishMain, "Publish the package"),
     ];
     const commandNames = commands.map!(c => c.name).array;
 
