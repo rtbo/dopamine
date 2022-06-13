@@ -7,6 +7,7 @@ if get_option('enable_client')
 endif
 
 if get_option('enable_server')
+    subdir('jwt')
     subdir('pgd')
     subdir('admin')
     subdir('server')
