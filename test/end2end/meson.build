@@ -1,13 +1,7 @@
 
-
-# e2e_registry_exe = executable('e2e-registry', 'e2e_registry.d',
-#     install: false,
-#     dependencies: [vibed_http_dep, dop_common_dep],
-# )
-
 e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
     install: false,
-    dependencies: vibed_http_dep,
+    dependencies: [vibed_http_dep, jwt_dep],
 )
 
 e2e_env = [
@@ -36,6 +30,8 @@ e2e_tests = [
     'build-zlib-win',
 
     'stage-lib2',
+
+    'publish-lib1',
 ]
 
 foreach e2e_test : e2e_tests
@@ -44,7 +40,7 @@ foreach e2e_test : e2e_tests
         env: e2e_env,
         args: [files('tests/' + e2e_test + '.test')],
         suite: 'e2e',
-        timeout: 0,
+        timeout: 300,
     )
 
 endforeach

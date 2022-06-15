@@ -72,6 +72,21 @@ final class DbClient
         }
     }
 
+    T transac(T)(T delegate(scope DbConn conn) @safe dg) @safe
+    {
+        auto lock = pool.lockConnection;
+        // ensure to pass the object rather than the lock to the dg
+        scope conn = cast(DbConn) lock;
+
+        try
+            return conn.transac(() @safe => dg(conn));
+        catch (ConnectionException ex)
+        {
+            conn.resetAsync();
+            throw ex;
+        }
+    }
+
     void finish() @safe
     {
         pool.removeUnused((DbConn conn) @safe nothrow{ conn.finish(); });

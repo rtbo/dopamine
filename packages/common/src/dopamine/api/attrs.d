@@ -56,6 +56,19 @@ template isRequest(ReqT)
     enum isRequest = hasUDA!(ReqT, Request);
 }
 
+/// Checks whether `ReqT` is a request type for the given method
+template isRequestFor(ReqT, Method method)
+{
+    static if (hasUDA!(ReqT, Request))
+    {
+        enum isRequestFor = getUDAs!(ReqT, Request)[0].method == method;
+    }
+    else
+    {
+        enum isRequestFor = false;
+    }
+}
+
 /// Retrieves the `Request` value attached to `ReqT`.
 template RequestAttr(ReqT)
 {

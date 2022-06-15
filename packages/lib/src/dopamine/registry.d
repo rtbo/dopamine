@@ -8,6 +8,7 @@ import std.conv;
 import std.exception;
 import std.format;
 import std.string;
+import core.time;
 
 @safe:
 
@@ -207,15 +208,19 @@ class Registry
 
         static assert(reqAttr.apiLevel >= 1, "Invalid API Level: " ~ reqAttr.apiLevel.to!string);
 
-        const resource = requestResource(req);
-
         RawRequest raw;
         raw.method = method.toCurl();
+        raw.resource = requestResource(req);
         raw.host = host;
-        raw.resource = resource;
+        static if (method == Method.POST)
+        {
+            auto json = serializeToJsonString(req);
+            raw.body_ = json.representation;
+            raw.contentType = "application/json";
+        }
         static if (requiresAuth)
         {
-            enforce(_key, new AuthRequiredException(reqAttr.url));
+            enforce(_key, new AuthRequiredException(reqAttr.resource));
             raw.headers["Authorization"] = format!"Bearer %s"(_key.key);
         }
 
@@ -225,7 +230,8 @@ class Registry
         {
             alias ResT = ResponseType!ReqT;
             // res.payload is unique because allocated in perform and not shared
-            return res.mapResp!((data) @trusted => toJson(assumeUnique(data)).deserializeJson!(ResT)());
+            return res.mapResp!((data) @trusted => toJson(assumeUnique(data))
+                    .deserializeJson!(ResT)());
         }
         else
         {
@@ -296,6 +302,7 @@ class Registry
             if (head.startsWith("sha-256="))
             {
                 import std.base64;
+
                 metadata.sha256 = Base64.decode(head["sha-256=".length .. $].strip());
             }
         }
@@ -393,11 +400,14 @@ string checkHost(string host)
     return host;
 }
 
-string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT)
+/// resource path for GET requests
+/// translates parameters (e.g. id in /recipes/:id) with the value of the
+/// corresponding member in the request object
+string requestResource(ReqT)(auto ref const ReqT req)
+        if (isRequestFor!(ReqT, Method.GET))
 {
     import std.array : split;
     import std.conv : to;
-    import std.format : format;
     import std.traits : getUDAs, getSymbolsByUDA, Unqual;
     import std.uri : encodeComponent;
 
@@ -505,6 +515,30 @@ string requestResource(ReqT)(auto ref const ReqT req) if (isRequest!ReqT)
     return resource;
 }
 
+/// resource path for POST requests
+/// Return the resource member of the Request attribute directly. (known at compile time)
+/// Does a few compile time checks as well before
+/// The request member are not used here, for POST request they are translated to JSON
+string requestResource(ReqT)(auto ref const ReqT req)
+        if (isRequestFor!(ReqT, Method.POST))
+{
+    import std.traits : getUDAs, getSymbolsByUDA;
+
+    pragma(inline, true);
+
+    enum reqAttr = RequestAttr!ReqT;
+    static assert(
+        reqAttr.resource.length > 1 && reqAttr.resource[0] == '/',
+        "Invalid resource URL: " ~ reqAttr.resource ~ " (must start by '/')"
+    );
+
+    static assert(!reqAttr.resource.canFind(":"), "URL parameters not allowed for POST requests");
+    static assert(getSymbolsByUDA!(ReqT, Query).length == 0, "Query parameters not allowed for POST");
+
+    enum result = format!"/api/v%s%s"(reqAttr.apiLevel, reqAttr.resource);
+    return result;
+}
+
 Json toJson(immutable(ubyte)[] raw) @safe
 {
     const str = cast(immutable(char)[]) raw;
@@ -555,6 +589,7 @@ struct RawRequest
     string host;
     string resource;
     string[string] headers;
+    string contentType;
     const(ubyte)[] body_;
     ubyte[] respBuf;
 
@@ -604,13 +639,11 @@ RawResponse perform(RawRequest req) @trusted
     {
         assert(req.method != HTTP.Method.get);
 
-        size_t sent = 0;
-        http.onSend = (void[] buf) {
-            auto b = cast(const(void)[]) req.body_;
-            const len = min(b.length - sent, buf.length);
-            buf[0 .. len] = b[sent .. sent + len];
-            return len;
-        };
+        http.contentLength = req.body_.length;
+        if (req.contentType)
+            http.setPostData(cast(const(void)[])req.body_, req.contentType);
+        else
+            http.postData = cast(const(void)[])req.body_;
     }
 
     auto buf = req.respBuf;
@@ -638,6 +671,8 @@ RawResponse perform(RawRequest req) @trusted
         resp.body_ = buf[0 .. len];
         return rcv.length;
     };
+
+    http.operationTimeout = dur!"seconds"(30);
 
     try
     {

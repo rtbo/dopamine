@@ -2,6 +2,8 @@ module dopamine.server.config;
 
 import std.conv;
 
+@safe:
+
 /// Server and configuration.
 /// Fields are read from environment variables.
 /// Defaults values should suit development environement.
@@ -10,6 +12,10 @@ struct Config
     /// Hostname of server (including port)
     /// Read from $DOP_SERVER_HOSTNAME
     string serverHostname;
+
+    /// Secret of JWT signature
+    /// Read from $DOP_SERVER_JWTSECRET
+    string serverJwtSecret;
 
     /// Connection string of the database
     /// Read from $DOP_DB_CONNSTRING
@@ -35,6 +41,9 @@ struct Config
         {
             c.serverHostname = environment.get(
                 "DOP_SERVER_HOSTNAME", "localhost:3000"
+            );
+            c.serverJwtSecret = environment.get(
+                "DOP_SERVER_JWTSECRET", "test-secret"
             );
 
             c.dbConnString = environment.get(

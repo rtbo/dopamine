@@ -77,3 +77,30 @@ struct DownloadRecipeArchive
 {
     int id;
 }
+
+struct NewRecipeResp
+{
+    @Name("new") bool newPkg;
+    @Name("package") PackageResource pkg;
+    RecipeResource recipe;
+}
+
+@Request(Method.POST, "/recipes", level)
+@Response!NewRecipeResp
+@RequiresAuth
+struct PostRecipe
+{
+    string name;
+    @Name("version")
+    string ver;
+    string revision;
+    /// encoded Base64: FIXME: handle by attribute
+    string archiveSha256;
+    /// encoded Base64
+    string archive;
+}
+
+static assert (isRequestFor!(PostRecipe, Method.POST));
+static assert (!isRequestFor!(PostRecipe, Method.GET));
+static assert (isRequestFor!(GetRecipe, Method.GET));
+static assert (!isRequestFor!(GetRecipe, Method.POST));

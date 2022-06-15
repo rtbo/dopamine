@@ -1,6 +1,7 @@
 /// A logging module that support colorized text when connected to a terminal.
 module dopamine.log;
 
+import std.conv;
 import std.format;
 import std.stdio;
 
@@ -84,37 +85,37 @@ void setDebugOutput(File output)
 /// sent to the `log*` formatting functions in this module
 /// (if the log goes to a terminal).
 /// Will format the text unmodified otherwise.
-auto color(Color color, const(char)[] text) @safe
+auto color(T)(Color color, T val) @safe if (is(typeof(val.to!string)))
 {
-    return ColorizedText(color, text);
+    return ColorizedText(color, val.to!string);
 }
 
 /// Format the text in bright white, suitable to highlight regular information.
 /// See_Also: [color]
-auto info(const(char)[] text) @safe
+auto info(T)(T val) @safe if (is(typeof(val.to!string)))
 {
-    return ColorizedText(Color.white | Color.bright, text);
+    return ColorizedText(Color.white | Color.bright, val.to!string);
 }
 
 /// Format the text in bright green, suitable to highlight successful operation.
 /// See_Also: [color]
-auto success(const(char)[] text) @safe
+auto success(T)(T val) @safe if (is(typeof(val.to!string)))
 {
-    return ColorizedText(Color.green | Color.bright, text);
+    return ColorizedText(Color.green | Color.bright, val.to!string);
 }
 
 /// Format the text in bright yellow, suitable to highlight warning.
 /// See_Also: [color]
-auto warning(const(char)[] text) @safe
+auto warning(T)(T val) @safe if (is(typeof(val.to!string)))
 {
-    return ColorizedText(Color.yellow | Color.bright, text);
+    return ColorizedText(Color.yellow | Color.bright, val.to!string);
 }
 
 /// Format the text in bright red, suitable to highlight errors.
 /// See_Also: [color]
-auto error(const(char)[] text) @safe
+auto error(T)(T val) @safe if(is(typeof(val.to!string)))
 {
-    return ColorizedText(Color.red | Color.bright, text);
+    return ColorizedText(Color.red | Color.bright, val.to!string);
 }
 
 private void privLog(Args...)(LogLevel level, string msgf, Args args) @trusted

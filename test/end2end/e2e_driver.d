@@ -3,6 +3,9 @@
 /// Read one *.test file, run the provided command and perform the associated assertions
 module e2e_driver;
 
+import jwt;
+import vibe.data.json;
+
 import std.array;
 import std.exception;
 import std.file;
@@ -405,6 +408,7 @@ struct Test
     string recipe;
     string cache;
     string registry;
+    string user;
 
     Expect[] expectations;
 
@@ -436,9 +440,10 @@ struct Test
             enum recipeMark = "RECIPE=";
             enum cacheMark = "CACHE=";
             enum registryMark = "REGISTRY=";
+            enum userMark = "USER=";
 
             const mark = line.startsWith(
-                preCmdMark, cmdMark, recipeMark, cacheMark, registryMark
+                preCmdMark, cmdMark, recipeMark, cacheMark, registryMark, userMark,
             );
             switch (mark)
             {
@@ -456,6 +461,9 @@ struct Test
                 break;
             case 5:
                 test.registry = line[registryMark.length .. $];
+                break;
+            case 6:
+                test.user = line[userMark.length .. $];
                 break;
             case 0:
             default:
@@ -611,6 +619,26 @@ struct Test
                     const dest = sandboxHomePath("cache", p);
                     copyRecurse(src, dest);
                 });
+        }
+
+        if (user)
+        {
+            auto usr = defs["users"][user];
+            const id = usr["id"].integer;
+            const email = usr["email"].str;
+
+            auto payload = Json([
+                "sub": Json(id),
+                "email": Json(email),
+                "exp": Json(jwtNow() + 5*60),
+            ]);
+            auto jwt = Jwt.sign(payload, "test-secret");
+            auto login = Json([
+                "userId": Json(id),
+                "keyName": Json(email),
+                "key": Json(jwt.token),
+            ]);
+            std.file.write(sandboxHomePath("login.json"), login.toString().representation);
         }
 
         writefln("copy %s to %s", e2ePath("recipes", recipe), sandboxRecipePath);
@@ -830,6 +858,7 @@ final class Registry
             adminExe,
             "--create-db",
             "--run-migration", "v1",
+            "--create-test-users", "v1",
             "--populate-from", regPath,
         ];
         auto adminEnv = this.env.dup;

@@ -20,8 +20,7 @@ CREATE TABLE "package" (
     "maintainer_id" integer,
     "created"       timestamptz NOT NULL,
 
-    FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,
-    UNIQUE("name")
+    FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL
 );
 
 CREATE TABLE "recipe" (
@@ -32,7 +31,6 @@ CREATE TABLE "recipe" (
     "version"       text NOT NULL,
     "revision"      text NOT NULL,
     "recipe"        text NOT NULL,
-    "archive_name"  text NOT NULL,
     "archive_data"  bytea NOT NULL,
 
     FOREIGN KEY ("package_name") REFERENCES "package"("name") ON DELETE CASCADE,

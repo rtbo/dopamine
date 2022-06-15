@@ -36,7 +36,7 @@ void doLogin(string key)
     if (isLoggedIn())
     {
         const current = readLoginKey();
-        logInfo("%s: Replacing former login key: %s", warning("Warning"), info(current.keyName));
+        logWarningH("Replacing former login key: %s", info(current.keyName));
     }
 
     writeLoginKey(loginKey);
