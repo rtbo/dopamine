@@ -31,6 +31,7 @@ struct Options
 
     bool createDb;
     string[] migrationsToRun;
+    bool createTestUsers;
     string registryDir;
 
     static Options parse(string[] args)
@@ -41,6 +42,7 @@ struct Options
         auto res = getopt(args,
             "create-db",        &opts.createDb,
             "run-migration",    &opts.migrationsToRun,
+            "create-test-users", &opts.createTestUsers,
             "populate-from",    &opts.registryDir,
         );
         // dfmt on
@@ -61,7 +63,7 @@ struct Options
 
     bool noop() const
     {
-        return !createDb && !migrationsToRun.length && !registryDir;
+        return !createDb && !migrationsToRun.length && !createTestUsers && !registryDir;
     }
 
     int checkErrors() const
@@ -124,6 +126,15 @@ version (DopAdminMain) int main(string[] args)
         db.exec(migrations[mig]);
     }
 
+    if (opts.createTestUsers)
+    {
+        const id1 = createUserIfNotExist(db, "admin@dop-test.org");
+        const id2 = createUserIfNotExist(db, "user@dop-test.org");
+        writefln("Created test users");
+        writefln("  %s: admin@dop-test.org", id1);
+        writefln("  %s: user@dop-test.org", id2);
+    }
+
     if (opts.registryDir)
         populateRegistry(db, opts.registryDir);
 
@@ -156,8 +167,6 @@ struct User
     string avatarUrl;
 }
 
-enum adminEmail = "admin.tool@dop-test.org";
-
 int createUserIfNotExist(PgConn db, string email)
 {
     auto ids = db.execScalars!int(
@@ -180,7 +189,7 @@ int createUserIfNotExist(PgConn db, string email)
 
 void populateRegistry(PgConn db, string regDir)
 {
-    const adminId = createUserIfNotExist(db, adminEmail);
+    const adminId = createUserIfNotExist(db, "admin@dop-test.org");
 
     foreach (packDir; dirEntries(regDir, SpanMode.shallow).filter!(e => e.isDir))
     {
