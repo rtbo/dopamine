@@ -43,9 +43,41 @@ long jwtNow()
     return toJwtTime(Clock.currTime(UTC()));
 }
 
+/// Cause if failure verification
+enum JwtVerifFailure
+{
+    /// The global structure of the token is not valid. E.g:
+    /// - could not split in 3 parts `header.payload.signature`
+    /// - base 64 decoding fails
+    /// - JSON deserialization fails
+    /// - the header does not have the expected fields
+    structure,
+    /// The `exp` field is now or in the past
+    expired,
+    /// The signature could not be verified
+    signature,
+}
+
+/// Exception thrown when verification fails
+class JwtException : Exception
+{
+    JwtVerifFailure cause;
+
+    private this(JwtVerifFailure cause, string msg, string file = __FILE__, size_t line = __LINE__)
+    {
+        this.cause = cause;
+        super(msg);
+    }
+}
+
 struct Jwt
 {
-    string token;
+    private string _token;
+
+    private this(string token)
+    {
+        _token = token;
+    }
 
     static Jwt sign(Json payload, string secret, Alg alg = Alg.HS256)
     {
@@ -57,26 +89,82 @@ struct Jwt
         return Jwt(format!"%s.%s"(toBeSigned, signature));
     }
 
-    string toString() const
+    /// Verify the token in the first argument using `secret` and options `opts`
+    /// If verification fails a JwtException is thrown
+    static Jwt verify(string token, string secret, VerifOpts opts = VerifOpts.init)
     {
-        return token;
+        try
+        {
+            const jwt = Jwt(token);
+            const header = jwt.header;
+            const typJson = header["typ"];
+            const algJson = header["alg"];
+            enforce(
+                typJson.type != Json.Type.undefined && algJson.type != Json.Type.undefined,
+                new JwtException(
+                    JwtVerifFailure.structure,
+                    `Invalid JWT header: "typ" and "alg" fields are mandatory`),
+            );
+            enforce(
+                typJson.get!string == "JWT",
+                new JwtException(JwtVerifFailure.structure, "Invalid JWT header: not a JWT typ"),
+            );
+
+            const alg = stringToAlg(algJson.get!string);
+
+            // decode the payload in all cases to generate an exception if JSON or base64 is invalid
+            auto payload = jwt.payload;
+
+            if (opts.checkExpired)
+            {
+                auto exp = payload["exp"];
+                enforce(
+                    exp.type != Json.Type.undefined,
+                    new JwtException(JwtVerifFailure.structure, `missing "exp" field in payload`)
+                );
+                enforce(
+                    exp.type == Json.Type.int_,
+                    new JwtException(JwtVerifFailure.structure, `invalid "exp" field in payload`)
+                );
+                const expTime = exp.get!long;
+                enforce(
+                    expTime > jwtNow(),
+                    new JwtException(JwtVerifFailure.expired, "JWT verification failed: expired")
+                );
+            }
+
+            const toBeSigned = jwt._token[0 .. jwt.point2];
+
+            enforce(
+                jwt.signature == doSign(alg, toBeSigned, secret),
+                new JwtException(JwtVerifFailure.signature, "JWT verification failed: signature mismatch")
+            );
+
+            return jwt;
+        }
+        catch (JwtException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            throw new JwtException(JwtVerifFailure.structure, ex.msg);
+        }
     }
 
-    @property bool isToken() const
+    @property string token() const
     {
-        if (!token.length)
-            return false;
-        if (token.count('.') != 2)
-            return false;
-        const p1 = point1;
-        const p2 = point2;
-        return p1 > 1 && p2 > (p1 + 1) && token.length > (p2 + 1);
+        return _token;
+    }
+
+    string toString() const
+    {
+        return _token;
     }
 
     @property string headerBase64() const
-    in (isToken)
     {
-        return token[0 .. point1];
+        return _token[0 .. point1];
     }
 
     @property string headerString() const
@@ -90,9 +178,8 @@ struct Jwt
     }
 
     @property string payloadBase64() const
-    in (isToken)
     {
-        return token[point1 + 1 .. point2];
+        return _token[point1 + 1 .. point2];
     }
 
     @property string payloadString() const
@@ -106,9 +193,8 @@ struct Jwt
     }
 
     @property string signature() const
-    in (isToken)
     {
-        return token[point2 + 1 .. $];
+        return _token[point2 + 1 .. $];
     }
 
     static struct VerifOpts
@@ -116,54 +202,14 @@ struct Jwt
         Flag!"checkExpired" checkExpired;
     }
 
-    /// verify the token
-    bool verify(string secret, VerifOpts opts = VerifOpts.init) const
-    in (isToken)
-    {
-        const head = header;
-        const typJson = head["typ"];
-        const algJson = head["alg"];
-        enforce(
-            typJson.type != Json.Type.undefined && algJson.type != Json.Type.undefined,
-            "Ill-formed JWT header"
-        );
-        enforce(
-            typJson.get!string == "JWT",
-            "Not a JWT",
-        );
-
-        const alg = stringToAlg(algJson.get!string);
-
-        const toBeSigned = token[0 .. point2];
-        if (signature != doSign(alg, toBeSigned, secret))
-            return false;
-
-        if (opts.checkExpired)
-        {
-            auto exp = payload["exp"];
-            enforce(
-                exp.type != Json.Type.undefined,
-                `missing "exp" field in payload`
-            );
-            enforce(
-                exp.type == Json.Type.int_,
-                `invalid "exp" field in payload`
-            );
-            const expTime = exp.get!int;
-            if (expTime <= jwtNow())
-                return false;
-        }
-        return true;
-    }
-
     private size_t point1() const
     {
-        return indexOf(token, '.');
+        return indexOf(_token, '.');
     }
 
     private @property size_t point2() const
     {
-        return lastIndexOf(token, '.');
+        return lastIndexOf(_token, '.');
     }
 }
 
@@ -181,6 +227,9 @@ unittest
 
     const jwt = Jwt.sign(payload, secret, Alg.HS256);
 
+    /// Warning: assume ordering of the json fields which is not guaranteed
+    /// for the payload
+
     assert(jwt.token ==
             "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." ~
             "eyJlbWFpbCI6InRlc3RAZG9wYW1pbmUub3JnIiwic3ViIjoxMiwiZXhwIjoxNjU1MDY0Njc4fQ" ~
@@ -188,8 +237,9 @@ unittest
     );
     assert(jwt.headerString == `{"alg":"HS256","typ":"JWT"}`);
     assert(jwt.payloadString == `{"email":"test@dopamine.org","sub":12,"exp":1655064678}`);
-    assert(jwt.verify("test-secret"));
-    assert(!jwt.verify("test-secret", Jwt.VerifOpts(Yes.checkExpired)));
+
+    assertNotThrown(Jwt.verify(jwt.token, "test-secret"));
+    assertThrown(Jwt.verify(jwt.token, "test-secret", Jwt.VerifOpts(Yes.checkExpired)));
 }
 
 private @property string algToString(Alg alg)

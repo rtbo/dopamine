@@ -632,6 +632,8 @@ private void setupDownloadRoute(ReqT, H)(URLRouter router, H handler) @safe
 
 private int enforceAuth(scope HTTPServerRequest req) @safe
 {
+    const config = Config.get;
+
     const head = enforceStatus(
         req.headers.get("authorization"), 401, "Authorization required"
     );
@@ -640,28 +642,18 @@ private int enforceAuth(scope HTTPServerRequest req) @safe
         head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
         400, "Ill-formed authorization header"
     );
-    const jwt = Jwt(head[bearer.length .. $].strip());
-    enforceStatus(
-        jwt.isToken,
-        400, "Ill-formed authorization header"
-    );
-    return enforceJwtValid(jwt);
-}
-
-private int enforceJwtValid(Jwt jwt) @safe
-{
-    const config = Config.get;
     try
     {
-        enforceStatus(
-            jwt.verify(config.serverJwtSecret),
-            403, "Invalid or expired token");
+        const jwt = Jwt.verify(head[bearer.length .. $].strip(), config.serverJwtSecret);
+        return jwt.payload["sub"].get!int;
     }
-    catch(Exception ex)
+    catch (JwtException ex)
     {
-        statusError(400, "Invalid authorization header");
+        if (ex.cause == JwtVerifFailure.structure)
+            statusError(400, "Ill-formed authorization header");
+        else
+            statusError(403, "Invalid or expired authorization token");
     }
-    return jwt.payload["sub"].get!int;
 }
 
 private ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
