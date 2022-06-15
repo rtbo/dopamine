@@ -74,19 +74,31 @@ struct Jwt
 {
     private string _token;
 
-    private this(string token)
+    private this(string token) nothrow
     {
         _token = token;
     }
 
-    static Jwt sign(Json payload, string secret, Alg alg = Alg.HS256)
+    static Jwt sign(Json payload, string secret, Alg alg = Alg.HS256) nothrow
     {
-        const header = format!`{"alg":"%s","typ":"JWT"}`(alg.algToString());
-        const toBeSigned = format!"%s.%s"(
-            encodeBase64(header.representation), encodeBase64(payload.toString().representation)
-        );
+        // in this function, only Json.toString() is not nothrow, probably due to the use
+        // of Formatted write. But toString should not throw for any well constructed Json value
+        string payloadString;
+        auto ex = collectException!Exception(payload.toString(), payloadString);
+        if (ex)
+            assert(false);
+
+        const header = `{"alg":"` ~ alg.algToString() ~ `","typ":"JWT"}`;
+        const toBeSigned = encodeBase64(header.representation) ~ "." ~ encodeBase64(payloadString.representation);
         const signature = doSign(alg, toBeSigned, secret);
-        return Jwt(format!"%s.%s"(toBeSigned, signature));
+        return Jwt(toBeSigned ~ "." ~ signature);
+    }
+
+    ///
+    static struct VerifOpts
+    {
+        ///
+        Flag!"checkExpired" checkExpired;
     }
 
     /// Verify the token in the first argument using `secret` and options `opts`
@@ -95,8 +107,15 @@ struct Jwt
     {
         try
         {
-            const jwt = Jwt(token);
-            const header = jwt.header;
+            const p1 = indexOf(token, '.');
+            const p2 = lastIndexOf(token, '.');
+
+            enforce(
+                p1 > 0 && (p2 - p1) > 0 && (token.length - p2) > 0,
+                new JwtException(JwtVerifFailure.structure, "Could not parse 3 parties of JWT")
+            );
+
+            const header = parseJsonString(decodeBase64(token[0 .. p1]));
             const typJson = header["typ"];
             const algJson = header["alg"];
             enforce(
@@ -113,7 +132,7 @@ struct Jwt
             const alg = stringToAlg(algJson.get!string);
 
             // decode the payload in all cases to generate an exception if JSON or base64 is invalid
-            auto payload = jwt.payload;
+            auto payload = parseJsonString(decodeBase64(token[p1 + 1 .. p2]));
 
             if (opts.checkExpired)
             {
@@ -133,14 +152,15 @@ struct Jwt
                 );
             }
 
-            const toBeSigned = jwt._token[0 .. jwt.point2];
+            const toBeSigned = token[0 .. p2];
+            const signature = token[p2 + 1 .. $];
 
             enforce(
-                jwt.signature == doSign(alg, toBeSigned, secret),
+                signature == doSign(alg, toBeSigned, secret),
                 new JwtException(JwtVerifFailure.signature, "JWT verification failed: signature mismatch")
             );
 
-            return jwt;
+            return Jwt(token);
         }
         catch (JwtException ex)
         {
@@ -148,67 +168,77 @@ struct Jwt
         }
         catch (Exception ex)
         {
+            // this will be either Json or Base64 exceptions
             throw new JwtException(JwtVerifFailure.structure, ex.msg);
         }
     }
 
-    @property string token() const
+    @property string token() const nothrow
     {
         return _token;
     }
 
-    string toString() const
+    string toString() const nothrow
     {
         return _token;
     }
 
-    @property string headerBase64() const
+    @property string headerBase64() const nothrow
     {
         return _token[0 .. point1];
     }
 
-    @property string headerString() const
+    // this function and some others can be nothrow because
+    // Jwt is built with verified token string and because
+    // constructor is private
+
+    @property string headerString() const nothrow
     {
+        scope (failure)
+            assert(false);
         return decodeBase64(headerBase64);
     }
 
-    @property Json header() const
+    @property Json header() const nothrow
     {
-        return parseJsonString(headerString);
+        scope (failure)
+            assert(false);
+        return parseJsonString(decodeBase64(headerBase64));
     }
 
-    @property string payloadBase64() const
+    @property string payloadBase64() const nothrow
     {
         return _token[point1 + 1 .. point2];
     }
 
-    @property string payloadString() const
+    @property string payloadString() const nothrow
     {
+        scope (failure)
+            assert(false);
         return decodeBase64(payloadBase64);
     }
 
-    @property Json payload() const
+    @property Json payload() const nothrow
     {
-        return parseJsonString(payloadString);
+        scope (failure)
+            assert(false);
+        return parseJsonString(decodeBase64(payloadBase64));
     }
 
-    @property string signature() const
+    @property string signature() const nothrow
     {
         return _token[point2 + 1 .. $];
     }
 
-    static struct VerifOpts
-    {
-        Flag!"checkExpired" checkExpired;
-    }
-
-    private size_t point1() const
+    private size_t point1() const nothrow
     {
         return indexOf(_token, '.');
     }
 
-    private @property size_t point2() const
+    private @property size_t point2() const nothrow
     {
+        scope (failure)
+            assert(false);
         return lastIndexOf(_token, '.');
     }
 }
@@ -242,7 +272,7 @@ unittest
     assertThrown(Jwt.verify(jwt.token, "test-secret", Jwt.VerifOpts(Yes.checkExpired)));
 }
 
-private @property string algToString(Alg alg)
+private @property string algToString(Alg alg) nothrow
 {
     final switch (alg)
     {
@@ -262,7 +292,7 @@ private @property Alg stringToAlg(string alg)
     }
 }
 
-private string doSign(Alg alg, const(char)[] toBeSigned, const(char)[] secret)
+private string doSign(Alg alg, const(char)[] toBeSigned, const(char)[] secret) nothrow
 {
     final switch (alg)
     {
@@ -278,7 +308,7 @@ private string decodeBase64(const(char)[] base64) @trusted
     return assumeUnique(cast(const(char)[]) Base64URLNoPadding.decode(base64));
 }
 
-private string encodeBase64(const(ubyte)[] data) @trusted
+private string encodeBase64(const(ubyte)[] data) @trusted nothrow
 {
     return assumeUnique(cast(const(char)[]) Base64URLNoPadding.encode(data));
 }
