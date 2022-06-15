@@ -4,17 +4,43 @@ import vibe.data.json;
 
 import std.algorithm;
 import std.base64;
-import std.datetime.systime;
+import std.datetime;
 import std.digest.hmac;
 import std.digest.sha;
 import std.exception;
 import std.string;
+import std.typecons;
 
 @safe:
 
 enum Alg
 {
     HS256,
+}
+
+long toJwtTime(SysTime time)
+{
+    return time.toUnixTime!long();
+}
+
+SysTime fromJwtTime(long jwtTime)
+{
+    return SysTime.fromUnixTime(jwtTime, UTC());
+}
+
+@("toJwtTime/fromJwtTime")
+unittest
+{
+    const st = SysTime(DateTime(Date(2022, 06, 12), TimeOfDay(20, 11, 18)), UTC());
+    const jt = 1_655_064_678;
+
+    assert(fromJwtTime(jt) == st);
+    assert(toJwtTime(st) == jt);
+}
+
+long jwtNow()
+{
+    return toJwtTime(Clock.currTime(UTC()));
 }
 
 struct Jwt
@@ -36,6 +62,17 @@ struct Jwt
         return token;
     }
 
+    @property bool isToken() const
+    {
+        if (!token.length)
+            return false;
+        if (token.count('.') != 2)
+            return false;
+        const p1 = point1;
+        const p2 = point2;
+        return p1 > 1 && p2 > (p1 + 1) && token.length > (p2 + 1);
+    }
+
     @property string headerBase64() const
     in (isToken)
     {
@@ -47,7 +84,7 @@ struct Jwt
         return decodeBase64(headerBase64);
     }
 
-    @property Json headerJson() const
+    @property Json header() const
     {
         return parseJsonString(headerString);
     }
@@ -63,7 +100,7 @@ struct Jwt
         return decodeBase64(payloadBase64);
     }
 
-    @property Json payloadJson() const
+    @property Json payload() const
     {
         return parseJsonString(payloadString);
     }
@@ -74,13 +111,18 @@ struct Jwt
         return token[point2 + 1 .. $];
     }
 
+    static struct VerifOpts
+    {
+        Flag!"checkExpired" checkExpired;
+    }
+
     /// verify the token
-    bool verify(string secret) const
+    bool verify(string secret, VerifOpts opts = VerifOpts.init) const
     in (isToken)
     {
-        const header = headerJson;
-        const typJson = header["typ"];
-        const algJson = header["alg"];
+        const head = header;
+        const typJson = head["typ"];
+        const algJson = head["alg"];
         enforce(
             typJson.type != Json.Type.undefined && algJson.type != Json.Type.undefined,
             "Ill-formed JWT header"
@@ -93,7 +135,25 @@ struct Jwt
         const alg = stringToAlg(algJson.get!string);
 
         const toBeSigned = token[0 .. point2];
-        return signature == doSign(alg, toBeSigned, secret);
+        if (signature != doSign(alg, toBeSigned, secret))
+            return false;
+
+        if (opts.checkExpired)
+        {
+            auto exp = payload["exp"];
+            enforce(
+                exp.type != Json.Type.undefined,
+                `missing "exp" field in payload`
+            );
+            enforce(
+                exp.type == Json.Type.int_,
+                `invalid "exp" field in payload`
+            );
+            const expTime = exp.get!int;
+            if (expTime <= jwtNow())
+                return false;
+        }
+        return true;
     }
 
     private size_t point1() const
@@ -104,17 +164,6 @@ struct Jwt
     private @property size_t point2() const
     {
         return lastIndexOf(token, '.');
-    }
-
-    private bool isToken() const
-    {
-        if (!token.length)
-            return false;
-        if (token.count('.') != 2)
-            return false;
-        const p1 = point1;
-        const p2 = point2;
-        return p1 > 1 && p2 > (p1 + 1) && token.length > (p2 + 1);
     }
 }
 
@@ -133,13 +182,14 @@ unittest
     const jwt = Jwt.sign(payload, secret, Alg.HS256);
 
     assert(jwt.token ==
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." ~
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." ~
             "eyJlbWFpbCI6InRlc3RAZG9wYW1pbmUub3JnIiwic3ViIjoxMiwiZXhwIjoxNjU1MDY0Njc4fQ" ~
             ".23Fpp0DtZvJeqjIQ1aenzd0RHpy6aGQJYjxjf1JuDLw"
     );
     assert(jwt.headerString == `{"alg":"HS256","typ":"JWT"}`);
     assert(jwt.payloadString == `{"email":"test@dopamine.org","sub":12,"exp":1655064678}`);
     assert(jwt.verify("test-secret"));
+    assert(!jwt.verify("test-secret", Jwt.VerifOpts(Yes.checkExpired)));
 }
 
 private @property string algToString(Alg alg)

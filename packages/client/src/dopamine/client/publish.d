@@ -21,6 +21,7 @@ import dopamine.util;
 import squiz_box;
 
 import std.algorithm;
+import std.base64;
 import std.conv;
 import std.digest.sha;
 import std.exception;
@@ -157,14 +158,14 @@ int publishMain(string[] args)
             new ErrorLogException(
                 "Publish requires the recipe to be under version control.\n" ~
                 "Run with %s to skip this check.", info("--skip-repo-clean")
-            ),
+        ),
         );
         enforce(
             isRepoClean(cvs, absRdir),
             new ErrorLogException(
                 "Publish is only possible if repo is clean.\n" ~
                 "Run with %s to skip this check.", info("--skip-repo-clean")
-            ),
+        ),
         );
     }
 
@@ -217,12 +218,13 @@ int publishMain(string[] args)
         return 1;
     }
 
+    logInfo("Publish: Recipe integrity %s", success("OK"));
+
     auto key = enforce(
         readLoginKey(),
         new ErrorLogException(
             "Publishing requires to be logged-in. Get a login key on the registry front-end and run %s.",
-            info("dop login [your key]"),
-    )
+            info("dop login [your key]")),
     );
 
     auto registry = new Registry(key);
@@ -230,8 +232,8 @@ int publishMain(string[] args)
     req.name = recipe.name;
     req.ver = recipe.ver.toString();
     req.revision = recipe.revision;
-    req.archiveSha256 = dig.finish().dup;
-    req.archive = cast(const(ubyte)[]) read(archivePath);
+    req.archiveSha256 = Base64.encode(dig.finish()[]);
+    req.archive = Base64.encode(cast(const(ubyte)[]) read(archivePath));
     auto resp = registry.sendRequest(req);
     if (!resp)
     {
@@ -246,7 +248,8 @@ int publishMain(string[] args)
         if (resp.payload.newPkg)
             logInfo("Publish: New package - %s", info(pkg.name));
 
-        logInfo("Publish: %s - %s/%s/%s", success("OK"), info(pkg.name), info(rec.ver), rec.revision);
+        logInfo("Publish: %s - %s/%s/%s", success("OK"), info(pkg.name), info(rec.ver), rec
+                .revision);
     }
     return 0;
 }

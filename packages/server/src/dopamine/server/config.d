@@ -11,6 +11,10 @@ struct Config
     /// Read from $DOP_SERVER_HOSTNAME
     string serverHostname;
 
+    /// Secret of JWT signature
+    /// Read from $DOP_SERVER_JWTSECRET
+    string serverJwtSecret;
+
     /// Connection string of the database
     /// Read from $DOP_DB_CONNSTRING
     string dbConnString;
@@ -35,6 +39,9 @@ struct Config
         {
             c.serverHostname = environment.get(
                 "DOP_SERVER_HOSTNAME", "localhost:3000"
+            );
+            c.serverJwtSecret = environment.get(
+                "DOP_SERVER_JWTSECRET", "test-secret"
             );
 
             c.dbConnString = environment.get(

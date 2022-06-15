@@ -5,6 +5,7 @@ import dopamine.server.db;
 import dopamine.api.attrs;
 import dopamine.api.v1;
 import dopamine.semver;
+import jwt;
 import pgd.conn;
 
 import squiz_box;
@@ -83,12 +84,13 @@ class DopRegistry
         router = new URLRouter(prefix);
 
         setupRoute!GetPackage(router, &getPackage);
+
+        setupRoute!PostRecipe(router, &postRecipe);
         setupRoute!GetLatestRecipeRevision(router, &getLatestRecipeRevision);
         setupRoute!GetRecipeRevision(router, &getRecipeRevision);
         setupRoute!GetRecipe(router, &getRecipe);
         setupRoute!GetRecipeFiles(router, &getRecipeFiles);
         setupDownloadRoute!DownloadRecipeArchive(router, &downloadRecipeArchive);
-        setupRoute!PostRecipe(router, &postRecipe);
 
         if (conf.testStopRoute)
             router.post("/stop", &stop);
@@ -313,7 +315,7 @@ class DopRegistry
                 `
                     INSERT INTO package (name, maintainer_id, created)
                     VALUES ($1, $2, CURRENT_TIMESTAMP)
-                    RETURNING (name, maintainer_id, created)
+                    RETURNING name, maintainer_id, created
                 `,
                 packName, userId
             );
@@ -373,6 +375,7 @@ class DopRegistry
     NewRecipeResp postRecipe(int userId, PostRecipe req) @safe
     {
         // FIXME: package name rules
+        import std.stdio;
         enforceStatus(
             Semver.isValid(req.ver), 400, "Invalid package version (not Semver compliant)"
         );
@@ -380,8 +383,11 @@ class DopRegistry
             req.revision.length, 400, "Invalid package revision"
         );
 
+        const archiveSha256 = Base64.decode(req.archiveSha256);
+        const archive = Base64.decode(req.archive);
+
         string recipe;
-        auto files = checkAndReadRecipeArchive(req.archive, req.archiveSha256, recipe);
+        auto files = checkAndReadRecipeArchive(archive, archiveSha256, recipe);
 
         return client.transac((scope db) @safe {
             bool newPkg;
@@ -409,18 +415,23 @@ class DopRegistry
                         recipe,
                         archive_data
                     ) VALUES (
-                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7
+                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6
                     )
-                    RETURNING (
+                    RETURNING
                         id,
                         maintainer_id,
                         created,
                         version,
                         revision,
                         recipe
-                    )
-                `, req.name, userId, req.ver, req.revision, req.archive
+                `, req.name, userId, req.ver, req.revision, recipe, archive
             );
+
+            const doubleCheck = db.execScalar!(const(ubyte)[])(
+                `SELECT digest(archive_data, 'sha256') FROM recipe WHERE id = $1`, recipeRow.id
+            );
+            enforce(doubleCheck == archiveSha256, "Could not verify archive integrity after insert");
+
             foreach (f; files)
                 db.exec(
                     `INSERT INTO recipe_file (recipe_id, name, size) VALUES ($1, $2, $3)`,
@@ -536,26 +547,26 @@ HTTPServerRequestDelegateS genericHandler(H)(H handler) @safe
     static assert(is(typeof(handler(HTTPServerRequest.init, HTTPServerResponse.init)) == void));
 
     return (scope req, scope resp) @safe {
+        logInfo("--> %s %s", req.method, req.requestURI);
         try
         {
-            logInfo("--> %s %s", req.method, req.requestURI);
             handler(req, resp);
         }
         catch (ResourceNotFoundException ex)
         {
-            () @trusted { logError("Not found error: %s", ex.msg); }();
+            () @trusted { logError("Not found error: %s", ex); }();
             resp.statusCode = 404;
             resp.writeBody(ex.msg);
         }
         catch (StatusException ex)
         {
-            () @trusted { logError("Status error: %s", ex.msg); }();
+            () @trusted { logError("Status error: %s", ex); }();
             resp.statusCode = ex.statusCode;
             resp.writeBody(ex.msg);
         }
         catch (Exception ex)
         {
-            () @trusted { logError("Internal error: %s", ex.msg); }();
+            () @trusted { logError("Internal error: %s", ex); }();
             resp.statusCode = 500;
             resp.writeBody("Internal Server Error");
         }
@@ -581,8 +592,7 @@ private void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
     auto routeHandler = genericHandler((scope HTTPServerRequest httpReq, scope HTTPServerResponse httpResp) @safe {
         static if (requiresAuth)
         {
-            // const userId = enforceAuth(httpReq);
-            const userId = 1;
+            const userId = enforceAuth(httpReq);
         }
         auto req = adaptRequest!ReqT(httpReq);
         static if (requiresAuth)
@@ -599,9 +609,13 @@ private void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
     enum reqAttr = RequestAttr!ReqT;
 
     static if (reqAttr.method == Method.GET)
+    {
         router.get(reqAttr.resource, routeHandler);
+    }
     else static if (reqAttr.method == Method.POST)
+    {
         router.post(reqAttr.resource, routeHandler);
+    }
     else
         static assert(false);
 }
@@ -626,25 +640,47 @@ private int enforceAuth(scope HTTPServerRequest req)
         head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
         400, "Ill-formed authorization header"
     );
-    const jwt = head[bearer.length .. $].strip();
+    const jwt = Jwt(head[bearer.length .. $].strip());
+    enforceStatus(
+        jwt.isToken,
+        400, "Ill-formed authorization header"
+    );
     return enforceJwtValid(jwt);
 }
 
-private int enforceJwtValid(string jwt)
+private int enforceJwtValid(Jwt jwt)
 {
-    const parts = jwt.split('.');
-    enforceStatus(
-        parts.length == 3, 400, "Ill-formed authorization header"
-    );
-
-    // FIXME: validate JWT
-    const payload = parts[1];
-    const str = cast(string) Base64URLNoPadding.decode(payload);
-    const json = parseJsonString(str);
-    return json["sub"].get!int;
+    const config = Config.get;
+    try
+    {
+        enforceStatus(
+            jwt.verify(config.serverJwtSecret),
+            403, "Invalid or expired token");
+    }
+    catch(Exception ex)
+    {
+        statusError(400, "Invalid authorization header");
+    }
+    return jwt.payload["sub"].get!int;
 }
 
 private ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
+{
+    enum reqAttr = RequestAttr!ReqT;
+    static if (reqAttr.method == Method.GET)
+        return adaptGetRequest!ReqT(httpReq);
+    else static if (reqAttr.method == Method.POST)
+        return adaptPostRequest!ReqT(httpReq);
+    else
+        static assert(false, "unimplemented method: " ~ reqAttr.method.stringof);
+}
+
+private ReqT adaptPostRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
+{
+    return deserializeJson!ReqT(httpReq.json);
+}
+
+private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
 {
     enum reqAttr = RequestAttr!ReqT;
     static assert(
