@@ -2,6 +2,8 @@ module dopamine.server.config;
 
 import std.conv;
 
+@safe:
+
 /// Server and configuration.
 /// Fields are read from environment variables.
 /// Defaults values should suit development environement.

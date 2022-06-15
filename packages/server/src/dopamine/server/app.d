@@ -630,7 +630,7 @@ private void setupDownloadRoute(ReqT, H)(URLRouter router, H handler) @safe
     router.match(HTTPMethod.GET, reqAttr.resource, downloadHandler);
 }
 
-private int enforceAuth(scope HTTPServerRequest req)
+private int enforceAuth(scope HTTPServerRequest req) @safe
 {
     const head = enforceStatus(
         req.headers.get("authorization"), 401, "Authorization required"
@@ -648,7 +648,7 @@ private int enforceAuth(scope HTTPServerRequest req)
     return enforceJwtValid(jwt);
 }
 
-private int enforceJwtValid(Jwt jwt)
+private int enforceJwtValid(Jwt jwt) @safe
 {
     const config = Config.get;
     try
