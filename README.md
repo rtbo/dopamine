@@ -57,70 +57,62 @@ Because it is packaging a 3rd party library, it has to download the source,
 and perform a few adjustement in the build options.
 
 ```lua
-return {
-    name = 'libpng',
-    version = '1.6.37',
-    description = 'The PNG reference library',
-    authors = {'The PNG Reference Library Authors'},
-    license = 'http://www.libpng.org/pub/png/src/libpng-LICENSE.txt',
-    copyright = 'Copyright (c) 1995-2019 The PNG Reference Library Authors',
-    langs = {'c'},
+name = 'libpng'
+version = '1.6.37'
+description = 'The PNG reference library'
+authors = {'The PNG Reference Library Authors'}
+license = 'http://www.libpng.org/pub/png/src/libpng-LICENSE.txt'
+copyright = 'Copyright (c) 1995-2019 The PNG Reference Library Authors'
+langs = {'c'}
 
-    dependencies = {zlib = '>=1.2.5'},
+dependencies = {zlib = '>=1.2.5'}
 
-    source = function (self)
-        local folder = 'libpng-' .. self.version
-        local archive = folder .. '.tar.xz'
-        dop.download {
-            url = 'https://download.sourceforge.net/libpng/' .. archive,
-            dest = archive,
-        }
-        dop.checksum {
-            archive,
-            sha256 = '505e70834d35383537b6491e7ae8641f1a4bed1876dbfe361201fc80868d88ca',
-        }
-        dop.extract_archive {archive = archive, outdir = '.'}
+function source ()
+    local folder = 'libpng-' .. version
+    local archive = folder .. '.tar.xz'
+    dop.download {
+        url = 'https://download.sourceforge.net/libpng/' .. archive,
+        dest = archive,
+    }
+    dop.checksum {
+        archive,
+        sha256 = '505e70834d35383537b6491e7ae8641f1a4bed1876dbfe361201fc80868d88ca',
+    }
+    dop.extract_archive {archive = archive, outdir = '.'}
 
-        return folder
-    end,
+    return folder
+end
 
-    build = function (self, dirs, config, dep_infos)
-        local cmake = dop.CMake:new(config.profile)
+function build (dirs, config, dep_infos)
+    -- build is executed from a directory suitable for out-of-tree build
+    local zlib = dep_infos.zlib
 
-        dop.mkdir {dirs.build, recurse = true}
-        dop.from_dir(dirs.build, function()
+    cmake_defs = {
+        ['PNG_TESTS'] = false,
+    }
 
-            local zlib = dep_infos.zlib
+    if not zlib.system then
+        cmake_defs['ZLIB_INCLUDE_DIR'] = dop.path(zlib.install_dir, 'include')
+        cmake_defs['ZLIB_LIBRARY'] = dop.path(zlib.install_dir, 'lib', 'libz.so')
+    end
 
-            cmake_defs = {
-                ['PNG_TESTS'] = false,
-            }
+    local cmake = dop.CMake:new(config.profile)
 
-            if not zlib.system then
-                cmake_defs['ZLIB_INCLUDE_DIR'] = dop.path(zlib.install_dir, 'include')
-                cmake_defs['ZLIB_LIBRARY'] = dop.path(zlib.install_dir, 'lib', 'libz.so')
-            end
-
-            cmake:configure({
-                src_dir = dirs.src,
-                install_dir = dirs.install,
-                defs = cmake_defs,
-            })
-            cmake:build()
-            cmake:install()
-        end)
-
-        -- return whether the build could be installed in dirs.install
-        return true
-    end,
-}
+    cmake:configure({
+        src_dir = dirs.src,
+        install_dir = dirs.install,
+        defs = cmake_defs,
+    })
+    cmake:build()
+    cmake:install()
+end
 ```
 
 ## Build
 
-Dopamine is built with `meson`.
+Dopamine is developed and built with `meson`.
 You need the following tools:
- - meson
+ - meson (>= 0.63)
  - ninja
  - a D compiler (either DMD or LDC)
  - Dub (dopamine depends on vibe-d)
@@ -136,7 +128,7 @@ ninja # or meson compile
 ninja test # or meson test
 
 # you can now run the dop client
-client/dop -h
+packages/client/dop -h
 ```
 
 ### Windows
@@ -158,5 +150,5 @@ ninja rem or meson compile
 ninja test rem or meson test
 
 rem you can now run the dop client
-client\dop.exe -h
+packages\client\dop.exe -h
 ```
