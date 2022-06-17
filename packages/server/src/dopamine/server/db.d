@@ -1,3 +1,6 @@
+/// Extension of PGD for Vibe.d applications:
+/// - DbClient (connection pool)
+/// - polling/waiting done with vibe.d API
 module dopamine.server.db;
 
 import pgd.conn;
