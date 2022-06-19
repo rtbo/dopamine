@@ -25,6 +25,14 @@ struct Config
     /// Read from $DOP_DB_POOLMAXSIZE
     uint dbPoolMaxSize;
 
+    /// Github OAuth client Id
+    /// Read from $DOP_GITHUB_CLIENTID
+    string githubClientId;
+
+    /// Github OAuth client secret
+    /// Read from $DOP_GITHUB_CLIENTSECRET
+    string githubClientSecret;
+
     /// Whether to setup a stop route
     /// Only used in testing
     /// Read from $DOP_TEST_STOPROUTE
@@ -52,6 +60,14 @@ struct Config
             c.dbPoolMaxSize = environment.get(
                 "DOP_DB_POOLMAXSIZE", "1"
             ).to!uint;
+
+            c.githubClientId = environment.get(
+                "DOP_GITHUB_CLIENTID", "3f2f6c2ce1e0bdf8ae6c"
+            );
+
+            c.githubClientSecret = environment.get(
+                "DOP_GITHUB_CLIENTSECRET", "Not a secret"
+            );
 
             c.testStopRoute = environment.get("DOP_TEST_STOPROUTE", null) !is null;
 
