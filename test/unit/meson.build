@@ -12,22 +12,10 @@ dop_ut_inc = [dop_common_inc, dop_inc, dop_client_inc, pgd_inc, jwt_inc, dop_adm
 # all_mods defined in test
 subdir('test')
 
-all_mods_lib = static_library('all-mods', all_mods,
+dop_ut_exe = executable('unit-tests', all_mods, dop_ut_src,
     install: false,
     include_directories: dop_ut_inc,
-    d_import_dirs: dop_ut_imp,
     dependencies: [ut_assertions_dep, vibed_http_dep, libpq_dep, squiz_dep, dop_dep],
-    d_unittest: true,
-)
-
-all_mods_dep = declare_dependency(
-    link_with: all_mods_lib,
-)
-
-dop_ut_exe = executable('unit-tests', dop_ut_src,
-    install: false,
-    include_directories: dop_ut_inc,
-    dependencies: [all_mods_dep, ut_assertions_dep, vibed_http_dep, libpq_dep, squiz_dep, dop_dep],
     d_import_dirs: dop_ut_imp,
     d_module_versions: lua_d_versions,
     d_unittest: true,
