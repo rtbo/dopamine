@@ -1,7 +1,9 @@
 module dopamine.server.app;
 
+import dopamine.server.auth;
 import dopamine.server.config;
 import dopamine.server.db;
+import dopamine.server.utils;
 import dopamine.api.attrs;
 import dopamine.api.v1;
 import dopamine.semver;
@@ -28,34 +30,6 @@ import std.string;
 import std.traits;
 import std.typecons;
 
-class StatusException : Exception
-{
-    int statusCode;
-    string reason;
-
-    this(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
-    {
-        super(format!"%s: %s%s"(statusCode, httpStatusText(statusCode), reason ? "\n" ~ reason : ""), file, line);
-        this.statusCode = statusCode;
-        this.reason = reason;
-    }
-}
-
-T enforceStatus(T)(T condition, int statusCode, string reason = null,
-    string file = __FILE__, size_t line = __LINE__) @safe
-{
-    static assert(is(typeof(!condition)), "condition must cast to bool");
-    if (!condition)
-        throw new StatusException(statusCode, reason, file, line);
-    return condition;
-}
-
-noreturn statusError(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
-{
-    throw new StatusException(statusCode, reason, file, line);
-}
-
-enum currentApiLevel = 1;
 
 version (DopServerMain) void main(string[] args)
 {
@@ -70,18 +44,18 @@ version (DopServerMain) void main(string[] args)
 class DopRegistry
 {
     HTTPServerSettings settings;
-    DbClient client;
     URLRouter router;
 
     this()
     {
         const conf = Config.get;
 
-        client = new DbClient(conf.dbConnString, conf.dbPoolMaxSize);
         settings = new HTTPServerSettings(conf.serverHostname);
 
         const prefix = format("/api/v%s", currentApiLevel);
         router = new URLRouter(prefix);
+
+        router.post("/auth", &handleAuth);
 
         setupRoute!GetPackage(router, &getPackage);
 
@@ -375,7 +349,6 @@ class DopRegistry
     NewRecipeResp postRecipe(int userId, PostRecipe req) @safe
     {
         // FIXME: package name rules
-        import std.stdio;
         enforceStatus(
             Semver.isValid(req.ver), 400, "Invalid package version (not Semver compliant)"
         );
@@ -667,12 +640,14 @@ private ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!R
         static assert(false, "unimplemented method: " ~ reqAttr.method.stringof);
 }
 
-private ReqT adaptPostRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
+private ReqT adaptPostRequest(ReqT)(scope HTTPServerRequest httpReq)
+        if (isRequest!ReqT)
 {
     return deserializeJson!ReqT(httpReq.json);
 }
 
-private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
+private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
+        if (isRequest!ReqT)
 {
     enum reqAttr = RequestAttr!ReqT;
     static assert(
