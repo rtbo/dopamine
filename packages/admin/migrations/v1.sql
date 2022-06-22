@@ -3,6 +3,7 @@ CREATE EXTENSION "pgcrypto";
 CREATE TABLE "user" (
     "id"            serial PRIMARY KEY,
     "email"         text NOT NULL,
+    "name"          text,
     "avatar_url"    text,
 
     UNIQUE("email")
