@@ -1,10 +1,11 @@
 module dopamine.server.app;
 
 import dopamine.server.config;
-import dopamine.server.cors;
 import dopamine.server.db;
 import dopamine.server.utils;
 import dopamine.server.v1;
+
+import cors_vibe;
 
 import vibe.core.core;
 import vibe.core.log;

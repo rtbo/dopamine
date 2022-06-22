@@ -1,10 +1,9 @@
-module dopamine.server.cors;
+module cors_vibe;
 
 import vibe.http.common;
 import vibe.http.server;
 
 import std.algorithm;
-import std.string;
 
 // porting (more or less) npm cors package
 
@@ -72,6 +71,7 @@ private class Cors : HTTPServerRequestHandlerS
     this(CorsOptions opts)
     {
         import std.conv;
+        import std.string;
 
         this.opts = opts;
 
