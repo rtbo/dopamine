@@ -58,7 +58,7 @@ struct TokenResp
 {
     @Name("token_type") string tokenType;
     @Name("access_token") string accessToken;
-    @Name("error_description") string errorDesc;
+    @optional @Name("error_description") string errorDesc;
 }
 
 struct UserResp
@@ -71,7 +71,7 @@ struct UserResp
 @OrderedCols
 struct UserRow
 {
-    string id;
+    int id;
     string email;
     string name;
     string avatarUrl;
@@ -121,10 +121,8 @@ void handleAuth(scope HTTPServerRequest req, scope HTTPServerResponse resp)
             INSERT INTO "user" (email, name, avatar_url)
             VALUES ($1, $2, $3)
             ON CONFLICT(email) DO
-            UPDATE "user" SET
-                name = EXCLUDED.name,
-                avatar_url = EXCLUDED.avatar_url
-            WHERE email = EXCLUDED.email
+            UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
+            WHERE "user".email = EXCLUDED.email
             RETURNING id, email, name, avatar_url
         `, userResp.email, userResp.name, userResp.avatarUrl);
     });
