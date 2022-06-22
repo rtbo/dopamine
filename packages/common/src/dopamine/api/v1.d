@@ -4,8 +4,6 @@ import dopamine.api.attrs;
 
 import std.datetime.systime;
 
-enum level = 1;
-
 struct PackageResource
 {
     string name;
@@ -14,7 +12,7 @@ struct PackageResource
     string[] versions;
 }
 
-@Request(Method.GET, "/packages/:name", level)
+@Request(Method.GET, "/v1/packages/:name")
 @Response!PackageResource
 struct GetPackage
 {
@@ -31,7 +29,7 @@ struct RecipeResource
     SysTime created;
 }
 
-@Request(Method.GET, "/packages/:name/:version/latest", level)
+@Request(Method.GET, "/v1/packages/:name/:version/latest")
 @Response!RecipeResource
 struct GetLatestRecipeRevision
 {
@@ -40,7 +38,7 @@ struct GetLatestRecipeRevision
     string ver;
 }
 
-@Request(Method.GET, "/packages/:name/:version/:revision", level)
+@Request(Method.GET, "/v1/packages/:name/:version/:revision")
 @Response!RecipeResource
 struct GetRecipeRevision
 {
@@ -51,7 +49,7 @@ struct GetRecipeRevision
 }
 
 
-@Request(Method.GET, "/recipes/:id", level)
+@Request(Method.GET, "/v1/recipes/:id")
 @Response!RecipeResource
 struct GetRecipe
 {
@@ -64,14 +62,14 @@ struct RecipeFile
     uint size;
 }
 
-@Request(Method.GET, "/recipes/:id/files", level)
+@Request(Method.GET, "/v1/recipes/:id/files")
 @Response!(const(RecipeFile)[])
 struct GetRecipeFiles
 {
     int id;
 }
 
-@Request(Method.GET, "/recipes/:id/archive", level)
+@Request(Method.GET, "/v1/recipes/:id/archive")
 @DownloadEndpoint
 struct DownloadRecipeArchive
 {
@@ -85,7 +83,7 @@ struct NewRecipeResp
     RecipeResource recipe;
 }
 
-@Request(Method.POST, "/recipes", level)
+@Request(Method.POST, "/v1/recipes")
 @Response!NewRecipeResp
 @RequiresAuth
 struct PostRecipe

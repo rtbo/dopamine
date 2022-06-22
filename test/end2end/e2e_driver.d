@@ -890,7 +890,7 @@ final class Registry
             return res.status;
         }
 
-        const stopUrl = url ~ "/api/v1/stop";
+        const stopUrl = url ~ "/api/stop";
         auto settings = new HTTPClientSettings;
         settings.defaultKeepAliveTimeout = 0.msecs;
 

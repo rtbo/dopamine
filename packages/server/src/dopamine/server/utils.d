@@ -46,8 +46,6 @@ noreturn statusError(int statusCode, string reason = null, string file = __FILE_
     throw new StatusException(statusCode, reason, file, line);
 }
 
-enum currentApiLevel = 1;
-
 T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
 {
     try

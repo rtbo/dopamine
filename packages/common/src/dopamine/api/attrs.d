@@ -16,7 +16,6 @@ struct Request
 {
     Method method;
     string resource;
-    int apiLevel;
 }
 
 /// Decorator for a request type that requires authentification

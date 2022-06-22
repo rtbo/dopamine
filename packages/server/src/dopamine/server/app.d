@@ -39,7 +39,7 @@ class DopRegistry
 
         settings = new HTTPServerSettings(conf.serverHostname);
 
-        const prefix = format("/api/v%s", currentApiLevel);
+        const prefix = format("/api");
         router = new URLRouter(prefix);
 
         router.any("*", cors());
@@ -69,5 +69,4 @@ class DopRegistry
     {
         logInfo("fallback for %s", req.requestURI);
     }
-
 }

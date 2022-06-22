@@ -206,8 +206,6 @@ class Registry
         enum method = reqAttr.method;
         enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
 
-        static assert(reqAttr.apiLevel >= 1, "Invalid API Level: " ~ reqAttr.apiLevel.to!string);
-
         RawRequest raw;
         raw.method = method.toCurl();
         raw.resource = requestResource(req);
@@ -254,7 +252,6 @@ class Registry
             reqAttr.method == Method.GET,
             "Download end-points are only valid for GET requests"
         );
-        static assert(reqAttr.apiLevel >= 1, "Invalid API Level: " ~ reqAttr.apiLevel.to!string);
 
         enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
         static if (requiresAuth)
@@ -417,7 +414,7 @@ string requestResource(ReqT)(auto ref const ReqT req)
         "Invalid resource URL: " ~ reqAttr.resource ~ " (must start by '/')"
     );
 
-    enum prefix = format("/api/v%s", reqAttr.apiLevel);
+    enum prefix = "/api";
     enum resourceParts = split(reqAttr.resource[1 .. $], '/');
 
     string resource = prefix;
@@ -535,7 +532,7 @@ string requestResource(ReqT)(auto ref const ReqT req)
     static assert(!reqAttr.resource.canFind(":"), "URL parameters not allowed for POST requests");
     static assert(getSymbolsByUDA!(ReqT, Query).length == 0, "Query parameters not allowed for POST");
 
-    enum result = format!"/api/v%s%s"(reqAttr.apiLevel, reqAttr.resource);
+    enum result = format!"/api%s"(reqAttr.resource);
     return result;
 }
 
