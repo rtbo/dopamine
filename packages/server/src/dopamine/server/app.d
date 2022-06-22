@@ -2,6 +2,7 @@ module dopamine.server.app;
 
 import dopamine.server.auth;
 import dopamine.server.config;
+import dopamine.server.cors;
 import dopamine.server.db;
 import dopamine.server.utils;
 import dopamine.api.attrs;
@@ -54,6 +55,8 @@ class DopRegistry
 
         const prefix = format("/api/v%s", currentApiLevel);
         router = new URLRouter(prefix);
+
+        router.any("*", cors());
 
         router.post("/auth", &handleAuth);
 

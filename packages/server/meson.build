@@ -3,6 +3,7 @@ dop_server_src = files([
     'src/dopamine/server/app.d',
     'src/dopamine/server/auth.d',
     'src/dopamine/server/config.d',
+    'src/dopamine/server/cors.d',
     'src/dopamine/server/db.d',
     'src/dopamine/server/pgd.d',
     'src/dopamine/server/utils.d',
