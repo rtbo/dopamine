@@ -34,6 +34,8 @@ import std.typecons;
 
 version (DopServerMain) void main(string[] args)
 {
+    setLogLevel(LogLevel.trace);
+
     auto registry = new DopRegistry();
     auto listener = registry.listen();
     scope (exit)
