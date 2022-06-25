@@ -4,8 +4,10 @@ export type QueryObj = Record<string, string | number | boolean>;
 export function encodeQuery(query: QueryObj): string {
     const res = [];
     for (const k in query) {
-        if (typeof query[k] === "boolean" && query[k]) res.push(encodeURIComponent(k));
-        else res.push(`${encodeURIComponent(k)}=${encodeURIComponent(query[k])}`);
+        if (typeof query[k] === "boolean" && query[k])
+            res.push(encodeURIComponent(k));
+        else
+            res.push(`${encodeURIComponent(k)}=${encodeURIComponent(query[k])}`);
     }
     return res.join("&");
 }
@@ -27,7 +29,7 @@ export function parseQueryString(str: string): QueryObj {
     str.split("&").forEach((param) => {
         const keyVal = param.split("=");
         const key = decodeURIComponent(keyVal[0]);
-        const val = keyVal[1] ?? decodeURIComponent(keyVal[1]);
+        const val = keyVal[1] && decodeURIComponent(keyVal[1]) || true;
         const num = +val;
         if (!isNaN(num)) {
             obj[key] = num;

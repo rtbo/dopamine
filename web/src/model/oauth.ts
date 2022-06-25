@@ -1,11 +1,11 @@
 import { resource } from "./api";
-import { encodeUrlQuery, getFullUrlPath, parseQueryString } from "./util";
+import { encodeUrlQuery, getFullUrlPath, parseQueryString, QueryObj } from "./util";
 
 import axios from "axios";
 import cryptoRandomString from "crypto-random-string";
 import { App, inject, InjectionKey, provide, ref, Ref } from "vue";
 
-type Provider = "github";
+export type Provider = "github" | "google";
 
 export interface OAuthConfig {
     apiAuthUrl: string;
@@ -16,6 +16,7 @@ interface ProviderConfig {
     clientId: string;
     requestUrl: string;
     redirectUrl: string;
+    scope: string;
 }
 
 const config: OAuthConfig = {
@@ -25,6 +26,15 @@ const config: OAuthConfig = {
             clientId: import.meta.env.VITE_GITHUB_CLIENT_ID || "3f2f6c2ce1e0bdf8ae6c",
             requestUrl: "https://github.com/login/oauth/authorize",
             redirectUrl: `${window.location.origin}/auth/github`,
+            scope: "read:user user:email"
+        },
+        google: {
+            clientId:
+                import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+                "241559404387-jf6rp461t5ikahsgrjop48jm5u97ur5t.apps.googleusercontent.com",
+            requestUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+            redirectUrl: `${window.location.origin}/auth/google`,
+            scope: "profile email openid",
         },
     },
 };
@@ -48,6 +58,14 @@ const defaultPopupOptions: PopupOptions = {
     width: 1020,
     height: 618,
 };
+
+interface PopupQuery {
+    client_id: string;
+    redirect_uri: string;
+    state: string;
+    scope: string;
+    response_type: string;
+}
 
 interface PopupResp {
     state: string;
@@ -99,27 +117,29 @@ export function provideOAuth(app: App) {
             status.value = "popup";
             loading.value = true;
 
-            const params = await doPopup(conf, state, popupOpts);
+            const params = await doPopup(provider, conf, state, popupOpts);
+
+            if (params["state"] !== state) {
+                throw new Error(`OAuth2 failure: wrong state`);
+            }
 
             status.value = "api-auth";
 
-            const apiUrl = "http://localhost:3500/api/v1/auth";
-
-            const resp = await axios.post<OAuthResult>(apiUrl, {
+            const resp = await axios.post<OAuthResult>(config.apiAuthUrl, {
                 provider,
                 code: params["code"],
-                state: params["state"],
+                redirectUri: conf.redirectUrl,
             });
 
             if (resp.status >= 400) {
-                throw new Error(`POST ${apiUrl} returned ${resp.status}: ${resp.data}`);
+                throw new Error(`POST ${config.apiAuthUrl} returned ${resp.status}: ${resp.data}`);
             }
             return resp.data;
-        } catch (e) {
+        } catch (e: any) {
             status.value = "error";
             return {
                 success: false,
-                msg: "could not log",
+                msg: e.message,
             };
         }
     }
@@ -142,11 +162,18 @@ export function useOAuth(): OAuth {
 }
 
 // open OAuth popup window of provider and return popup result
-function doPopup(config: ProviderConfig, state: string, partialOpts?: Partial<PopupOptions>): Promise<PopupResp> {
-    const query = {
+function doPopup(
+    provider: Provider,
+    config: ProviderConfig,
+    state: string,
+    partialOpts?: Partial<PopupOptions>
+): Promise<PopupResp> {
+    const query: PopupQuery = {
         client_id: config.clientId,
         redirect_uri: config.redirectUrl,
+        scope: config.scope,
         state,
+        response_type: "code",
     };
 
     const opts: Record<string, string | number> = {
@@ -154,7 +181,7 @@ function doPopup(config: ProviderConfig, state: string, partialOpts?: Partial<Po
         ...partialOpts,
     };
 
-    const popup = window.open(encodeUrlQuery(config.requestUrl, query), "Authentication", stringifyOptions(opts));
+    const popup = window.open(encodeUrlQuery(config.requestUrl, query as unknown as QueryObj), "Authentication", stringifyOptions(opts));
 
     if (popup && popup.focus) popup.focus();
 
