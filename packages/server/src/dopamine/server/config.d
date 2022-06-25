@@ -33,6 +33,14 @@ struct Config
     /// Read from $DOP_GITHUB_CLIENTSECRET
     string githubClientSecret;
 
+    /// Google OAuth client Id
+    /// Read from $DOP_GOOGLE_CLIENTID
+    string googleClientId;
+
+    /// Google OAuth client secret
+    /// Read from $DOP_GOOGLE_CLIENTSECRET
+    string googleClientSecret;
+
     /// Whether to setup a stop route
     /// Only used in testing
     /// Read from $DOP_TEST_STOPROUTE
@@ -64,9 +72,15 @@ struct Config
             c.githubClientId = environment.get(
                 "DOP_GITHUB_CLIENTID", "3f2f6c2ce1e0bdf8ae6c"
             );
-
             c.githubClientSecret = environment.get(
                 "DOP_GITHUB_CLIENTSECRET", "Not a secret"
+            );
+
+            c.googleClientId = environment.get(
+                "DOP_GOOGLE_CLIENTID", "241559404387-jf6rp461t5ikahsgrjop48jm5u97ur5t.apps.googleusercontent.com"
+            );
+            c.googleClientSecret = environment.get(
+                "DOP_GOOGLE_CLIENTSECRET", "Not a secret"
             );
 
             c.testStopRoute = environment.get("DOP_TEST_STOPROUTE", null) !is null;

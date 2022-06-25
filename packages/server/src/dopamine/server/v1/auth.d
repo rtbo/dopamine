@@ -7,6 +7,7 @@ import dopamine.server.utils;
 import jwt;
 import pgd.conn;
 
+import vibe.core.log;
 import vibe.data.json;
 import vibe.data.serialization;
 import vibe.http.client;
@@ -24,6 +25,7 @@ alias Name = vibe.data.serialization.name;
 enum Provider
 {
     github = 0,
+    google,
 }
 
 struct ProviderConfig
@@ -38,30 +40,33 @@ struct TokenReq
     @Name("client_id") string clientId;
     @Name("client_secret") string clientSecret;
     string code;
-    string state;
+    @Name("redirect_uri") string redirectUri;
+    @Name("grant_type") string grantType;
 }
 
-struct TokenResp
+struct GithubTokenResp
 {
     @Name("token_type") string tokenType;
     @Name("access_token") string accessToken;
-    @optional @Name("error_description") string errorDesc;
+    @Name("scope") string scope_;
 }
 
-struct UserResp
+struct GoogleTokenResp
 {
-    string email;
-    string name;
-    string avatarUrl;
+    @Name("token_type") string tokenType;
+    @Name("access_token") string accessToken;
+    @Name("scope") string scope_;
+    @Name("id_token") string idToken;
+    @Name("expires_in") int expiresIn;
 }
 
-@OrderedCols
-struct UserRow
+template TokenResp(Provider provider)
 {
-    int id;
-    string email;
-    string name;
-    string avatarUrl;
+    static if (provider == Provider.github)
+        alias TokenResp = GithubTokenResp;
+
+    else static if (provider == Provider.google)
+        alias TokenResp = GoogleTokenResp;
 }
 
 class AuthApi
@@ -81,61 +86,45 @@ class AuthApi
             config.githubClientId,
             config.githubClientSecret,
         );
+        providers[Provider.google] = ProviderConfig(
+            "https://oauth2.googleapis.com/token",
+            config.googleClientId,
+            config.googleClientSecret,
+        );
     }
 
     void setupRoutes(URLRouter router)
     {
-        router.post("/auth", genericHandler(&auth));
+        router.post("/v1/auth", genericHandler(&auth));
     }
 
     void auth(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
         const provider = toProvider(req.json["provider"].get!string);
-        const code = req.json["code"].get!string;
-        const state = req.json["state"].get!string;
 
         const config = providers[provider];
 
-        TokenResp token;
-        // dfmt off
-        requestHTTP(
-            config.tokenUrl,
-            (scope HTTPClientRequest req) {
-                req.method = HTTPMethod.POST;
-                req.headers["Accept"] = "application/json";
-                req.writeJsonBody(TokenReq(
-                    config.clientId,
-                    config.clientSecret,
-                    code,
-                    state
-                ));
-            },
-            (scope HTTPClientResponse resp) {
-                enforceStatus(
-                    resp.statusCode < 400, 403,
-                    "Could not request token to " ~ config.tokenUrl
-                );
-                deserializeJson(token, resp.readJson());
-                enforceStatus(token.tokenType.toLower() == "bearer", 500,
-                    "Unsupported token type: " ~ token.tokenType
-                );
-                enforceStatus(!token.errorDesc, 403, token.errorDesc);
-                enforceStatus(token.accessToken, 403, format!"Did not receive token from %s"(provider));
-            }
-        );
-        // dfmt on
+        UserResp userResp;
 
-        auto userResp = provider.getUser(token.accessToken);
+        final switch (provider)
+        {
+        case Provider.github:
+            userResp = authImpl!(Provider.github)(req.json, config);
+            break;
+        case Provider.google:
+            userResp = authImpl!(Provider.google)(req.json, config);
+            break;
+        }
 
         const row = client.connect((scope DbConn db) {
             return db.execRow!UserRow(`
-            INSERT INTO "user" (email, name, avatar_url)
-            VALUES ($1, $2, $3)
-            ON CONFLICT(email) DO
-            UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
-            WHERE "user".email = EXCLUDED.email
-            RETURNING id, email, name, avatar_url
-        `, userResp.email, userResp.name, userResp.avatarUrl);
+                INSERT INTO "user" (email, name, avatar_url)
+                VALUES ($1, $2, $3)
+                ON CONFLICT(email) DO
+                UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
+                WHERE "user".email = EXCLUDED.email
+                RETURNING id, email, name, avatar_url
+            `, userResp.email, userResp.name, userResp.avatarUrl);
         });
 
         auto payload = Json([
@@ -150,15 +139,75 @@ class AuthApi
         resp.headers["Content-Type"] = "text/plain";
         resp.writeBody(jwt.toString());
     }
+
+    UserResp authImpl(Provider provider)(Json req, ProviderConfig config)
+    {
+        const code = req["code"].get!string;
+        const redirectUri = req["redirectUri"].get!string;
+
+        TokenResp!provider token;
+
+        // dfmt off
+        requestHTTP(
+            config.tokenUrl,
+            (scope HTTPClientRequest req) {
+                req.method = HTTPMethod.POST;
+                req.headers["Accept"] = "application/json";
+                const tokReq = TokenReq(
+                    config.clientId,
+                    config.clientSecret,
+                    code,
+                    redirectUri,
+                    "authorization_code",
+                );
+                req.writeJsonBody(tokReq);
+            },
+            (scope HTTPClientResponse resp) {
+                if (resp.statusCode >= 400)
+                {
+                    import vibe.stream.operations;
+                    throw new StatusException(
+                        403,
+                        format!"Could not request token to %s: %s"(config.tokenUrl, resp.bodyReader().readAllUTF8()),
+                    );
+                }
+                auto json = resp.readJson();
+                string error;
+                if (json["error"].type != Json.Type.undefined)
+                    error = json["error"].get!string;
+                else if (json["error_description"].type != Json.Type.undefined)
+                    error = json["error_description"].get!string;
+                enforceStatus (!error, 403, error);
+                deserializeJson(token, resp.readJson());
+                enforceStatus(token.tokenType.toLower() == "bearer", 500,
+                    "Unsupported token type: " ~ token.tokenType
+                );
+                enforceStatus(token.accessToken, 403, format!"Did not receive token from %s"(provider));
+            }
+        );
+        // dfmt on
+
+        static if (provider == Provider.github)
+            return getGithubUser(token.accessToken);
+        else static if (provider == Provider.google)
+            return getGoogleUser(token.idToken);
+    }
 }
 
-UserResp getUser(Provider provider, string accessToken)
+struct UserResp
 {
-    final switch (provider)
-    {
-    case Provider.github:
-        return getGithubUser(accessToken);
-    }
+    string email;
+    string name;
+    string avatarUrl;
+}
+
+@OrderedCols
+struct UserRow
+{
+    int id;
+    string email;
+    string name;
+    string avatarUrl;
 }
 
 struct GithubUserResp
@@ -175,7 +224,7 @@ UserResp getGithubUser(string accessToken)
     // dfmt off
     requestHTTP(
         "https://api.github.com/user",
-            (scope HTTPClientRequest req) {
+        (scope HTTPClientRequest req) {
             req.method = HTTPMethod.GET;
             req.headers["Authorization"] = format!"token %s"(accessToken);
         },
@@ -188,7 +237,24 @@ UserResp getGithubUser(string accessToken)
         }
     );
     // dfmt on
+
     return UserResp(ghUser.email, ghUser.name, ghUser.avatarUrl);
+}
+
+struct GoogleUserPayload
+{
+    @optional string name;
+    @optional string picture;
+    string email;
+}
+
+UserResp getGoogleUser(string idToken)
+{
+    const jwt = ClientJwt(idToken);
+    GoogleUserPayload payload;
+    deserializeJson(payload, jwt.payload);
+
+    return UserResp(payload.email, payload.name, payload.picture);
 }
 
 Provider toProvider(string provider)
@@ -197,6 +263,8 @@ Provider toProvider(string provider)
     {
     case "github":
         return Provider.github;
+    case "google":
+        return Provider.google;
     default:
         throw new StatusException(400, "Unknown provider: " ~ provider);
     }
