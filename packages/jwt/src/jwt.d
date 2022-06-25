@@ -1,3 +1,10 @@
+/// Simple JWT implementation.
+///
+/// Only the HMAC-SHA256 signature / verify algorithm is provided.
+///
+/// Two main types are provided:
+///  - Jwt: to be used on a server to sign a Json payload, or verify a JWT allegedly signed on the same server.
+///  - ClientJwt: to be used on a client that received a JWT from a server and only want to read the payload.
 module jwt;
 
 import vibe.data.json;
@@ -58,10 +65,18 @@ enum JwtVerifFailure
     signature,
 }
 
-/// Exception thrown when verification fails
+/// Exception thrown when `Jwt.verify` fails, or if ill-formed token is passed to `ClientJwt`
 class JwtException : Exception
 {
     JwtVerifFailure cause;
+
+    private this(string token, JwtVerifFailure cause, string reason, string file = __FILE__, size_t line = __LINE__)
+    {
+        import std.format : format;
+
+        this.cause = cause;
+        super(format!"Invalid token: %s\n%s"(reason, token));
+    }
 
     private this(JwtVerifFailure cause, string msg, string file = __FILE__, size_t line = __LINE__)
     {
@@ -270,6 +285,96 @@ unittest
 
     assertNotThrown(Jwt.verify(jwt.token, "test-secret"));
     assertThrown(Jwt.verify(jwt.token, "test-secret", Jwt.VerifOpts(Yes.checkExpired)));
+}
+
+/// Similar to Jwt, but can be constructed directly from a string.
+/// The token cannot be verified, thus some functions may throw exceptions
+/// if the token is not a conform JWT.
+struct ClientJwt
+{
+    private string _token;
+
+    this(string token)
+    {
+        _token = token;
+
+        const p1 = point1;
+        const p2 = point2;
+
+        enforce (
+            p1 >= 1,
+            new JwtException(token, JwtVerifFailure.structure, "No header found")
+        );
+
+        enforce (
+            p2 < _token.length - 1,
+            new JwtException(token, JwtVerifFailure.structure, "No signature found")
+        );
+
+        enforce (
+            p1 < p2 - 1,
+            new JwtException(token, JwtVerifFailure.structure, "No payload found")
+        );
+    }
+
+    @property string token() const nothrow
+    {
+        return _token;
+    }
+
+    string toString() const nothrow
+    {
+        return _token;
+    }
+
+    @property string headerBase64() const nothrow
+    {
+        return _token[0 .. point1];
+    }
+
+    // this function and some others can be nothrow because
+    // Jwt is built with verified token string and because
+    // constructor is private
+
+    @property string headerString() const
+    {
+        return decodeBase64(headerBase64);
+    }
+
+    @property Json header() const
+    {
+        return parseJsonString(decodeBase64(headerBase64));
+    }
+
+    @property string payloadBase64() const
+    {
+        return _token[point1 + 1 .. point2];
+    }
+
+    @property string payloadString() const
+    {
+        return decodeBase64(payloadBase64);
+    }
+
+    @property Json payload() const
+    {
+        return parseJsonString(decodeBase64(payloadBase64));
+    }
+
+    @property string signature() const
+    {
+        return _token[point2 + 1 .. $];
+    }
+
+    private size_t point1() const nothrow
+    {
+        return indexOf(_token, '.');
+    }
+
+    private @property size_t point2() const
+    {
+        return lastIndexOf(_token, '.');
+    }
 }
 
 private @property string algToString(Alg alg) nothrow
