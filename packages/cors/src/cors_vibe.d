@@ -73,10 +73,7 @@ private class Cors : HTTPServerRequestHandlerS
         import std.conv;
         import std.string;
 
-        this.opts = opts;
-
         // pre-computing what can be pre-computed
-
         if (opts.allowedMethods)
             allowedMethods = opts.allowedMethods.map!(m => httpMethodString(m)).join(",");
         else
@@ -93,6 +90,8 @@ private class Cors : HTTPServerRequestHandlerS
 
         if (opts.preflightSuccessStatus == 0)
             opts.preflightSuccessStatus = 204;
+
+        this.opts = opts;
     }
 
     void handleRequest(scope HTTPServerRequest req, scope HTTPServerResponse resp)
