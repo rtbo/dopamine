@@ -17,6 +17,10 @@ struct Config
     /// Read from $DOP_SERVER_JWTSECRET
     string serverJwtSecret;
 
+    /// Origin of the front-end website
+    /// Read from $DOP_FRONTEND_ORIGIN
+    string frontendOrigin;
+
     /// Connection string of the database
     /// Read from $DOP_DB_CONNSTRING
     string dbConnString;
@@ -56,10 +60,14 @@ struct Config
         if (!initialized)
         {
             c.serverHostname = environment.get(
-                "DOP_SERVER_HOSTNAME", "localhost:3000"
+                "DOP_SERVER_HOSTNAME", "localhost:3500"
             );
             c.serverJwtSecret = environment.get(
                 "DOP_SERVER_JWTSECRET", "test-secret"
+            );
+
+            c.frontendOrigin = environment.get(
+                "DOP_FRONTEND_ORIGIN", "localhost:3000"
             );
 
             c.dbConnString = environment.get(
