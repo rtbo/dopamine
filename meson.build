@@ -51,13 +51,15 @@ if get_option('enable_test')
         method: 'dub',
         version: '2.0.3',
     )
+    stupid_gen_exe = executable('stupid_gen', 'tools/stupid_gen.d',
+        d_import_dirs: include_directories('tools'),
+    )
 endif
 
-discover_unittest = executable('discover_unittest', 'tools/discover_unittest.d')
 config_gen = executable('config_generator', 'tools/config_generator.d')
 
 subdir('packages')
 
 if get_option('enable_test')
-    subdir('test')
+    subdir('tests_e2e')
 endif

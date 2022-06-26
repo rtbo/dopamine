@@ -18,8 +18,3 @@ shared static ~this()
 {
     enforce(execute(["dub", "remove-path", testPath("pkgs")]).status == 0);
 }
-
-int main()
-{
-    return 0;
-}

@@ -23,3 +23,28 @@ pgd_dep = declare_dependency(
     dependencies: libpq_dep,
     include_directories: pgd_inc,
 )
+
+if get_option('enable_test')
+    pgd_test_src = files([
+        'src/pgd/connstring.d',
+    ])
+
+    pgd_stupid = custom_target('pgd_stupid',
+        capture: true,
+        output: 'stupid.d',
+        input: pgd_test_src,
+        command: [
+            stupid_gen_exe, '@INPUT@',
+        ],
+    )
+
+    pgd_test_exe = executable('dop-pgd-test', pgd_stupid, pgd_test_src,
+        d_unittest: true,
+        dependencies: [libpq_dep, ut_assertions_dep],
+        include_directories: include_directories('.', 'src'),
+    )
+
+    test('pgd unit tests', pgd_test_exe,
+        suite: 'unit',
+    )
+endif
