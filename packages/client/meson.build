@@ -18,3 +18,31 @@ dop_client_exe = executable('dop', dop_client_src,
     dependencies: dop_dep,
     d_module_versions: lua_d_versions + ['DopClientMain'],
 )
+
+if get_option('enable_test')
+
+    dop_client_test_src = files([
+        'src/dopamine/client/profile.d',
+        'src/dopamine/client/utils.d',
+    ])
+
+    client_stupid = custom_target('client_stupid',
+        capture: true,
+        output: 'stupid.d',
+        input: dop_client_test_src,
+        command: [
+            stupid_gen_exe, '@INPUT@',
+        ],
+    )
+
+    dop_client_test_exe = executable('dop-client-test', client_stupid, dop_client_test_src,
+        d_unittest: true,
+        include_directories: include_directories('.', 'src'),
+        dependencies: dop_dep,
+    )
+
+    test('client unit tests', dop_client_test_exe,
+        suite: 'unit',
+    )
+
+endif

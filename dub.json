@@ -13,8 +13,7 @@
     "packages/pgd/src",
     "packages/server/src",
     "subprojects/squiz-box/src",
-    "test/end2end",
-    "test/unit"
+    "tests_e2e"
   ],
   "importPaths": [
     "packages/admin/src",
@@ -27,8 +26,7 @@
     "packages/pgd/src",
     "packages/server/src",
     "subprojects/squiz-box/src",
-    "test/end2end",
-    "test/unit"
+    "tests_e2e"
   ],
   "dependencies": {
     "vibe-d:http": "0.9.4",

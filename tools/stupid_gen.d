@@ -1,4 +1,5 @@
-module tools.discover_unittest;
+/// Discover unittests and generate stupid test driver
+module tools.stupid_gen;
 
 import std.algorithm;
 import std.array;
@@ -8,7 +9,9 @@ import std.path;
 import std.stdio;
 import std.string;
 
-string processFile(string filename)
+/// return module name of the D file at filename
+/// only if it contains "unittest"
+string getUnittestMod(string filename)
 {
     string mod;
     auto file = File(filename, "r");
@@ -31,13 +34,12 @@ string processFile(string filename)
 int main(string[] args)
 {
     string root = ".";
-    string modname = "test.all_mods";
     string[] exclusions;
 
-    auto helpInfo = getopt(args, "root", &root, "exclude", &exclusions, "modname", &modname);
+    auto helpInfo = getopt(args, "root", &root, "exclude", &exclusions);
     if (helpInfo.helpWanted)
     {
-        defaultGetoptPrinter("Discover unittest files.", helpInfo.options);
+        defaultGetoptPrinter("Generate stupid test driver.", helpInfo.options);
         return 0;
     }
 
@@ -59,7 +61,7 @@ int main(string[] args)
                 continue outer;
         }
 
-        const m = processFile(f);
+        const m = getUnittestMod(f);
         if (m)
         {
             mods ~= m;
@@ -68,21 +70,30 @@ int main(string[] args)
 
     mods = mods.sort().uniq().array;
 
-    writefln("module %s;", modname);
-    writefln("");
-    writefln("import std.meta : AliasSeq;");
-    writefln("");
-    foreach (m; mods)
+    const tmplate = import("stupid.d.in");
+
+    foreach (inl; lineSplitter(tmplate))
     {
-        writefln("import %s;", m);
+        if (!inl.startsWith("// TESTED MODULES HERE"))
+        {
+            writeln(inl);
+            continue;
+        }
+
+        foreach (m; mods)
+        {
+            writefln("import %s;", m);
+        }
+        writefln("");
+        writefln("alias allModules = AliasSeq!(");
+        foreach (m; mods)
+        {
+            writefln("    %s,", m);
+        }
+        writefln(");");
+
     }
     writefln("");
-    writefln("alias allModules = AliasSeq!(");
-    foreach (m; mods)
-    {
-        writefln("    %s,", m);
-    }
-    writefln(");");
 
     return 0;
 }

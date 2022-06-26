@@ -49,3 +49,34 @@ dop_dep = declare_dependency(
     link_with: [dop_lib],
     sources: dop_conf,
 )
+
+if get_option('enable_test')
+    dop_test_src = dop_src + files([
+        'test/main.d',
+        'test/util.d',
+        'test/lua/lib.d',
+        'test/lua/ut.d',
+    ])
+
+    dop_test_imp = [dop_imp, include_directories('test/data')]
+
+    dop_stupid = custom_target('dop_stupid',
+        capture: true,
+        output: 'stupid.d',
+        input: dop_test_src,
+        command: [
+            stupid_gen_exe, '@INPUT@',
+        ],
+    )
+
+    dop_test_exe = executable('dop-dop-test', dop_stupid, dop_test_src,
+        d_unittest: true,
+        d_import_dirs: dop_test_imp,
+        dependencies: [dop_deps, ut_assertions_dep],
+        include_directories: include_directories('.', 'src'),
+    )
+
+    test('dop library unit tests', dop_test_exe,
+        suite: 'unit',
+    )
+endif

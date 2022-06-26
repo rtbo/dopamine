@@ -1,6 +1,7 @@
 // dfmt off
 /*
-	This is a slightly modified version of silly that allows integration out of DUB
+	This is a modified version of silly that allows integration out of DUB.
+	This file actually is a template used by gen_silly
 */
 /*
  * Silly is a test runner for the D programming language
@@ -11,7 +12,7 @@
 /* SPDX-License-Identifier: ISC */
 /* Copyright (c) 2018-2019, Anton Fediushin */
 
-module test.unit.test.silly;
+module stupid;
 
 version(unittest):
 
@@ -21,12 +22,20 @@ version(unittest):
 // 	static import dub_test_root;
 // }
 
-import test.all_mods : allModules;
-import dopamine.log;
-
 import core.time : Duration, MonoTime;
 import std.ascii : newline;
+import std.meta : AliasSeq;
 import std.stdio : stdout;
+
+// TESTED MODULES HERE
+
+version (NoStupidMain)
+{
+}
+else
+{
+    void main() {}
+}
 
 shared static this() {
 	import core.runtime    : Runtime, UnitTestResult;
@@ -68,8 +77,6 @@ shared static this() {
 
 			return UnitTestResult(0, 0, false, false);
 		}
-
-        minLogLevel = verbose ? LogLevel.verbose : LogLevel.error;
 
 		if(!threads)
 			threads = totalCPUs;
