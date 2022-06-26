@@ -17,6 +17,14 @@ struct Config
     /// Read from $DOP_SERVER_JWTSECRET
     string serverJwtSecret;
 
+    /// Path to the HTTPS certificate file
+    /// Read from $DOP_HTTPS_CERT
+    string httpsCert;
+
+    /// Path to the HTTPS key file
+    /// Read from $DOP_HTTPS_KEY
+    string httpsKey;
+
     /// Origin of the front-end website
     /// Read from $DOP_FRONTEND_ORIGIN
     string frontendOrigin;
@@ -52,6 +60,7 @@ struct Config
 
     static @property Config get()
     {
+        import std.path;
         import std.process : environment;
 
         static Config c;
@@ -64,6 +73,13 @@ struct Config
             );
             c.serverJwtSecret = environment.get(
                 "DOP_SERVER_JWTSECRET", "test-secret"
+            );
+
+            c.httpsCert = environment.get(
+                "DOP_HTTPS_CERT", null,
+            );
+            c.httpsKey = environment.get(
+                "DOP_HTTPS_KEY", null,
             );
 
             c.frontendOrigin = environment.get(

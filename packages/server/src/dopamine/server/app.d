@@ -12,6 +12,7 @@ import vibe.core.core;
 import vibe.core.log;
 import vibe.http.router;
 import vibe.http.server;
+import vibe.stream.tls;
 
 import std.format;
 
@@ -40,6 +41,13 @@ class DopRegistry
         client = new DbClient(conf.dbConnString, conf.dbPoolMaxSize);
 
         settings = new HTTPServerSettings(conf.serverHostname);
+
+        if (conf.httpsCert && conf.httpsKey)
+        {
+            settings.tlsContext = createTLSContext(TLSContextKind.server);
+            settings.tlsContext.useCertificateChainFile(conf.httpsCert);
+            settings.tlsContext.usePrivateKeyFile(conf.httpsKey);
+        }
 
         auto auth = new AuthApi(client);
         auto v1 = v1Api(client);

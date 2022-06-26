@@ -164,7 +164,7 @@ struct DownloadMetadata
 }
 
 /// The URL of default registry the client connects to.
-enum defaultRegistry = "http://localhost:3000";
+enum defaultRegistry = "https://localhost:3500";
 
 /// Client interface to the registry.
 class Registry
@@ -386,10 +386,6 @@ string checkHost(string host)
     import std.exception : enforce;
     import std.string : endsWith, startsWith;
 
-    enforce(
-        host.startsWith("http://"),
-        new InvalidRegistryHostException(host, "Only http:// protocol is supported")
-    );
     enforce(
         !host.endsWith("/"),
         new InvalidRegistryHostException(host, "The final '/' must be removed")
@@ -638,9 +634,9 @@ RawResponse perform(RawRequest req) @trusted
 
         http.contentLength = req.body_.length;
         if (req.contentType)
-            http.setPostData(cast(const(void)[])req.body_, req.contentType);
+            http.setPostData(cast(const(void)[]) req.body_, req.contentType);
         else
-            http.postData = cast(const(void)[])req.body_;
+            http.postData = cast(const(void)[]) req.body_;
     }
 
     auto buf = req.respBuf;
