@@ -33,6 +33,7 @@ struct Options
     string[] migrationsToRun;
     bool createTestUsers;
     string registryDir;
+    uint genCryptoPassword;
 
     static Options parse(string[] args)
     {
@@ -40,10 +41,11 @@ struct Options
 
         // dfmt off
         auto res = getopt(args,
-            "create-db",        &opts.createDb,
-            "run-migration",    &opts.migrationsToRun,
-            "create-test-users", &opts.createTestUsers,
-            "populate-from",    &opts.registryDir,
+            "create-db",            &opts.createDb,
+            "run-migration",        &opts.migrationsToRun,
+            "create-test-users",    &opts.createTestUsers,
+            "populate-from",        &opts.registryDir,
+            "gen-crypto-password",  &opts.genCryptoPassword,
         );
         // dfmt on
 
@@ -63,7 +65,7 @@ struct Options
 
     bool noop() const
     {
-        return !createDb && !migrationsToRun.length && !createTestUsers && !registryDir;
+        return !createDb && !migrationsToRun.length && !createTestUsers && !registryDir && !genCryptoPassword;
     }
 
     int checkErrors() const
@@ -100,6 +102,11 @@ version (DopAdminMain) int main(string[] args)
         return 0;
     }
 
+    if (opts.genCryptoPassword)
+    {
+        genCryptoPassword(opts.genCryptoPassword);
+    }
+
     if (int errs = opts.checkErrors())
         return errs;
 
@@ -114,8 +121,10 @@ version (DopAdminMain) int main(string[] args)
         createDatabase(db, conf.dbConnString);
     }
 
+    if (!opts.migrationsToRun && !opts.createTestUsers && !opts.registryDir)
+        return 0;
+
     auto db = new PgConn(conf.dbConnString);
-    // db.trace(stderr);
 
     scope (exit)
         db.finish();
@@ -139,6 +148,18 @@ version (DopAdminMain) int main(string[] args)
         populateRegistry(db, opts.registryDir);
 
     return 0;
+}
+
+void genCryptoPassword(uint len)
+{
+    import crypto;
+    import std.base64;
+
+    auto bytes = new ubyte[Base64.decodeLength(len) + 2];
+    cryptoRandomBytes(bytes);
+    auto b64 = Base64.encode(bytes);
+    assert(b64.length >= len, "Base64 bug!");
+    writeln(b64[0 .. len]);
 }
 
 void createDatabase(PgConn db, string connString)
