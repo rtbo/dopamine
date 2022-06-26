@@ -1,5 +1,6 @@
 module dopamine.server.app;
 
+import dopamine.server.auth;
 import dopamine.server.config;
 import dopamine.server.db;
 import dopamine.server.utils;
@@ -40,12 +41,14 @@ class DopRegistry
 
         settings = new HTTPServerSettings(conf.serverHostname);
 
+        auto auth = new AuthApi(client);
+        auto v1 = v1Api(client);
+
         const prefix = format("/api");
         router = new URLRouter(prefix);
-
         router.any("*", cors());
 
-        auto v1 = v1Api(client);
+        auth.setupRoutes(router);
         v1.setupRoutes(router);
 
         if (conf.testStopRoute)

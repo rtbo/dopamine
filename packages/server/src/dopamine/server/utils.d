@@ -1,6 +1,7 @@
 module dopamine.server.utils;
 
 import dopamine.server.config;
+import dopamine.server.auth;
 
 import dopamine.api.attrs;
 
@@ -230,32 +231,6 @@ void setupDownloadRoute(ReqT, H)(URLRouter router, H handler) @safe
 
     router.match(HTTPMethod.HEAD, reqAttr.resource, downloadHandler);
     router.match(HTTPMethod.GET, reqAttr.resource, downloadHandler);
-}
-
-private int enforceAuth(scope HTTPServerRequest req) @safe
-{
-    const config = Config.get;
-
-    const head = enforceStatus(
-        req.headers.get("authorization"), 401, "Authorization required"
-    );
-    const bearer = "bearer ";
-    enforceStatus(
-        head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
-        400, "Ill-formed authorization header"
-    );
-    try
-    {
-        const jwt = Jwt.verify(head[bearer.length .. $].strip(), config.serverJwtSecret);
-        return jwt.payload["sub"].get!int;
-    }
-    catch (JwtException ex)
-    {
-        if (ex.cause == JwtVerifFailure.structure)
-            statusError(400, "Ill-formed authorization header");
-        else
-            statusError(403, "Invalid or expired authorization token");
-    }
 }
 
 private ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)

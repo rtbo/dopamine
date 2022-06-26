@@ -20,7 +20,7 @@ interface ProviderConfig {
 }
 
 const config: OAuthConfig = {
-    apiAuthUrl: resource("/v1/auth"),
+    apiAuthUrl: resource("/auth"),
     providers: {
         github: {
             clientId: import.meta.env.VITE_GITHUB_CLIENT_ID || "3f2f6c2ce1e0bdf8ae6c",

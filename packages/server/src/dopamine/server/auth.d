@@ -1,4 +1,4 @@
-module dopamine.server.v1.auth;
+module dopamine.server.auth;
 
 import dopamine.server.config;
 import dopamine.server.db;
@@ -95,7 +95,7 @@ class AuthApi
 
     void setupRoutes(URLRouter router)
     {
-        router.post("/v1/auth", genericHandler(&auth));
+        router.post("/auth", genericHandler(&auth));
     }
 
     void auth(scope HTTPServerRequest req, scope HTTPServerResponse resp)
@@ -178,7 +178,7 @@ class AuthApi
                 else if (json["error_description"].type != Json.Type.undefined)
                     error = json["error_description"].get!string;
                 enforceStatus (!error, 403, error);
-                deserializeJson(token, resp.readJson());
+                deserializeJson(token, json);
                 enforceStatus(token.tokenType.toLower() == "bearer", 500,
                     "Unsupported token type: " ~ token.tokenType
                 );
@@ -194,7 +194,7 @@ class AuthApi
     }
 }
 
-struct UserResp
+private struct UserResp
 {
     string email;
     string name;
@@ -202,7 +202,7 @@ struct UserResp
 }
 
 @OrderedCols
-struct UserRow
+private struct UserRow
 {
     int id;
     string email;
@@ -210,14 +210,14 @@ struct UserRow
     string avatarUrl;
 }
 
-struct GithubUserResp
+private struct GithubUserResp
 {
     string email;
     string name;
     @Name("avatar_url") string avatarUrl;
 }
 
-UserResp getGithubUser(string accessToken)
+private UserResp getGithubUser(string accessToken)
 {
     GithubUserResp ghUser;
 
@@ -241,14 +241,14 @@ UserResp getGithubUser(string accessToken)
     return UserResp(ghUser.email, ghUser.name, ghUser.avatarUrl);
 }
 
-struct GoogleUserPayload
+private struct GoogleUserPayload
 {
     @optional string name;
     @optional string picture;
     string email;
 }
 
-UserResp getGoogleUser(string idToken)
+private UserResp getGoogleUser(string idToken)
 {
     const jwt = ClientJwt(idToken);
     GoogleUserPayload payload;
@@ -257,7 +257,7 @@ UserResp getGoogleUser(string idToken)
     return UserResp(payload.email, payload.name, payload.picture);
 }
 
-Provider toProvider(string provider)
+private Provider toProvider(string provider)
 {
     switch (provider)
     {
@@ -267,5 +267,31 @@ Provider toProvider(string provider)
         return Provider.google;
     default:
         throw new StatusException(400, "Unknown provider: " ~ provider);
+    }
+}
+
+int enforceAuth(scope HTTPServerRequest req) @safe
+{
+    const config = Config.get;
+
+    const head = enforceStatus(
+        req.headers.get("authorization"), 401, "Authorization required"
+    );
+    const bearer = "bearer ";
+    enforceStatus(
+        head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
+        400, "Ill-formed authorization header"
+    );
+    try
+    {
+        const jwt = Jwt.verify(head[bearer.length .. $].strip(), config.serverJwtSecret);
+        return jwt.payload["sub"].get!int;
+    }
+    catch (JwtException ex)
+    {
+        if (ex.cause == JwtVerifFailure.structure)
+            statusError(400, "Ill-formed authorization header");
+        else
+            statusError(403, "Invalid or expired authorization token");
     }
 }

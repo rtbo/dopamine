@@ -1,10 +1,10 @@
 
 dop_server_src = files([
-    'src/dopamine/server/v1/auth.d',
     'src/dopamine/server/v1/package.d',
     'src/dopamine/server/v1/recipes.d',
 
     'src/dopamine/server/app.d',
+    'src/dopamine/server/auth.d',
     'src/dopamine/server/config.d',
     'src/dopamine/server/db.d',
     'src/dopamine/server/utils.d',
