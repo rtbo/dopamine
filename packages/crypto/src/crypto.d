@@ -28,13 +28,14 @@ void cryptoRandomBytes(scope ubyte[] buf) @trusted
     else
     {
         auto res = BCryptGenRandom(null, buf.ptr, cast(ULONG) buf.length, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-        enforce(res == 0, "BCryptGenRandom failed");
+        enforce(NT_SUCCESS(res), "BCryptGenRandom failed");
     }
 }
 
 version (Windows)
 {
     import core.sys.windows.windows;
+    import core.sys.windows.ntdef;
 
     enum BCRYPT_USE_SYSTEM_PREFERRED_RNG = 0x0000_0002;
 
