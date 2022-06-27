@@ -9,6 +9,15 @@ CREATE TABLE "user" (
     UNIQUE("email")
 );
 
+CREATE TABLE "refresh_token" (
+    "token"         text PRIMARY KEY,
+    "user_id"       integer NOT NULL,
+    "expiration"    timestamptz NOT NULL,
+    "revoked"       boolean NOT NULL,
+
+    FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE
+);
+
 CREATE TABLE "user_clikey" (
     "clikey"        text PRIMARY KEY,
     "user_id"       integer NOT NULL,

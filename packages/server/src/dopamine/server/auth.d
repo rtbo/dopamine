@@ -4,6 +4,7 @@ import dopamine.server.config;
 import dopamine.server.db;
 import dopamine.server.utils;
 
+import crypto;
 import jwt;
 import pgd.conn;
 
@@ -14,6 +15,9 @@ import vibe.http.client;
 import vibe.http.router;
 import vibe.http.server;
 
+import std.base64;
+import std.datetime;
+import std.exception;
 import std.format;
 import std.string;
 import std.traits;
@@ -69,6 +73,9 @@ template TokenResp(Provider provider)
         alias TokenResp = GoogleTokenResp;
 }
 
+enum idTokenDuration = dur!"seconds"(3600);
+enum refreshTokenDuration = dur!"days"(2);
+
 class AuthApi
 {
     DbClient client;
@@ -116,8 +123,11 @@ class AuthApi
             break;
         }
 
-        const row = client.connect((scope DbConn db) {
-            return db.execRow!UserRow(`
+        auto refreshToken = Base64.encode(cryptoRandomBytes(32)).idup;
+        auto refreshTokenExp = Clock.currTime + refreshTokenDuration;
+
+        const row = client.transac((scope DbConn db) {
+            const userRow = db.execRow!UserRow(`
                 INSERT INTO "user" (email, name, avatar_url)
                 VALUES ($1, $2, $3)
                 ON CONFLICT(email) DO
@@ -125,19 +135,35 @@ class AuthApi
                 WHERE "user".email = EXCLUDED.email
                 RETURNING id, email, name, avatar_url
             `, userResp.email, userResp.name, userResp.avatarUrl);
+
+            const rt = db.execScalar!string(`
+                    INSERT INTO refresh_token (token, user_id, expiration, revoked)
+                    VALUES ($1, $2, $3, FALSE)
+                    RETURNING token
+                `, refreshToken, userRow.id, refreshTokenExp
+            );
+
+            enforce(rt == refreshToken, "Could not store refresh token in DB");
+
+            return userRow;
         });
 
         auto payload = Json([
-            "id": Json(row.id),
+            "iss": Json(Config.get.serverHostname),
+            "sub": Json(row.id),
+            "exp": Json((Clock.currTime + idTokenDuration).toUTC().toISOExtString()),
             "email": Json(row.email),
             "name": Json(row.name),
             "avatarUrl": Json(row.avatarUrl),
         ]);
 
-        auto jwt = Jwt.sign(payload, Config.get.serverJwtSecret);
+        auto idToken = Jwt.sign(payload, Config.get.serverJwtSecret);
 
-        resp.headers["Content-Type"] = "text/plain";
-        resp.writeBody(jwt.toString());
+        resp.writeJsonBody(Json([
+            "idToken": Json(idToken.toString()),
+            "refreshToken": Json(refreshToken),
+            "refreshTokenExp": Json(refreshTokenExp.toUTC().toISOExtString()),
+        ]));
     }
 
     UserResp authImpl(Provider provider)(Json req, ProviderConfig config)
