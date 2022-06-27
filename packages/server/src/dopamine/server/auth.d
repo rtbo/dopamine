@@ -27,6 +27,17 @@ import std.typecons;
 
 alias Name = vibe.data.serialization.name;
 
+@OrderedCols
+struct UserInfo
+{
+    int id;
+    string email;
+    string name;
+    string avatarUrl;
+}
+
+private alias UserRow = UserInfo;
+
 enum Provider
 {
     github = 0,
@@ -308,15 +319,6 @@ private struct UserResp
     string avatarUrl;
 }
 
-@OrderedCols
-private struct UserRow
-{
-    int id;
-    string email;
-    string name;
-    string avatarUrl;
-}
-
 private struct GithubUserResp
 {
     string email;
@@ -377,7 +379,7 @@ private Provider toProvider(string provider)
     }
 }
 
-int enforceAuth(scope HTTPServerRequest req) @safe
+UserInfo enforceAuth(scope HTTPServerRequest req) @safe
 {
     const head = enforceStatus(
         req.headers.get("authorization"), 401, "Authorization required"
@@ -395,7 +397,13 @@ int enforceAuth(scope HTTPServerRequest req) @safe
             conf.serverJwtSecret,
             Jwt.VerifOpts(Yes.checkExpired, [conf.serverHostname]),
         );
-        return jwt.payload["sub"].get!int;
+        auto payload = jwt.payload;
+        return UserInfo(
+            payload["sub"].get!int,
+            payload["email"].get!string,
+            payload["name"].get!string,
+            payload["avatarUrl"].get!string,
+        );
     }
     catch (JwtException ex)
     {

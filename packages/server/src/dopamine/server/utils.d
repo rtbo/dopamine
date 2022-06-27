@@ -213,7 +213,7 @@ void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
     enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
     static if (requiresAuth)
     {
-        static assert(is(typeof(handler(1, ReqT.init)) == ResponseType!ReqT));
+        static assert(is(typeof(handler(UserInfo.init, ReqT.init)) == ResponseType!ReqT));
     }
     else
     {
@@ -223,12 +223,12 @@ void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
     auto routeHandler = genericHandler((scope HTTPServerRequest httpReq, scope HTTPServerResponse httpResp) @safe {
         static if (requiresAuth)
         {
-            const userId = enforceAuth(httpReq);
+            const userInfo = enforceAuth(httpReq);
         }
         auto req = adaptRequest!ReqT(httpReq);
         static if (requiresAuth)
         {
-            auto resp = handler(userId, req);
+            auto resp = handler(userInfo, req);
         }
         else
         {

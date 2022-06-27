@@ -1,5 +1,6 @@
 module dopamine.server.v1.recipes;
 
+import dopamine.server.auth;
 import dopamine.server.db;
 import dopamine.server.utils;
 
@@ -300,7 +301,7 @@ class RecipesApi
         return files;
     }
 
-    NewRecipeResp postRecipe(int userId, PostRecipe req) @safe
+    NewRecipeResp postRecipe(UserInfo user, PostRecipe req) @safe
     {
         // FIXME: package name rules
         enforceStatus(
@@ -318,7 +319,7 @@ class RecipesApi
 
         return client.transac((scope db) @safe {
             bool newPkg;
-            auto pkg = createPackageIfNotExist(db, userId, req.name, newPkg);
+            auto pkg = createPackageIfNotExist(db, user.id, req.name, newPkg);
             const recExists = db.execScalar!bool(
                 `
                     SELECT count(id) <> 0 FROM recipe
@@ -351,7 +352,7 @@ class RecipesApi
                         version,
                         revision,
                         recipe
-                `, req.name, userId, req.ver, req.revision, recipe, archive
+                `, req.name, user.id, req.ver, req.revision, recipe, archive
             );
 
             const doubleCheck = db.execScalar!(const(ubyte)[])(
