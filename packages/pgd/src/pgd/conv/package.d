@@ -62,8 +62,8 @@ enum isScalar(T) = is(T == bool) ||
     isNumeric!T ||
     isString!T ||
     isByteArray!T ||
-    is(T == Date) ||
-    is(T == SysTime);
+    is(Unqual!T == Date) ||
+    is(Unqual!T == SysTime);
 
 enum isRow(R) = is(R == struct) && allSatisfy!(isScalar, Fields!R);
 
@@ -89,6 +89,7 @@ static assert(isScalar!string);
 static assert(!isScalar!wstring); // no UTF-16 support, user must convert to string before
 static assert(isScalar!Date);
 static assert(isScalar!SysTime);
+static assert(isScalar!(const(SysTime)));
 
 private struct SomeRow
 {
@@ -310,12 +311,12 @@ private size_t emplaceScalar(T)(T val, ubyte[] buf) @safe
         buf[0 .. val.length] = cast(const(ubyte)[]) val[]; // add [] to support static arrays
         return val.length;
     }
-    else static if (is(T == Date))
+    else static if (is(Unqual!T == Date))
     {
         buf[0 .. 4] = nativeToBigEndian(dateToPg(val));
         return 4;
     }
-    else static if (is(T == SysTime))
+    else static if (is(Unqual!T == SysTime))
     {
         const pgTime = stdTimeToPg(val.stdTime);
         buf[0 .. 8] = nativeToBigEndian(pgTime);
@@ -366,7 +367,7 @@ package(pgd) PgQueryParams pgQueryParams(Args...)(Args args) @trusted
     // dfmt off
     static foreach (i, arg; args)
     {{
-        alias T = typeof(arg);
+        alias T = Unqual!(typeof(arg));
         static assert(isScalar!T, T(arg).stringof ~ " is not a supported scalar type");
 
         static if (sizeKnownAtCt!T)
