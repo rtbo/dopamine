@@ -32,6 +32,14 @@ void cryptoRandomBytes(scope ubyte[] buf) @trusted
     }
 }
 
+/// ditto
+ubyte[] cryptoRandomBytes(size_t len) @safe
+{
+    auto bytes = new ubyte[len];
+    cryptoRandomBytes(bytes);
+    return bytes;
+}
+
 version (Windows)
 {
     import core.sys.windows.windows;
