@@ -14,18 +14,19 @@ import vibe.data.json;
 import vibe.http.router;
 import vibe.http.server;
 
+import std.algorithm;
 import std.conv;
 import std.format;
+import std.json;
 import std.string;
 import std.traits;
-
 
 class StatusException : Exception
 {
     int statusCode;
     string reason;
 
-    this(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
+    this(int statusCode, lazy string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
     {
         super(format!"%s: %s%s"(statusCode, httpStatusText(statusCode), reason ? "\n" ~ reason : ""), file, line);
         this.statusCode = statusCode;
@@ -33,7 +34,7 @@ class StatusException : Exception
     }
 }
 
-T enforceStatus(T)(T condition, int statusCode, string reason = null,
+T enforceStatus(T)(T condition, int statusCode, lazy string reason = null,
     string file = __FILE__, size_t line = __LINE__) @safe
 {
     static assert(is(typeof(!condition)), "condition must cast to bool");
@@ -45,6 +46,19 @@ T enforceStatus(T)(T condition, int statusCode, string reason = null,
 noreturn statusError(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
 {
     throw new StatusException(statusCode, reason, file, line);
+}
+
+T enforceProp(T)(Json json, string prop) @safe
+{
+    auto res = json[prop];
+    const t = res.type;
+    enforceStatus(t != Json.Type.undefined, 400, format!`missing JSON property "%s"`(prop));
+    enforceStatus(
+        t == Json.typeId!T,
+        400,
+        format!`wrong type of JSON property "%s". Expected %s, got %s`(prop, T.stringof, t)
+    );
+    return res.get!T;
 }
 
 T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
@@ -167,11 +181,25 @@ HTTPServerRequestDelegateS genericHandler(H)(H handler) @safe
             resp.statusCode = ex.statusCode;
             resp.writeBody(ex.msg);
         }
+        catch (JSONException ex)
+        {
+            () @trusted { logError("JSON error: %s", ex); }();
+            if (ex.msg.canFind("Got JSON of type undefined"))
+            {
+                resp.statusCode = 400;
+                resp.writeBody(ex.msg);
+            }
+            else
+            {
+                resp.statusCode = 500;
+                () @trusted { resp.writeBody(ex.toString()); }();
+            }
+        }
         catch (Exception ex)
         {
             () @trusted { logError("Internal error: %s", ex); }();
             resp.statusCode = 500;
-            resp.writeBody("Internal Server Error");
+            () @trusted { resp.writeBody(ex.toString()); }();
         }
         logInfo("<-- %s", resp.statusCode);
     };
