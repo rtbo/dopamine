@@ -21,6 +21,7 @@ import std.exception;
 import std.format;
 import std.string;
 import std.traits;
+import std.typecons;
 
 @safe:
 
@@ -378,8 +379,6 @@ private Provider toProvider(string provider)
 
 int enforceAuth(scope HTTPServerRequest req) @safe
 {
-    const config = Config.get;
-
     const head = enforceStatus(
         req.headers.get("authorization"), 401, "Authorization required"
     );
@@ -390,7 +389,12 @@ int enforceAuth(scope HTTPServerRequest req) @safe
     );
     try
     {
-        const jwt = Jwt.verify(head[bearer.length .. $].strip(), config.serverJwtSecret);
+        const conf = Config.get;
+        const jwt = Jwt.verify(
+            head[bearer.length .. $].strip(),
+            conf.serverJwtSecret,
+            Jwt.VerifOpts(Yes.checkExpired, [conf.serverHostname]),
+        );
         return jwt.payload["sub"].get!int;
     }
     catch (JwtException ex)
