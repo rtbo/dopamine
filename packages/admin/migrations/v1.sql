@@ -10,7 +10,7 @@ CREATE TABLE "user" (
 );
 
 CREATE TABLE "refresh_token" (
-    "token"         text PRIMARY KEY,
+    "token"         bytea PRIMARY KEY,
     "user_id"       integer NOT NULL,
     "expiration"    timestamptz NOT NULL,
     "revoked"       boolean NOT NULL,
