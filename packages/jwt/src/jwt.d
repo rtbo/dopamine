@@ -112,8 +112,11 @@ struct Jwt
     ///
     static struct VerifOpts
     {
-        ///
+        /// checks that "exp" field of payload is in the future
         Flag!"checkExpired" checkExpired;
+
+        /// if not empty, checks the "iss" field is one of the listed issuers
+        string[] issuers;
     }
 
     /// Verify the token in the first argument using `secret` and options `opts`
@@ -164,6 +167,24 @@ struct Jwt
                 enforce(
                     expTime > jwtNow(),
                     new JwtException(JwtVerifFailure.expired, "JWT verification failed: expired")
+                );
+            }
+
+            if (opts.issuers)
+            {
+                auto iss = payload["iss"];
+                enforce(
+                    iss.type != Json.Type.undefined,
+                    new JwtException(JwtVerifFailure.structure, `missing "iss" field in payload`),
+                );
+                enforce(
+                    iss.type == Json.Type.string,
+                    new JwtException(JwtVerifFailure.structure, `invalid "iss" field in payload`)
+                );
+                const issuer = iss.get!string;
+                enforce(
+                    opts.issuers.canFind(issuer),
+                    new JwtException(JwtVerifFailure.expired, "JWT verification failed: invalid issuer")
                 );
             }
 
