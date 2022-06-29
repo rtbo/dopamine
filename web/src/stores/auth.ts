@@ -27,6 +27,7 @@ export const useAuthStore = defineStore("auth", {
         };
     },
     getters: {
+        loggedIn: (state) => !!state.idToken,
         idTokenValid: (state) => state.idTokenExp > Date.now(),
         refreshTokenValid: (state) => state.refreshTokenExp > Date.now(),
     },
