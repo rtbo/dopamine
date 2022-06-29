@@ -1,4 +1,4 @@
-import { resource } from "./api";
+import { AuthResponse, resource } from "./api";
 import { encodeUrlQuery, getFullUrlPath, parseQueryString, QueryObj } from "./util";
 
 import axios from "axios";
@@ -26,7 +26,7 @@ const config: OAuthConfig = {
             clientId: import.meta.env.VITE_GITHUB_CLIENT_ID || "3f2f6c2ce1e0bdf8ae6c",
             requestUrl: "https://github.com/login/oauth/authorize",
             redirectUrl: `${window.location.origin}/auth/github`,
-            scope: "read:user user:email"
+            scope: "read:user user:email",
         },
         google: {
             clientId:
@@ -72,87 +72,54 @@ interface PopupResp {
     code: string;
 }
 
-export type OAuthStatus = "" | "popup" | "api-auth" | "success" | "error";
-
-export interface OAuthSuccess {
-    success: true;
-    token: string;
-    name: string;
-    email: string;
-    avatarUrl: string;
+export interface OAuthResult {
+    provider: Provider;
+    code: string;
+    redirectUri: string;
 }
-
-export interface OAuthFailure {
-    success: false;
-    msg: string;
-}
-
-export type OAuthResult = OAuthSuccess | OAuthFailure;
 
 export interface OAuth {
-    status: Ref<OAuthStatus>;
-    loading: Ref<boolean>;
-    error: Ref<string>;
-    result: Ref<OAuthResult | null>;
+    popupOn: Ref<boolean>;
     authenticate(provider: Provider, popupOpts?: Partial<PopupOptions>): Promise<OAuthResult>;
 }
 
 const OAuthSymbol: InjectionKey<OAuth> = Symbol();
 
-export function provideOAuth(app: App) {
-    const status = ref("" as OAuthStatus);
-    const loading = ref(false);
-    const error = ref("");
-    const result = ref(null);
+export function provideOAuth() {
+    const popupOn = ref(false);
 
     async function authenticate(provider: Provider, popupOpts?: Partial<PopupOptions>): Promise<OAuthResult> {
+        const conf = config.providers[provider];
+
+        const state = cryptoRandomString({
+            length: 16,
+            type: "base64",
+        });
+
         try {
-            const conf = config.providers[provider];
-
-            const state = cryptoRandomString({
-                length: 8,
-                type: "ascii-printable",
-            });
-
-            status.value = "popup";
-            loading.value = true;
-
-            const params = await doPopup(provider, conf, state, popupOpts);
+            popupOn.value = true;
+            const params = await doPopup(conf, state, popupOpts);
 
             if (params["state"] !== state) {
                 throw new Error(`OAuth2 failure: wrong state`);
             }
 
-            status.value = "api-auth";
-
-            const resp = await axios.post<OAuthResult>(config.apiAuthUrl, {
+            return {
                 provider,
                 code: params["code"],
                 redirectUri: conf.redirectUrl,
-            });
-
-            if (resp.status >= 400) {
-                throw new Error(`POST ${config.apiAuthUrl} returned ${resp.status}: ${resp.data}`);
             }
-            return resp.data;
-        } catch (e: any) {
-            status.value = "error";
-            return {
-                success: false,
-                msg: e.message,
-            };
+        } finally {
+            popupOn.value = false;
         }
     }
 
     const oauth = {
-        status,
-        loading,
-        error,
-        result,
+        popupOn,
         authenticate,
     };
 
-    app.provide(OAuthSymbol, oauth);
+    provide(OAuthSymbol, oauth);
 }
 
 export function useOAuth(): OAuth {
@@ -163,7 +130,6 @@ export function useOAuth(): OAuth {
 
 // open OAuth popup window of provider and return popup result
 function doPopup(
-    provider: Provider,
     config: ProviderConfig,
     state: string,
     partialOpts?: Partial<PopupOptions>
@@ -181,7 +147,11 @@ function doPopup(
         ...partialOpts,
     };
 
-    const popup = window.open(encodeUrlQuery(config.requestUrl, query as unknown as QueryObj), "Authentication", stringifyOptions(opts));
+    const popup = window.open(
+        encodeUrlQuery(config.requestUrl, query as unknown as QueryObj),
+        "Authentication",
+        stringifyOptions(opts)
+    );
 
     if (popup && popup.focus) popup.focus();
 

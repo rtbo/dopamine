@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import TheHeader from './components/TheHeader.vue'
+import { provideOAuth } from './model/oauth';
+
+provideOAuth();
 </script>
 
 <template>
