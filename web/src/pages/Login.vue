@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import GithubLogo from '../assets/github-64.svg'
 import { useOAuth, Provider } from '../model/oauth';
+import { useAuthStore } from '../stores/auth';
 
 const oauth = useOAuth();
+const authStore = useAuthStore();
 
 async function login(provider: Provider) {
   const res = await oauth.authenticate(provider);
-  console.log(res);
+  await authStore.connect(res)
 }
 
 </script>

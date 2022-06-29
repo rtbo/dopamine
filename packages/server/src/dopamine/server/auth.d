@@ -38,6 +38,16 @@ struct UserInfo
 
 private alias UserRow = UserInfo;
 
+struct JwtPayload
+{
+    string iss;
+    int sub;
+    long exp;
+    string email;
+    string name;
+    string avatarUrl;
+}
+
 enum Provider
 {
     github = 0,
@@ -85,10 +95,17 @@ template TokenResp(Provider provider)
         alias TokenResp = GoogleTokenResp;
 }
 
-enum idTokenDuration = dur!"seconds"(3600);
+enum idTokenDuration = dur!"seconds"(900);
 enum refreshTokenDuration = dur!"days"(2);
 
 alias RefreshToken = ubyte[32];
+
+struct AuthResponse
+{
+    string idToken;
+    string refreshToken;
+    long refreshTokenExp;
+}
 
 class AuthApi
 {
@@ -167,11 +184,12 @@ class AuthApi
 
         auto idToken = Jwt.sign(idPayload(row), Config.get.serverJwtSecret);
 
-        resp.writeJsonBody(Json([
-                "idToken": Json(idToken.toString()),
-                "refreshToken": Json(refreshTokenB64),
-                "refreshTokenExp": Json(refreshTokenExp.toUTC().toISOExtString()),
-            ]));
+        const tokenResp = AuthResponse(
+            idToken.toString(),
+            refreshTokenB64,
+            refreshTokenExp.toUnixTime() * 1000
+        );
+        resp.writeJsonBody(serializeToJson(tokenResp));
     }
 
     UserResp authImpl(Provider provider)(Json req, ProviderConfig config)
@@ -290,26 +308,27 @@ class AuthApi
 
             auto idToken = Jwt.sign(idPayload(userRow), Config.get.serverJwtSecret);
 
-            resp.writeJsonBody(Json([
-                    "idToken": Json(idToken.toString()),
-                    "refreshToken": Json(refreshTokenB64),
-                    "refreshTokenExp": Json(refreshTokenExp.toUTC().toISOExtString()),
-                ]));
+            const tokenResp = AuthResponse(
+                idToken.toString(),
+                refreshTokenB64,
+                refreshTokenExp.toUnixTime() * 1000
+            );
+            resp.writeJsonBody(serializeToJson(tokenResp));
         });
     }
 }
 
 private Json idPayload(UserRow row)
 {
-    return Json([
-        "iss": Json(Config.get.serverHostname),
-        "sub": Json(row.id),
-        "exp": Json((Clock.currTime + idTokenDuration).toUTC()
-                .toISOExtString()),
-        "email": Json(row.email),
-        "name": Json(row.name),
-        "avatarUrl": Json(row.avatarUrl),
-    ]);
+    const payload = JwtPayload(
+        Config.get.serverHostname,
+        row.id,
+        (Clock.currTime + idTokenDuration).toUnixTime!long() * 1000,
+        row.email,
+        row.name,
+        row.avatarUrl,
+    );
+    return serializeToJson(payload);
 }
 
 private struct UserResp
