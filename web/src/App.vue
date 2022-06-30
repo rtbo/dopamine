@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import TheHeader from './components/TheHeader.vue'
 import { provideOAuth } from './model/oauth';
+import { useAuthStore } from './stores/auth';
 
 provideOAuth();
+
+const authStore = useAuthStore();
+authStore.initialize();
 </script>
 
 <template>

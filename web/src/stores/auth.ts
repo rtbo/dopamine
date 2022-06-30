@@ -32,23 +32,34 @@ export const useAuthStore = defineStore("auth", {
         refreshTokenValid: (state) => state.refreshTokenExp > Date.now(),
     },
     actions: {
+        initialize() {
+            const persistentStateStr = localStorage.getItem("authState");
+            if (!persistentStateStr) return;
+            const persistentState = JSON.parse(persistentStateStr);
+            this.$patch(persistentState);
+            return this.refresh();
+        },
         async connect(oauth: OAuthResult) {
             try {
                 this.loading = true;
                 const res = await postOAuth(oauth);
                 const { idToken, refreshToken, refreshTokenExp } = res;
                 const idPayload = jwtDecode<JwtPayload>(idToken);
-                this.$state = {
+                const persistentState = {
                     email: idPayload.email,
                     name: idPayload.name,
                     avatarUrl: idPayload.avatarUrl,
-                    idToken,
-                    idTokenExp: idPayload.exp,
                     refreshToken,
                     refreshTokenExp,
+                };
+                this.$state = {
+                    idToken,
+                    idTokenExp: idPayload.exp,
                     loading: false,
                     error: "",
+                    ...persistentState,
                 };
+                localStorage.setItem("authState", JSON.stringify(persistentState));
                 // refresh 30 secs before expiration
                 const refreshIn = idPayload.exp - Date.now() - 30000;
                 if (refreshIn < 0) {
@@ -77,17 +88,21 @@ export const useAuthStore = defineStore("auth", {
                 });
 
                 const idPayload = jwtDecode<JwtPayload>(idToken);
-                this.$state = {
+                const persistentState = {
                     email: idPayload.email,
                     name: idPayload.name,
                     avatarUrl: idPayload.avatarUrl,
-                    idToken,
-                    idTokenExp: idPayload.exp,
                     refreshToken,
                     refreshTokenExp,
+                };
+                this.$state = {
+                    idToken,
+                    idTokenExp: idPayload.exp,
                     loading: false,
                     error: "",
+                    ...persistentState,
                 };
+                localStorage.setItem("authState", JSON.stringify(persistentState));
                 // refresh 30 secs before expiration
                 const refreshIn = idPayload.exp - Date.now() - 30000;
                 setTimeout(() => this.refresh(), refreshIn);
