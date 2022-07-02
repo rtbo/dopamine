@@ -207,21 +207,6 @@ int luaPath(lua_State* L) nothrow
     import std.path : isAbsolute, dirSeparator;
 
     const n = lua_gettop(L);
-    debug
-    {
-        import std.stdio : writeln;
-
-        try
-        {
-            writeln(n);
-        }
-        catch (Exception)
-        {
-        }
-    }
-    L.catchAll!({ import std.stdio;
-
-    luaPrintStack(L, stdout); });
 
     luaL_Buffer buf;
     luaL_buffinit(L, &buf);
@@ -230,18 +215,6 @@ int luaPath(lua_State* L) nothrow
     {
         size_t l;
         const s = luaL_checklstring(L, i, &l);
-        debug
-        {
-            import std.stdio : writeln;
-
-            try
-            {
-                writeln(s[0 .. l]);
-            }
-            catch (Exception)
-            {
-            }
-        }
         if (i > 1 && isAbsolute(s[0 .. l]))
         {
             return luaL_argerror(L, i, "Invalid absolute path after first position");
