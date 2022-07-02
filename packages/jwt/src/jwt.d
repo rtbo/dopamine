@@ -61,6 +61,8 @@ enum JwtVerifFailure
     structure,
     /// The `exp` field is now or in the past
     expired,
+    /// Some field in the payload is missing or has an unexpected value
+    payload,
     /// The signature could not be verified
     signature,
 }
@@ -152,16 +154,24 @@ struct Jwt
             // decode the payload in all cases to generate an exception if JSON or base64 is invalid
             auto payload = parseJsonString(decodeBase64(token[p1 + 1 .. p2]));
 
+            const toBeSigned = token[0 .. p2];
+            const signature = token[p2 + 1 .. $];
+
+            enforce(
+                signature == doSign(alg, toBeSigned, secret),
+                new JwtException(JwtVerifFailure.signature, "JWT verification failed: signature mismatch")
+            );
+
             if (opts.checkExpired)
             {
                 auto exp = payload["exp"];
                 enforce(
                     exp.type != Json.Type.undefined,
-                    new JwtException(JwtVerifFailure.structure, `missing "exp" field in payload`)
+                    new JwtException(JwtVerifFailure.payload, `missing "exp" field in payload`)
                 );
                 enforce(
                     exp.type == Json.Type.int_,
-                    new JwtException(JwtVerifFailure.structure, `invalid "exp" field in payload`)
+                    new JwtException(JwtVerifFailure.payload, `invalid "exp" field in payload`)
                 );
                 const expTime = exp.get!long;
                 enforce(
@@ -175,26 +185,18 @@ struct Jwt
                 auto iss = payload["iss"];
                 enforce(
                     iss.type != Json.Type.undefined,
-                    new JwtException(JwtVerifFailure.structure, `missing "iss" field in payload`),
+                    new JwtException(JwtVerifFailure.payload, `missing "iss" field in payload`),
                 );
                 enforce(
                     iss.type == Json.Type.string,
-                    new JwtException(JwtVerifFailure.structure, `invalid "iss" field in payload`)
+                    new JwtException(JwtVerifFailure.payload, `invalid "iss" field in payload`)
                 );
                 const issuer = iss.get!string;
                 enforce(
                     opts.issuers.canFind(issuer),
-                    new JwtException(JwtVerifFailure.expired, "JWT verification failed: invalid issuer")
+                    new JwtException(JwtVerifFailure.payload, "JWT verification failed: invalid issuer")
                 );
             }
-
-            const toBeSigned = token[0 .. p2];
-            const signature = token[p2 + 1 .. $];
-
-            enforce(
-                signature == doSign(alg, toBeSigned, secret),
-                new JwtException(JwtVerifFailure.signature, "JWT verification failed: signature mismatch")
-            );
 
             return Jwt(token);
         }
