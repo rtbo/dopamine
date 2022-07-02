@@ -58,7 +58,7 @@ struct Config
     /// Read from $DOP_TEST_STOPROUTE
     bool testStopRoute;
 
-    static @property Config get()
+    static @property const(Config) get()
     {
         import std.path;
         import std.process : environment;
