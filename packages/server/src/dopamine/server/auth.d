@@ -420,15 +420,23 @@ UserInfo enforceAuth(scope HTTPServerRequest req) @safe
         return UserInfo(
             payload["sub"].get!int,
             payload["email"].get!string,
-            payload["name"].get!string,
-            payload["avatarUrl"].get!string,
+            payload["name"].opt!string,
+            payload["avatarUrl"].opt!string,
         );
     }
     catch (JwtException ex)
     {
-        if (ex.cause == JwtVerifFailure.structure)
-            statusError(400, "Ill-formed authorization header");
-        else
-            statusError(403, "Invalid or expired authorization token");
+        final switch (ex.cause)
+        {
+        case JwtVerifFailure.structure:
+            statusError(400, format!"Ill-formed authorization header: %s"(ex.msg));
+        case JwtVerifFailure.payload:
+            // 500 because it is checked after signature
+            statusError(500, format!"Improper field in authorization header payload: %s"(ex.msg));
+        case JwtVerifFailure.expired:
+            statusError(403, "Expired authorization token");
+        case JwtVerifFailure.signature:
+            statusError(403, "Invalid authorization token");
+        }
     }
 }
