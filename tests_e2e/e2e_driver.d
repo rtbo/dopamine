@@ -621,26 +621,6 @@ struct Test
                 });
         }
 
-        if (user)
-        {
-            auto usr = defs["users"][user];
-            const id = usr["id"].integer;
-            const email = usr["email"].str;
-
-            auto payload = Json([
-                "sub": Json(id),
-                "email": Json(email),
-                "exp": Json(jwtNow() + 5*60),
-            ]);
-            auto jwt = Jwt.sign(payload, "test-secret");
-            auto login = Json([
-                "userId": Json(id),
-                "keyName": Json(email),
-                "key": Json(jwt.token),
-            ]);
-            std.file.write(sandboxHomePath("login.json"), login.toString().representation);
-        }
-
         writefln("copy %s to %s", e2ePath("recipes", recipe), sandboxRecipePath);
         copyRecurse(e2ePath("recipes", recipe), sandboxRecipePath);
     }
@@ -671,6 +651,29 @@ struct Test
         }
     }
 
+    void prepareUserLogin(string issuer)
+    {
+        auto defs = parseJSON(cast(string) read(e2ePath("definitions.json")));
+
+        auto usr = defs["users"][user];
+        const id = usr["id"].integer;
+        const email = usr["email"].str;
+
+        auto payload = Json([
+            "iss": Json(issuer),
+            "sub": Json(id),
+            "email": Json(email),
+            "exp": Json(jwtNow() + 5 * 60),
+        ]);
+        auto jwt = Jwt.sign(payload, "test-secret");
+        auto login = Json([
+            "userId": Json(id),
+            "keyName": Json(email),
+            "key": Json(jwt.token),
+        ]);
+        std.file.write(sandboxHomePath("login.json"), login.toString().representation);
+    }
+
     int perform(string dopExe, string regExe, string adminExe)
     {
         // we delete previous sandbox if any
@@ -696,8 +699,11 @@ struct Test
             portLock = res[0];
             const port = res[1];
 
+            if (user)
+                prepareUserLogin(format!"localhost:%s"(port));
+
             env["E2E_REGISTRY_PORT"] = port.to!string;
-            env["DOP_REGISTRY"] = format("http://localhost:%s", port);
+            env["DOP_REGISTRY"] = format!"http://localhost:%s"(port);
             reg = new Registry(regExe, adminExe, port, env, name);
         }
 
