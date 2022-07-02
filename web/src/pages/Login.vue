@@ -1,14 +1,20 @@
 <script setup lang="ts">
+import { useRoute, useRouter } from 'vue-router';
 import GithubLogo from '../assets/github-64.svg'
 import { useOAuth, Provider } from '../model/oauth';
 import { useAuthStore } from '../stores/auth';
 
 const oauth = useOAuth();
 const authStore = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 
 async function login(provider: Provider) {
   const res = await oauth.authenticate(provider);
   await authStore.connect(res)
+  const redirect = route.query?.["redirectTo"] as string ?? '/';
+  if (authStore.loggedIn)
+    router.push({ path: redirect });
 }
 
 </script>

@@ -1,11 +1,9 @@
 <script setup lang="ts">
+import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 
 const authStore = useAuthStore();
-
-function logout() {
-  authStore.disconnect()
-}
+const route = useRoute();
 </script>
 <template>
   <header class="w-full mb-2 bg-base-200 border-b border-b-base-content/30">
@@ -17,14 +15,20 @@ function logout() {
         <div v-if="authStore.loggedIn" class="dropdown dropdown-end">
           <label tabindex="0" class="btn btn-ghost btn-circle avatar">
             <div class="w-10 rounded-full">
-              <img :src="encodeURI(authStore.avatarUrl)" />
+              <img :src="authStore.avatarUrl" />
             </div>
           </label>
-          <ul class="menu menu-compact dropdown-content mt-3 p-2 shadow bg-base-100 rounded-box w-52">
-            <li><button class="btn" @click="logout">Logout</button></li>
+          <ul
+            class="menu menu-compact dropdown-content mt-3 p-2 shadow bg-base-100 rounded-box w-52">
+            <li>
+              <button class="btn bg-base-200" @click="authStore.disconnect()">
+                Logout
+              </button>
+            </li>
           </ul>
         </div>
-        <router-link v-else to="/login">
+        <router-link v-else
+          :to="{ path: '/login', query: { redirectTo: route.path } }">
           Sign in
         </router-link>
       </div>
