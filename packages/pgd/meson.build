@@ -26,6 +26,10 @@ pgd_dep = declare_dependency(
 
 if get_option('enable_test')
     pgd_test_src = files([
+        'src/pgd/libpq/defs.d',
+        'src/pgd/conv/package.d',
+        'src/pgd/conv/test.d',
+        'src/pgd/conv/time.d',
         'src/pgd/connstring.d',
     ])
 
