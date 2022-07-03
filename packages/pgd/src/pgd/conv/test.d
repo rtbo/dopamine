@@ -6,26 +6,6 @@ import pgd.libpq.defs;
 
 import std.typecons;
 
-@("isNull")
-unittest
-{
-    int* pi;
-    Nullable!int ni;
-    //Nullable!(int, int.max) ni2;
-
-    assert(isNull(pi));
-    assert(isNull(ni));
-    //assert(isNull(ni2));
-
-    int i = 12;
-    pi = &i;
-    ni = i;
-    //ni2 = i;
-    assert(!isNull(pi));
-    assert(!isNull(ni));
-    //assert(!isNull(ni2));
-}
-
 @("pgQueryParams")
 unittest
 {
