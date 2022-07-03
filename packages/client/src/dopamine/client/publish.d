@@ -10,7 +10,6 @@ import dopamine.dep.build;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
-import dopamine.login;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
@@ -220,14 +219,16 @@ int publishMain(string[] args)
 
     logInfo("Publish: Recipe integrity %s", success("OK"));
 
-    auto key = enforce(
-        readLoginKey(),
+    auto registry = new Registry();
+    try
+    {
+        registry.ensureAuth();
+    }
+    catch (Exception ex)
+    {
         new ErrorLogException(
-            "Publishing requires to be logged-in. Get a login key on the registry front-end and run %s.",
-            info("dop login [your key]")),
-    );
-
-    auto registry = new Registry(key);
+            "Publishing requires to be logged-in. Get a login key on the registry front-end.");
+    }
     PostRecipe req;
     req.name = recipe.name;
     req.ver = recipe.ver.toString();

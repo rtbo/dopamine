@@ -5,8 +5,10 @@ import dopamine.login;
 
 import std.algorithm;
 import std.conv;
+import std.datetime;
 import std.exception;
 import std.format;
+import std.process;
 import std.string;
 import core.time;
 
@@ -46,7 +48,8 @@ class AuthRequiredException : Exception
 
         this.url = url;
         super(format(
-                "Request \"%s\" requires authentication. You might get one from the " ~ defaultRegistry ~ ".",
+                "Request \"%s\" requires authentication. You need to get a token from " ~
+                environment.get("DOP_REGISTRY", defaultRegistry) ~ ".",
                 url
         ), file, line);
     }
@@ -170,20 +173,17 @@ enum defaultRegistry = "https://localhost:3500";
 class Registry
 {
     string _host;
-    LoginKey _key;
+    string _idToken;
+    SysTime _idTokenExp;
 
-    this(LoginKey key = LoginKey.init)
+    this()
     {
-        import std.process : environment;
-
         _host = checkHost(environment.get("DOP_REGISTRY", defaultRegistry));
-        _key = key;
     }
 
-    this(string host, LoginKey key = LoginKey.init)
+    this(string host)
     {
         _host = checkHost(host);
-        _key = key;
     }
 
     @property string host() const
@@ -191,9 +191,25 @@ class Registry
         return _host;
     }
 
-    @property LoginKey key() const
+    @property bool isLoggedIn()
     {
-        return _key;
+        return _idToken && _idTokenExp > Clock.currTime;
+    }
+
+    void ensureAuth()
+    {
+        import dopamine.api.auth;
+        import jwt;
+
+        if (_idToken && _idTokenExp > Clock.currTime)
+            return;
+        string registry = _host.find("://")[3 .. $];
+
+        auto req = PostAuthToken(readLoginToken(registry));
+        AuthToken resp = sendRequest(req).payload;
+        writeLoginToken(registry, resp.refreshToken);
+        _idToken = resp.idToken;
+        _idTokenExp = fromJwtTime(ClientJwt(_idToken).payload["exp"].get!long);
     }
 
     Response!(ResponseType!ReqT) sendRequest(ReqT)(auto ref const ReqT req) @safe
@@ -218,8 +234,8 @@ class Registry
         }
         static if (requiresAuth)
         {
-            enforce(_key, new AuthRequiredException(reqAttr.resource));
-            raw.headers["Authorization"] = format!"Bearer %s"(_key.key);
+            enforce(isLoggedIn, new AuthRequiredException(reqAttr.resource));
+            raw.headers["Authorization"] = format!"Bearer %s"(_idToken);
         }
 
         auto res = perform(raw).asResponse();
@@ -256,7 +272,7 @@ class Registry
         enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
         static if (requiresAuth)
         {
-            enforce(_key, new AuthRequiredException(reqAttr.url));
+            enforce(isLoggedIn, new AuthRequiredException(reqAttr.url));
         }
 
         // HEAD request
@@ -265,7 +281,7 @@ class Registry
         raw.host = host;
         raw.resource = requestResource(req);
         static if (requiresAuth)
-            raw.headers["Authorization"] = format!"Bearer %s"(_key.key);
+            raw.headers["Authorization"] = format!"Bearer %s"(_idToken);
         raw.headers["Want-Digest"] = "sha-256";
 
         RawResponse resp = perform(raw);

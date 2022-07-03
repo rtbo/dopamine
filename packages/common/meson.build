@@ -1,5 +1,6 @@
 dop_common_src = files([
     'src/dopamine/api/attrs.d',
+    'src/dopamine/api/auth.d',
     'src/dopamine/api/v1.d',
 
     'src/dopamine/cache_dirs.d',

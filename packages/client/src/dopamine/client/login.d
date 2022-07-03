@@ -9,40 +9,36 @@ import std.stdio;
 
 int loginMain(string[] args)
 {
-    import std.algorithm : find;
+    string registry;
 
-    auto help = args.find!(a => a == "-h" || a == "--help");
-    if (help.length)
-    {
+    // dfmt off
+    auto helpInfo = getopt(args,
+        "registry|R",    &registry,
+    );
+    // dfmt on
+
+    if (helpInfo.helpWanted)
         return usage();
-    }
 
-    if (args.length != 2)
+    if (args.length < 2)
     {
-        logError("%s: %s must be called with a %s as argument", error("Error"), info("dop login"), info(
-                "key"));
+        logErrorH("missing [TOKEN] argument");
+        return usage(1);
+    }
+    if (args.length > 2)
+    {
+        logErrorH("too many arguments");
         return usage(1);
     }
 
-    doLogin(args[1]);
-
-    return 0;
-}
-
-void doLogin(string key)
-{
-    const loginKey = decodeLoginKey(key);
-
-    if (isLoggedIn())
+    if (isLoggedIn(registry))
     {
-        const current = readLoginKey();
-        logWarningH("Replacing former login key: %s", info(current.keyName));
+        logInfo("Replacing revoked login token");
     }
 
-    writeLoginKey(loginKey);
+    writeLoginToken(registry, args[1]);
 
-    logInfo("%s: %s - Registered new key: %s", info("Login"), success("OK"),
-        info(loginKey.keyName));
+    return 0;
 }
 
 int usage(int code = 0)
@@ -53,8 +49,9 @@ int usage(int code = 0)
     }
     logInfo("");
     logInfo("%s", info("Usage"));
-    logInfo("    dop login [LOGIN KEY]");
+    logInfo("    dop login --registry [REGISTRY] [TOKEN]");
     logInfo("");
-    logInfo("[LOGIN KEY] is a signed key that must be obtained from the registry");
+    logInfo("[REGISTRY] is remote registry on which to log-in");
+    logInfo("[TOKEN] is a token that must be obtained from the registry");
     return code;
 }

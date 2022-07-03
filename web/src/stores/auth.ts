@@ -54,14 +54,14 @@ export const useAuthStore = defineStore("auth", {
                 };
                 this.$state = {
                     idToken,
-                    idTokenExp: idPayload.exp,
+                    idTokenExp: idPayload.exp * 1000,
                     loading: false,
                     error: "",
                     ...persistentState,
                 };
                 localStorage.setItem("authState", JSON.stringify(persistentState));
                 // refresh 30 secs before expiration
-                const refreshIn = idPayload.exp - Date.now() - 30000;
+                const refreshIn = idPayload.exp * 1000 - Date.now() - 30000;
                 if (refreshIn < 0) {
                     await this.refresh();
                 } else {
@@ -97,14 +97,14 @@ export const useAuthStore = defineStore("auth", {
                 };
                 this.$state = {
                     idToken,
-                    idTokenExp: idPayload.exp,
+                    idTokenExp: idPayload.exp * 1000,
                     loading: false,
                     error: "",
                     ...persistentState,
                 };
                 localStorage.setItem("authState", JSON.stringify(persistentState));
                 // refresh 30 secs before expiration
-                const refreshIn = idPayload.exp - Date.now() - 30000;
+                const refreshIn = idPayload.exp * 1000 - Date.now() - 30000;
                 setTimeout(() => this.refresh(), refreshIn);
             } catch (ex: any) {
                 console.error(ex);

@@ -58,7 +58,7 @@ struct Config
     /// Read from $DOP_TEST_STOPROUTE
     bool testStopRoute;
 
-    static @property Config get()
+    static @property const(Config) get()
     {
         import std.path;
         import std.process : environment;
@@ -90,7 +90,7 @@ struct Config
                 "DOP_DB_CONNSTRING", "postgres:///dop-registry"
             );
             c.dbPoolMaxSize = environment.get(
-                "DOP_DB_POOLMAXSIZE", "1"
+                "DOP_DB_POOLMAXSIZE", "5"
             ).to!uint;
 
             c.githubClientId = environment.get(

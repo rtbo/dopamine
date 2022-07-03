@@ -1,6 +1,7 @@
 module pgd.conv;
 
 import pgd.libpq;
+import pgd.conv.nullable;
 import pgd.conv.time;
 
 import std.algorithm;
@@ -12,6 +13,7 @@ import std.exception;
 import std.format;
 import std.meta;
 import std.traits;
+import std.typecons;
 
 class UnsupportedTypeException : Exception
 {
@@ -22,6 +24,11 @@ class UnsupportedTypeException : Exception
         super("Encountered PostgreSQL type not supported by PGD: " ~ oid.to!string, file, line);
         this.oid = oid;
     }
+}
+
+class NullValueException : Exception
+{
+    mixin basicExceptionCtors!();
 }
 
 ///
@@ -38,7 +45,7 @@ enum PgType
     date = 1082,
     // time = 1083,
     // timestamp = 1114,
-    timestamptz = 1184,// interval = 1186,
+    timestamptz = 1184, // interval = 1186,
 }
 
 package(pgd) PgType enforceSupported(TypeOid oid)
@@ -63,7 +70,8 @@ enum isScalar(T) = is(T == bool) ||
     isString!T ||
     isByteArray!T ||
     is(Unqual!T == Date) ||
-    is(Unqual!T == SysTime);
+    is(Unqual!T == SysTime) ||
+    (isNullable!T && !is(NullableTarget!T == T) && isScalar!(NullableTarget!T));
 
 enum isRow(R) = is(R == struct) && allSatisfy!(isScalar, Fields!R);
 
@@ -91,6 +99,10 @@ static assert(isScalar!Date);
 static assert(isScalar!SysTime);
 static assert(isScalar!(const(SysTime)));
 
+static assert(isScalar!(int*));
+static assert(isScalar!(Nullable!int));
+static assert(!isScalar!(Nullable!wstring));
+
 private struct SomeRow
 {
     int i;
@@ -99,6 +111,8 @@ private struct SomeRow
     byte[] blob;
     string text;
     Date date;
+    Nullable!int ni;
+    int* pi;
 }
 
 private struct NotSomeRow
@@ -117,10 +131,26 @@ static assert(!isScalar!SomeRow);
 
 package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @system
 {
+    import std.string : fromStringz;
+
     const len = PQgetlength(res, rowInd, colInd);
     const pval = PQgetvalue(res, rowInd, colInd);
+    const isnull = PQgetisnull(res, rowInd, colInd) != 0;
     const val = pval[0 .. len];
     const text = PQfformat(res, colInd) == 0;
+
+    if (isnull)
+    {
+        static if (isNullable!T)
+        {
+            return nullValue!T();
+        }
+        else
+        {
+            const name = fromStringz(PQfname(res, colInd)).idup;
+            throw new NullValueException("Unexpected null value for column " ~ name);
+        }
+    }
 
     if (text)
     {
@@ -136,7 +166,11 @@ package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @syst
         binVal.checkType(pgTypeOf!T, T.stringof);
         static if (sizeKnownAtCt!T)
             binVal.checkSize(scalarBinSizeCt!T, T.stringof);
-        return toScalar!T(binVal);
+
+        static if (isNullable!T)
+            return fromNonNull!T(toScalar!(NullableTarget!T)(binVal));
+        else
+            return toScalar!T(binVal);
     }
 }
 
@@ -197,6 +231,8 @@ private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 // UTF-8 is not checked, hence @system
 private T toScalar(T)(BinValue val) @system if (isString!T)
 {
+    if (val.val.length == 0)
+        return null;
     return (cast(const(char)[]) val.val).idup;
 }
 
@@ -208,6 +244,8 @@ private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isStaticArray!T)
 
 private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
 {
+    if (val.val.length == 0)
+        return null;
     return cast(ElType!T[]) val.val.dup;
 }
 
@@ -220,6 +258,24 @@ private T toScalar(T)(BinValue val) @safe if (is(T == SysTime))
 {
     const stdTime = pgToStdTime(bigEndianToNative!long(val.val[0 .. 8]));
     return SysTime(stdTime);
+}
+
+private T toScalar(T)(BinValue val) @safe
+        if (isNullable!T && !is(NullableTarget!T == T))
+{
+    if (val.val.length == 0)
+        return nullValue!T();
+
+    auto nonNull = toScalar!(NullableTarget!T)(val);
+
+    static if (__traits(isSame, TemplateOf!T, Nullable))
+    {
+        return T(nonNull);
+    }
+    else static if (isPointer!T)
+    {
+        return new PointerTarget!T(nonNull);
+    }
 }
 
 private template pgTypeOf(TT)
@@ -246,6 +302,8 @@ private template pgTypeOf(TT)
         enum pgTypeOf = PgType.date;
     else static if (is(T == SysTime))
         enum pgTypeOf = PgType.timestamptz;
+    else static if (isNullable!T && !is(NullableTarget!T == T))
+        enum pgTypeOf = pgTypeOf!(NullableTarget!T);
     else
         static assert(false, "unsupported scalar type: " ~ T.stringof);
 }
@@ -287,12 +345,14 @@ private size_t scalarBinSize(T)(T val) @safe if (isScalar!T)
         return val.length;
     else static if (isByteArray!T)
         return val.length;
+    else static if (isNullable!T && !is(NullableTarget!T == T))
+        return isNull(val) ? 0 : scalarBinSize(getNonNull(val));
     else
         static assert(false, "unimplemented scalar type " ~ T.stringof);
 }
 
 /// write binary representation in array and return offset advance
-private size_t emplaceScalar(T)(T val, ubyte[] buf) @safe
+private size_t emplaceScalar(T)(T val, scope ubyte[] buf) @safe
 {
     assert(buf.length >= scalarBinSize(val));
 
@@ -321,6 +381,12 @@ private size_t emplaceScalar(T)(T val, ubyte[] buf) @safe
         const pgTime = stdTimeToPg(val.stdTime);
         buf[0 .. 8] = nativeToBigEndian(pgTime);
         return 8;
+    }
+    else static if (isNullable!T && !is(NullableTarget!T == T))
+    {
+        if (isNull(val))
+            return 0;
+        return emplaceScalar(getNonNull(val), buf);
     }
     else
     {
@@ -386,8 +452,16 @@ package(pgd) PgQueryParams pgQueryParams(Args...)(Args args) @trusted
 
     static foreach (i, arg; args)
     {{
-        params.values[i] = cast(const(char)*)&valuesBuf[offset];
-        offset += emplaceScalar(arg, valuesBuf[offset .. $]);
+        const sz = emplaceScalar(arg, valuesBuf[offset .. $]);
+        if (sz > 0 || !isNullable!(Args[i]))
+        {
+            params.values[i] = cast(const(char)*)&valuesBuf[offset];
+            offset += sz;
+        }
+        else
+        {
+            params.values[i] = null;
+        }
     }}
     // dfmt on
 

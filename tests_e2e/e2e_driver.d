@@ -3,10 +3,10 @@
 /// Read one *.test file, run the provided command and perform the associated assertions
 module e2e_driver;
 
-import jwt;
 import vibe.data.json;
 
 import std.array;
+import std.base64;
 import std.exception;
 import std.file;
 import std.json;
@@ -651,25 +651,16 @@ struct Test
         }
     }
 
-    void prepareUserLogin(string issuer)
+    void prepareUserLogin(string registry)
     {
         auto defs = parseJSON(cast(string) read(e2ePath("definitions.json")));
 
         auto usr = defs["users"][user];
-        const id = usr["id"].integer;
         const email = usr["email"].str;
 
-        auto payload = Json([
-            "iss": Json(issuer),
-            "sub": Json(id),
-            "email": Json(email),
-            "exp": Json(jwtNow() + 5 * 60),
-        ]);
-        auto jwt = Jwt.sign(payload, "test-secret");
+        const token = Base64.encode(cast(const(ubyte)[])email).idup;
         auto login = Json([
-            "userId": Json(id),
-            "keyName": Json(email),
-            "key": Json(jwt.token),
+            registry: Json(token),
         ]);
         std.file.write(sandboxHomePath("login.json"), login.toString().representation);
     }
@@ -864,7 +855,7 @@ final class Registry
             adminExe,
             "--create-db",
             "--run-migration", "v1",
-            "--create-test-users", "v1",
+            "--create-test-users",
             "--populate-from", regPath,
         ];
         auto adminEnv = this.env.dup;
