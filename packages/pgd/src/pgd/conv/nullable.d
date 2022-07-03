@@ -43,12 +43,33 @@ bool isNull(T)(T maybe) if (isNullable!T)
 {
     static if (__traits(isSame, TemplateOf!T, Nullable))
     {
-        return maybe.empty;
+        return maybe.isNull;
     }
     else
     {
         return maybe is null;
     }
+}
+
+@("isNull")
+unittest
+{
+    import std.algorithm;
+    int* pi;
+    Nullable!int ni;
+    //Nullable!(int, int.max) ni2;
+
+    assert(isNull(pi));
+    assert(isNull(ni));
+    //assert(isNull(ni2));
+
+    int i = 12;
+    pi = &i;
+    ni = i;
+    //ni2 = i;
+    assert(!isNull(pi));
+    assert(!isNull(ni));
+    //assert(!isNull(ni2));
 }
 
 auto getNonNull(T)(T val) if (isNullable!T)
@@ -80,7 +101,6 @@ T nullValue(T)() if (isNullable!T)
     {
         return null;
     }
-
 }
 
 T fromNonNull(T)(NullableTarget!T nonNull) if (isNullable!T)
@@ -101,24 +121,4 @@ T fromNonNull(T)(NullableTarget!T nonNull) if (isNullable!T)
     }
 
     return res;
-}
-
-@("isNull")
-unittest
-{
-    int* pi;
-    Nullable!int ni;
-    //Nullable!(int, int.max) ni2;
-
-    assert(isNull(pi));
-    assert(isNull(ni));
-    //assert(isNull(ni2));
-
-    int i = 12;
-    pi = &i;
-    ni = i;
-    //ni2 = i;
-    assert(!isNull(pi));
-    assert(!isNull(ni));
-    //assert(!isNull(ni2));
 }
