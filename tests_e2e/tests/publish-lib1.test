@@ -1,7 +1,7 @@
 SKIP_NOPROG=meson
 
 REGISTRY=base
-USER=user
+USER=user1
 PRE_CMD=$DOP profile --discover
 CMD=$DOP publish --skip-cvs-clean
 RECIPE=lib1

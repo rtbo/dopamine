@@ -100,13 +100,6 @@ enum refreshTokenDuration = dur!"days"(2);
 
 alias RefreshToken = ubyte[32];
 
-struct AuthResponse
-{
-    string idToken;
-    string refreshToken;
-    long refreshTokenExp;
-}
-
 class AuthApi
 {
     DbClient client;
@@ -140,7 +133,6 @@ class AuthApi
     void auth(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
         const provider = toProvider(req.json.enforceProp!string("provider"));
-
         const config = providers[provider];
 
         UserResp userResp;
@@ -171,7 +163,7 @@ class AuthApi
             `, userResp.email, userResp.name, userResp.avatarUrl);
 
             const rt = db.execScalar!RefreshToken(`
-                    INSERT INTO refresh_token (token, user_id, expiration, revoked)
+                    INSERT INTO refresh_token (token, user_id, expiration, cli)
                     VALUES ($1, $2, $3, FALSE)
                     RETURNING token
                 `, refreshToken, userRow.id, refreshTokenExp
@@ -184,12 +176,12 @@ class AuthApi
 
         auto idToken = Jwt.sign(idPayload(row), Config.get.serverJwtSecret);
 
-        const tokenResp = AuthResponse(
-            idToken.toString(),
-            refreshTokenB64,
-            refreshTokenExp.toUnixTime() * 1000
-        );
-        resp.writeJsonBody(serializeToJson(tokenResp));
+        auto json = Json([
+            "idToken": Json(idToken.toString()),
+            "refreshToken": Json(refreshTokenB64),
+            "refreshTokenExpJs": Json(refreshTokenExp.toUnixTime() * 1000)
+        ]);
+        resp.writeJsonBody(json);
     }
 
     UserResp authImpl(Provider provider)(Json req, ProviderConfig config)
@@ -249,71 +241,98 @@ class AuthApi
     static struct TokenRow
     {
         int userId;
-        SysTime exp;
-        bool revoked;
+        Nullable!SysTime exp;
+        Nullable!SysTime revoked;
+        bool cli;
+    }
+
+    @OrderedCols
+    static struct Row
+    {
+        const(ubyte)[] token;
+        int userId;
+        Nullable!SysTime exp;
+        Nullable!SysTime revoked;
+        bool cli;
     }
 
     void token(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
         string refreshTokenB64 = req.json.enforceProp!string("refreshToken");
-        RefreshToken refreshToken;
-        Base64.decode(refreshTokenB64, refreshToken[]);
+        RefreshToken refreshTokenBuf;
+        auto refreshToken = Base64.decode(refreshTokenB64, refreshTokenBuf[]);
 
         client.transac((scope DbConn db) {
+
+            auto rows = db.execRows!Row(`
+                SELECT token, user_id, expiration, revoked, cli FROM refresh_token
+            `);
+
             TokenRow tokRow;
             try
             {
                 // update revoked but return previous value
                 tokRow = db.execRow!TokenRow(`
-                    UPDATE refresh_token new SET revoked = TRUE
+                    UPDATE refresh_token new SET revoked = NOW()
                     FROM refresh_token old
                     WHERE new.token = old.token AND new.token = $1
-                    RETURNING old.user_id, old.expiration, old.revoked
+                    RETURNING old.user_id, old.expiration, old.revoked, old.cli
                 `, refreshToken);
             }
             catch (ResourceNotFoundException ex)
             {
                 statusError(401, "Unknown token");
             }
+            const revoked = !tokRow.revoked.isNull;
             const now = Clock.currTime.toUTC();
-            if (tokRow.revoked || tokRow.exp <= now)
+            if (revoked || (!tokRow.exp.isNull && tokRow.exp.get <= now))
             {
                 // attempt to use a revoked or expired token.
-                // possibly a token stolen by XSS
+                // possibly a token was stolen by XSS
                 // invalidate all tokens from the user to force to re-authenticate
                 db.exec(
-                    `UPDATE refresh_token SET revoked = TRUE WHERE user_id = $1`,
+                    `UPDATE refresh_token SET revoked = NOW() WHERE user_id = $1`,
                     tokRow.userId,
                 );
-                statusError(403, tokRow.revoked ? "Attempt to use revoked token" : "expired token");
+                statusError(403, revoked ? "Attempt to use revoked token" : "expired token");
             }
+
             // all good let's generate a new Jwt and refresh token
             // FIXME: here we should re-authenticate to provider
-            cryptoRandomBytes(refreshToken[]);
-            refreshTokenB64 = Base64.encode(refreshToken);
-            auto refreshTokenExp = now + refreshTokenDuration;
+
+            cryptoRandomBytes(refreshTokenBuf[]);
+            refreshTokenB64 = Base64.encode(refreshTokenBuf);
+
+            // for CLI, we keep the same expiration date
+            Nullable!SysTime refreshTokenExp = tokRow.cli ? tokRow.exp
+                : nullable(now + refreshTokenDuration);
 
             const userRow = db.execRow!UserRow(
                 `SELECT id, email, name, avatar_url FROM "user" WHERE id = $1`,
                 tokRow.userId
             );
 
-            const rt = db.execScalar!RefreshToken(`
-                    INSERT INTO refresh_token (token, user_id, expiration, revoked)
-                    VALUES ($1, $2, $3, FALSE)
+            const rt = db.execScalar!(const(ubyte)[])(`
+                    INSERT INTO refresh_token (token, user_id, expiration, cli)
+                    VALUES ($1, $2, $3, $4)
                     RETURNING token
-                `, refreshToken, userRow.id, refreshTokenExp
+                `, refreshToken, userRow.id, refreshTokenExp, tokRow.cli,
             );
             enforce(rt == refreshToken, "Could not store refresh token in DB");
 
             auto idToken = Jwt.sign(idPayload(userRow), Config.get.serverJwtSecret);
 
-            const tokenResp = AuthResponse(
-                idToken.toString(),
-                refreshTokenB64,
-                refreshTokenExp.toUnixTime() * 1000
-            );
-            resp.writeJsonBody(serializeToJson(tokenResp));
+            auto json = Json([
+                "idToken": Json(idToken.toString()),
+                "refreshToken": Json(refreshTokenB64),
+            ]);
+
+            if (!refreshTokenExp.isNull)
+            {
+                json["refreshTokenExpJs"] = Json(refreshTokenExp.get.toUnixTime() * 1000);
+            }
+
+            resp.writeJsonBody(json);
         });
     }
 }
@@ -323,7 +342,7 @@ private Json idPayload(UserRow row)
     const payload = JwtPayload(
         Config.get.serverHostname,
         row.id,
-        (Clock.currTime + idTokenDuration).toUnixTime!long() * 1000,
+        toJwtTime(Clock.currTime + idTokenDuration),
         row.email,
         row.name,
         row.avatarUrl,

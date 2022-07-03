@@ -90,7 +90,7 @@ struct Config
                 "DOP_DB_CONNSTRING", "postgres:///dop-registry"
             );
             c.dbPoolMaxSize = environment.get(
-                "DOP_DB_POOLMAXSIZE", "1"
+                "DOP_DB_POOLMAXSIZE", "5"
             ).to!uint;
 
             c.githubClientId = environment.get(
