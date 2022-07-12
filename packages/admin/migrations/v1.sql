@@ -14,6 +14,7 @@ CREATE TABLE "refresh_token" (
     "user_id"       integer NOT NULL,
     "expiration"    timestamptz,
     "revoked"       timestamptz, -- null if valid
+    "name"          text, -- only for CLI tokens
     "cli"           boolean NOT NULL,
 
     FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE

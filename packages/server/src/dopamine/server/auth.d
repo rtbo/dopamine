@@ -15,6 +15,8 @@ import vibe.http.client;
 import vibe.http.router;
 import vibe.http.server;
 
+import std.algorithm;
+import std.array;
 import std.base64;
 import std.datetime;
 import std.exception;
@@ -128,6 +130,9 @@ class AuthApi
     {
         router.post("/auth", genericHandler(&auth));
         router.post("/auth/token", genericHandler(&token));
+        router.get("/auth/cli-tokens", genericHandler(&cliTokens));
+        router.post("/auth/cli-tokens", genericHandler(&cliTokensCreate));
+        router.delete_("/auth/cli-tokens/:elidedToken", genericHandler(&cliTokensRevoke));
     }
 
     void auth(scope HTTPServerRequest req, scope HTTPServerResponse resp)
@@ -237,94 +242,82 @@ class AuthApi
             return getGoogleUser(token.idToken);
     }
 
-    @OrderedCols
-    static struct TokenRow
-    {
-        int userId;
-        Nullable!SysTime exp;
-        Nullable!SysTime revoked;
-        bool cli;
-    }
-
-    @OrderedCols
-    static struct Row
-    {
-        const(ubyte)[] token;
-        int userId;
-        Nullable!SysTime exp;
-        Nullable!SysTime revoked;
-        bool cli;
-    }
-
     void token(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
+        @OrderedCols
+        static struct Row
+        {
+            int userId;
+            Nullable!SysTime exp;
+            Nullable!SysTime revoked;
+            string name;
+            bool cli;
+        }
+
         string refreshTokenB64 = req.json.enforceProp!string("refreshToken");
         RefreshToken refreshTokenBuf;
         auto refreshToken = Base64.decode(refreshTokenB64, refreshTokenBuf[]);
 
         client.transac((scope DbConn db) {
 
-            auto rows = db.execRows!Row(`
-                SELECT token, user_id, expiration, revoked, cli FROM refresh_token
-            `);
-
-            TokenRow tokRow;
+            Row row;
             try
             {
                 // update revoked but return previous value
-                tokRow = db.execRow!TokenRow(`
+                row = db.execRow!Row(`
                     UPDATE refresh_token new SET revoked = NOW()
                     FROM refresh_token old
                     WHERE new.token = old.token AND new.token = $1
-                    RETURNING old.user_id, old.expiration, old.revoked, old.cli
+                    RETURNING old.user_id, old.expiration, old.revoked, old.name, old.cli
                 `, refreshToken);
             }
             catch (ResourceNotFoundException ex)
             {
                 statusError(401, "Unknown token");
             }
-            const revoked = !tokRow.revoked.isNull;
-            const now = Clock.currTime.toUTC();
-            if (revoked || (!tokRow.exp.isNull && tokRow.exp.get <= now))
+            const revoked = !row.revoked.isNull;
+            const now = Clock.currTime;
+            if (revoked || (!row.exp.isNull && row.exp.get <= now))
             {
+                logTrace("Revoking all tokens of user %s", row.userId);
+
                 // attempt to use a revoked or expired token.
                 // possibly a token was stolen by XSS
                 // invalidate all tokens from the user to force to re-authenticate
                 db.exec(
                     `UPDATE refresh_token SET revoked = NOW() WHERE user_id = $1`,
-                    tokRow.userId,
+                    row.userId,
                 );
-                statusError(403, revoked ? "Attempt to use revoked token" : "expired token");
+                resp.statusCode = 403;
+                resp.writeBody(revoked ? "Attempt to use revoked token" : "expired token");
+                return;
             }
 
             // all good let's generate a new Jwt and refresh token
-            // FIXME: here we should re-authenticate to provider
-
-            cryptoRandomBytes(refreshTokenBuf[]);
-            refreshTokenB64 = Base64.encode(refreshTokenBuf);
+            // FIXME: should we here re-authenticate to provider?
 
             // for CLI, we keep the same expiration date
-            Nullable!SysTime refreshTokenExp = tokRow.cli ? tokRow.exp
+            Nullable!SysTime refreshTokenExp = row.cli ? row.exp
                 : nullable(now + refreshTokenDuration);
 
             const userRow = db.execRow!UserRow(
                 `SELECT id, email, name, avatar_url FROM "user" WHERE id = $1`,
-                tokRow.userId
+                row.userId
             );
 
-            const rt = db.execScalar!(const(ubyte)[])(`
-                    INSERT INTO refresh_token (token, user_id, expiration, cli)
-                    VALUES ($1, $2, $3, $4)
-                    RETURNING token
-                `, refreshToken, userRow.id, refreshTokenExp, tokRow.cli,
+            const newToken = db.execScalar!string(
+                `
+                    INSERT INTO refresh_token (token, user_id, expiration, name, cli)
+                    VALUES (GEN_RANDOM_BYTES($1), $2, $3, $4, $5)
+                    RETURNING ENCODE(token, 'base64')
+                `, cast(uint)RefreshToken.length, userRow.id, refreshTokenExp, row.name, row.cli,
             );
-            enforce(rt == refreshToken, "Could not store refresh token in DB");
 
             auto idToken = Jwt.sign(idPayload(userRow), Config.get.serverJwtSecret);
 
             auto json = Json([
                 "idToken": Json(idToken.toString()),
-                "refreshToken": Json(refreshTokenB64),
+                "refreshToken": Json(newToken),
             ]);
 
             if (!refreshTokenExp.isNull)
@@ -335,6 +328,108 @@ class AuthApi
             resp.writeJsonBody(json);
         });
     }
+
+    @OrderedCols
+    static struct CliTokenRow
+    {
+        const(ubyte)[] token;
+        string name;
+        Nullable!SysTime expiration;
+
+        static CliTokenRow[] byUserId(scope DbConn db, int userId)
+        {
+            return db.execRows!CliTokenRow(
+                `
+                    SELECT token, name, expiration FROM refresh_token
+                    WHERE user_id = $1 AND cli AND revoked IS NULL AND expiration > NOW()
+                `, userId,
+            );
+        }
+
+        Json toElidedJson() const
+        {
+            auto js = Json.emptyObject;
+            js["elidedToken"] = elidedToken(Base64.encode(token).idup);
+            js["name"] = name;
+            if (!expiration.isNull)
+                js["expJs"] = Json(expiration.get.toUnixTime() * 1000);
+            return js;
+        }
+    }
+
+    void cliTokens(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    {
+        const userInfo = enforceAuth(req);
+
+        const rows = client.connect((scope db) => CliTokenRow.byUserId(db, userInfo.id));
+        auto json = rows.map!(r => r.toElidedJson()).array;
+
+        resp.writeJsonBody(Json(json));
+    }
+
+    void cliTokensCreate(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    {
+        const userInfo = enforceAuth(req);
+
+        const name = req.json["name"].opt!string(null);
+
+        auto days = req.json["expDays"];
+        Nullable!SysTime expiration;
+        if (days.type == Json.Type.int_)
+            expiration = Clock.currTime + dur!"days"(days.get!int);
+
+        @OrderedCols
+        static struct Row
+        {
+            string token;
+            string name;
+            Nullable!SysTime exp;
+        }
+
+        const row = client.connect((scope db) @safe {
+            return db.execRow!Row(`
+                INSERT INTO refresh_token (user_id, token, name, expiration, cli)
+                VALUES($1, GEN_RANDOM_BYTES($2), $3, $4, TRUE)
+                RETURNING ENCODE(token, 'base64'), name, expiration
+            `, userInfo.id, cast(uint)RefreshToken.length, name, expiration);
+        });
+
+        auto json = Json.emptyObject;
+        json["token"] = Json(row.token);
+        if (row.name)
+            json["name"] = Json(row.name);
+        if (!row.exp.isNull)
+            json["expJs"] = Json(row.exp.get.toUnixTime() * 1000);
+
+        resp.writeJsonBody(json);
+    }
+
+    void cliTokensRevoke(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    {
+        const userInfo = enforceAuth(req);
+
+        const elidedToken = req.params["elidedToken"];
+        logTrace("Deleting %s", elidedToken);
+
+        const json = client.transac((scope db) {
+            db.exec(`
+                UPDATE refresh_token SET revoked = NOW()
+                WHERE revoked IS NULL AND user_id = $1 AND ENCODE(token, 'base64') LIKE $2
+            `, userInfo.id, elidedToken.replace(" ... ", "%"));
+
+            const rows = CliTokenRow.byUserId(db, userInfo.id);
+            auto json = rows.map!(r => r.toElidedJson()).array;
+            return Json(json);
+        });
+
+        resp.writeJsonBody(json);
+    }
+}
+
+private string elidedToken(string token)
+{
+    const chars = min(4, token.length / 5);
+    return token[0 .. chars] ~ " ... " ~ token[$ - chars .. $];
 }
 
 private Json idPayload(UserRow row)
