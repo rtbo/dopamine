@@ -1,20 +1,20 @@
-import Home from "./pages/Home.vue";
-import Login from "./pages/Login.vue";
-import CliTokens from "./pages/CliTokens.vue";
 import {
     createRouter,
     createWebHistory,
-    RouteLocationNormalized,
-    RouteLocationRaw,
     RouteRecordRaw,
     RouterOptions,
 } from "vue-router";
-import { useAuthStore } from "./stores/auth";
+import "vue-router";
+import Home from "./pages/Home.vue";
+import Login from "./pages/Login.vue";
+import CliTokens from "./pages/CliTokens.vue";
 
-function checkAuth(to: RouteLocationNormalized): RouteLocationRaw | undefined {
-    const store = useAuthStore();
-    console.log(store.idToken);
-    if (!store.loggedIn) return `/login?redirectTo=${to.path}`;
+declare module "vue-router" {
+    interface RouteMeta {
+        // see App.vue for the handling of authorized routes
+        requiresAuth?: boolean;
+        title?: string;
+    }
 }
 
 const routes: RouteRecordRaw[] = [
@@ -23,7 +23,7 @@ const routes: RouteRecordRaw[] = [
     {
         path: "/cli-tokens",
         component: CliTokens,
-        beforeEnter: [checkAuth],
+        meta: { requiresAuth: true },
     },
 ];
 

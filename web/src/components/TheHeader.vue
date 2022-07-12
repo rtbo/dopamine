@@ -21,14 +21,14 @@ const route = useRoute();
           <ul
             class="menu menu-compact dropdown-content mt-3 p-2 shadow bg-base-100 rounded-box w-52">
             <li>
-              <router-link :to="{ path: '/cli-tokens' }" class="btn bg-base-200">
+              <router-link :to="{ path: '/cli-tokens' }">
                 <span class="iconify" data-icon="mdi:console"></span>
                 CLI Tokens
               </router-link>
 
             </li>
             <li>
-              <button class="btn bg-base-200" @click="authStore.disconnect()">
+              <button @click="authStore.disconnect()">
                 <span class="iconify" data-icon="mdi:logout"></span>
                 Logout
               </button>

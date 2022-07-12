@@ -80,7 +80,7 @@ async function revoke(tok: ElidedCliToken) {
         </p>
         <p>This token will be showed only once. Run the following command to use
           it locally:</p>
-        <code class="bg-base-300">
+        <code class="bg-base-300 p-2">
           {{ createdCommand }}
         </code>
         <div class="card-actions justify-end">
@@ -92,16 +92,17 @@ async function revoke(tok: ElidedCliToken) {
         </div>
       </div>
     </div>
-    <div v-for="tok in tokens" :key="tok.elidedToken" class="card max-w-md">
+    <div v-for="tok in tokens" :key="tok.elidedToken" class="card bg-base-200 my-4">
       <div class="card-body">
         <h2 v-if="tok.name" class="card-title">{{ tok.name }}</h2>
-        <p v-if="tok.expJs">Expires: {{ new Date(tok.expJs).toLocaleString() }}
+        <p v-if="tok.expJs">Expires:&nbsp; {{ new Date(tok.expJs).toLocaleString() }}
         </p>
         <p>
-          <code>{{ tok.elidedToken }}</code>
+          Token:&nbsp;
+          <code class="bg-base-300 p-2">{{ tok.elidedToken }}</code>
         </p>
         <div class="card-actions justify-end">
-          <button @click="revoke(tok)">Revoke</button>
+          <button class="btn" @click="revoke(tok)">Revoke</button>
         </div>
       </div>
     </div>

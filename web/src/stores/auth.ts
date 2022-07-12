@@ -50,8 +50,7 @@ export const useAuthStore = defineStore("auth", {
         async connect(oauth: OAuthResult) {
             try {
                 this.loading = true;
-                const res = await postOAuth(oauth);
-                const { idToken, refreshToken, refreshTokenExpJs } = res;
+                const { idToken, refreshToken, refreshTokenExpJs } = await postOAuth(oauth);
                 const idPayload = jwtDecode<JwtPayload>(idToken);
                 const persistentState = {
                     email: idPayload.email,
@@ -83,6 +82,7 @@ export const useAuthStore = defineStore("auth", {
         },
         disconnect() {
             this.$reset();
+            localStorage.removeItem("authState");
         },
         async refresh() {
             if (!this.refreshToken || !this.refreshTokenValid) {
