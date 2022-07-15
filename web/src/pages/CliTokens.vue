@@ -39,70 +39,87 @@ function doneShowCreated() {
 }
 
 async function revoke(tok: ElidedCliToken) {
-  console.log(tok);
-  tokens.value = await delAuthCliTokens(store.idToken, tok.elidedToken);
+  doneShowCreated();
+  tokens.value = await delAuthCliTokens(store.idToken, tok.id);
 }
 </script>
 
 <template>
-  <div class="w-full max-w-lg">
+  <div class="w-full">
     <h1 class="text-lg mb-2">CLI tokens</h1>
-    <div class="card bg-base-200">
-      <div class="card-body" v-if="!showCreated">
-        <h2>Create new Token</h2>
-        <div class="form-control">
-          <input type="text" placeholder='Token name (e.g. "Linux laptop")'
-            class="input max-w-xs" v-model="createName" />
-          <label class="label">
-            <input type="checkbox" v-model="createHasExp" class="checkbox" />
-            <span class="label-text">valid for</span>
-            <input type="number" class="input w-24" v-model="createValidity"
-              :disabled="!createHasExp" />
-            <span class="label-text">days</span>
-          </label>
-        </div>
-        <div class="card-actions justify-end">
-          <button class="btn btn-primary" @click="create">
-            <span class="iconify" data:icon="mdi:plus"></span>
-            Create
-          </button>
+    <div class="w-full mx-auto grid grid-cols-1 lg:grid-cols-2">
+      <div class="w-full mx-auto max-w-xl">
+
+        <div class="card bg-base-200 mx-4 mb-4">
+
+          <div class="card-body" v-if="!showCreated">
+            <h2 class="card-title">Create new <Icon icon="mdi:console"></Icon> Token</h2>
+            <div class="form-control">
+              <input type="text" placeholder='Token name (e.g. "Linux laptop")'
+                class="input max-w-xs" v-model="createName" />
+              <label class="label">
+                <input type="checkbox" v-model="createHasExp"
+                  class="checkbox" />
+                <span class="label-text">valid for</span>
+                <input type="number" class="input w-24" v-model="createValidity"
+                  :disabled="!createHasExp" />
+                <span class="label-text">days</span>
+              </label>
+            </div>
+            <div class="card-actions justify-end">
+              <button class="btn btn-primary" @click="create">
+                <span class="iconify" data:icon="mdi:plus"></span>
+                Create
+              </button>
+            </div>
+          </div>
+
+          <div v-else class="card-body">
+            <h2 class="card-title">New <Icon icon="mdi:console"></Icon> Token created</h2>
+            <p>
+              Name: {{ created?.name ?? "(no name)" }}
+            </p>
+            <p>
+              Expires: {{ created?.expJs ? (new
+                  Date(created.expJs)).toLocaleString() : "never"
+              }}
+            </p>
+            <p>This token will be showed only once. Run the following command to
+              use
+              it locally:</p>
+            <code class="bg-base-300 p-2 break-words"> {{ createdCommand }} </code>
+            <div class="card-actions justify-end">
+              <button class="btn btn-ghost" @click="commandCopy()">
+                <Icon :icon="copyIcon"></Icon>
+                &nbsp;Copy
+              </button>
+              <button class="btn" @click="doneShowCreated">Done</button>
+            </div>
+          </div>
+
         </div>
       </div>
-      <div v-else class="card-body">
-        <h2>New token created</h2>
-        <p>
-          Name: {{ created?.name ?? "(no name)" }}
-        </p>
-        <p>
-          Expires: {{ created?.expJs ? (new
-              Date(created.expJs)).toLocaleString() : "never"
-          }}
-        </p>
-        <p>This token will be showed only once. Run the following command to use
-          it locally:</p>
-        <code class="bg-base-300 p-2">
-          {{ createdCommand }}
-        </code>
-        <div class="card-actions justify-end">
-          <button class="btn btn-ghost" @click="commandCopy()">
-            <Icon :icon="copyIcon"></Icon>
-            &nbsp;Copy
-          </button>
-          <button class="btn" @click="doneShowCreated">Done</button>
-        </div>
-      </div>
-    </div>
-    <div v-for="tok in tokens" :key="tok.elidedToken" class="card bg-base-200 my-4">
-      <div class="card-body">
-        <h2 v-if="tok.name" class="card-title">{{ tok.name }}</h2>
-        <p v-if="tok.expJs">Expires:&nbsp; {{ new Date(tok.expJs).toLocaleString() }}
-        </p>
-        <p>
-          Token:&nbsp;
-          <code class="bg-base-300 p-2">{{ tok.elidedToken }}</code>
-        </p>
-        <div class="card-actions justify-end">
-          <button class="btn" @click="revoke(tok)">Revoke</button>
+
+      <div class="w-full mx-auto max-w-xl">
+        <div v-for="tok in tokens" :key="tok.elidedToken"
+          class="card bg-base-200 mx-4 mb-8">
+          <div class="card-body">
+            <h2 v-if="tok.name" class="card-title">{{ tok.name }}</h2>
+            <p v-if="tok.expJs">Expires:&nbsp; {{ new
+                Date(tok.expJs).toLocaleString()
+            }}
+            </p>
+            <p>
+              Token:&nbsp;
+              <code class="bg-base-300 p-2">{{ tok.elidedToken }}</code>
+            </p>
+            <div class="card-actions justify-end">
+              <button class="btn hover:bg-red-700 hover:text-wite"
+                @click="revoke(tok)">
+                <Icon icon="mdi:delete"></Icon>&nbsp; Revoke
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

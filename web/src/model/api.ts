@@ -6,7 +6,7 @@ import { Provider, OAuthResult } from "./oauth";
 const hostUrl = import.meta.env.VITE_API_HOST || "http://localhost:3500";
 const prefix = import.meta.env.VITE_API_PREFIX || "/api";
 
-export const host = hostUrl.replace("http://", "").replace("https://", "")
+export const host = hostUrl.replace("http://", "").replace("https://", "");
 
 export function resource(path?: string): string {
     return `${hostUrl}${prefix}${path || ""}`;
@@ -57,20 +57,22 @@ export function postAuthToken(data: { refreshToken: string }): Promise<AuthRespo
 }
 
 export interface ElidedCliToken {
+    id: number;
     name: string;
     elidedToken: string;
     expJs?: number;
 }
 
 export interface CliToken {
-    token: string,
-    name?: string,
-    expJs?: string,
+    token: string;
+    name?: string;
+    expJs?: string;
 }
 
 export function getAuthCliTokens(idToken: string): Promise<ElidedCliToken[]> {
+    if (!idToken) return Promise.resolve([]);
     return api
-        .get("auth/cli-tokens", {
+        .get(`auth/cli-tokens`, {
             headers: authHeader(idToken),
         })
         .then((resp) => resp.data);
@@ -91,14 +93,11 @@ export function postAuthCliTokens(idToken: string, name: string, expDays?: numbe
         .then((resp) => resp.data);
 }
 
-export function delAuthCliTokens(idToken: string, elidedToken: string): Promise<ElidedCliToken[]> {
+export function delAuthCliTokens(idToken: string, tokenId: number): Promise<ElidedCliToken[]> {
     return api
-        .delete(
-            `auth/cli-tokens/${encodeURIComponent(elidedToken)}`,
-            {
-                headers: authHeader(idToken),
-            }
-        )
+        .delete(`auth/cli-tokens/${tokenId}`, {
+            headers: authHeader(idToken),
+        })
         .then((resp) => resp.data);
 }
 

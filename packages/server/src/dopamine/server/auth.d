@@ -132,7 +132,7 @@ class AuthApi
         router.post("/auth/token", genericHandler(&token));
         router.get("/auth/cli-tokens", genericHandler(&cliTokens));
         router.post("/auth/cli-tokens", genericHandler(&cliTokensCreate));
-        router.delete_("/auth/cli-tokens/:elidedToken", genericHandler(&cliTokensRevoke));
+        router.delete_("/auth/cli-tokens/:id", genericHandler(&cliTokensRevoke));
     }
 
     void auth(scope HTTPServerRequest req, scope HTTPServerResponse resp)
@@ -152,9 +152,7 @@ class AuthApi
             break;
         }
 
-        RefreshToken refreshToken;
-        cryptoRandomBytes(refreshToken[]);
-        const refreshTokenB64 = Base64.encode(refreshToken).idup;
+        string refreshToken;
         const refreshTokenExp = Clock.currTime + refreshTokenDuration;
 
         const row = client.transac((scope DbConn db) {
@@ -167,14 +165,12 @@ class AuthApi
                 RETURNING id, email, name, avatar_url
             `, userResp.email, userResp.name, userResp.avatarUrl);
 
-            const rt = db.execScalar!RefreshToken(`
+            refreshToken = db.execScalar!string(`
                     INSERT INTO refresh_token (token, user_id, expiration, cli)
-                    VALUES ($1, $2, $3, FALSE)
-                    RETURNING token
-                `, refreshToken, userRow.id, refreshTokenExp
+                    VALUES (GEN_RANDOM_BYTES($1), $2, $3, FALSE)
+                    RETURNING ENCODE(token, 'base64')
+                `, cast(uint) RefreshToken.length, userRow.id, refreshTokenExp
             );
-
-            enforce(rt == refreshToken, "Could not store refresh token in DB");
 
             return userRow;
         });
@@ -183,7 +179,7 @@ class AuthApi
 
         auto json = Json([
             "idToken": Json(idToken.toString()),
-            "refreshToken": Json(refreshTokenB64),
+            "refreshToken": Json(refreshToken),
             "refreshTokenExpJs": Json(refreshTokenExp.toUnixTime() * 1000)
         ]);
         resp.writeJsonBody(json);
@@ -254,7 +250,7 @@ class AuthApi
             bool cli;
         }
 
-        string refreshTokenB64 = req.json.enforceProp!string("refreshToken");
+        const refreshTokenB64 = req.json.enforceProp!string("refreshToken");
         RefreshToken refreshTokenBuf;
         auto refreshToken = Base64.decode(refreshTokenB64, refreshTokenBuf[]);
 
@@ -310,7 +306,7 @@ class AuthApi
                     INSERT INTO refresh_token (token, user_id, expiration, name, cli)
                     VALUES (GEN_RANDOM_BYTES($1), $2, $3, $4, $5)
                     RETURNING ENCODE(token, 'base64')
-                `, cast(uint)RefreshToken.length, userRow.id, refreshTokenExp, row.name, row.cli,
+                `, cast(uint) RefreshToken.length, userRow.id, refreshTokenExp, row.name, row.cli,
             );
 
             auto idToken = Jwt.sign(idPayload(userRow), Config.get.serverJwtSecret);
@@ -332,6 +328,7 @@ class AuthApi
     @OrderedCols
     static struct CliTokenRow
     {
+        int id;
         const(ubyte)[] token;
         string name;
         Nullable!SysTime expiration;
@@ -340,7 +337,7 @@ class AuthApi
         {
             return db.execRows!CliTokenRow(
                 `
-                    SELECT token, name, expiration FROM refresh_token
+                    SELECT id, token, name, expiration FROM refresh_token
                     WHERE user_id = $1 AND cli AND revoked IS NULL AND expiration > NOW()
                 `, userId,
             );
@@ -349,6 +346,7 @@ class AuthApi
         Json toElidedJson() const
         {
             auto js = Json.emptyObject;
+            js["id"] = id;
             js["elidedToken"] = elidedToken(Base64.encode(token).idup);
             js["name"] = name;
             if (!expiration.isNull)
@@ -391,7 +389,7 @@ class AuthApi
                 INSERT INTO refresh_token (user_id, token, name, expiration, cli)
                 VALUES($1, GEN_RANDOM_BYTES($2), $3, $4, TRUE)
                 RETURNING ENCODE(token, 'base64'), name, expiration
-            `, userInfo.id, cast(uint)RefreshToken.length, name, expiration);
+            `, userInfo.id, cast(uint) RefreshToken.length, name, expiration);
         });
 
         auto json = Json.emptyObject;
@@ -406,16 +404,20 @@ class AuthApi
 
     void cliTokensRevoke(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
+        import std.conv : to;
+
         const userInfo = enforceAuth(req);
 
-        const elidedToken = req.params["elidedToken"];
-        logTrace("Deleting %s", elidedToken);
+        const tokenId = req.params["id"].to!int;
 
         const json = client.transac((scope db) {
-            db.exec(`
+            const revoked = db.execScalar!string(`
                 UPDATE refresh_token SET revoked = NOW()
-                WHERE revoked IS NULL AND user_id = $1 AND ENCODE(token, 'base64') LIKE $2
-            `, userInfo.id, elidedToken.replace(" ... ", "%"));
+                WHERE id = $1 AND revoked IS NULL AND user_id = $2
+                RETURNING ENCODE(token, 'base64')
+            `, tokenId, userInfo.id);
+
+            logTrace("Revoking token %s (%s)", tokenId, revoked);
 
             const rows = CliTokenRow.byUserId(db, userInfo.id);
             auto json = rows.map!(r => r.toElidedJson()).array;
@@ -428,7 +430,7 @@ class AuthApi
 
 private string elidedToken(string token)
 {
-    const chars = min(4, token.length / 5);
+    const chars = max(4, token.length / 5);
     return token[0 .. chars] ~ " ... " ~ token[$ - chars .. $];
 }
 
