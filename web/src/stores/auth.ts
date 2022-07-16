@@ -12,6 +12,14 @@ interface JwtPayload {
     avatarUrl: string;
 }
 
+interface PersistentAuthState {
+    email: string;
+    name: string;
+    avatarUrl: string;
+    refreshToken: string;
+    refreshTokenExp: number;
+}
+
 export const useAuthStore = defineStore("auth", {
     state: () => {
         return {
@@ -27,7 +35,7 @@ export const useAuthStore = defineStore("auth", {
         };
     },
     getters: {
-        loggedIn: (state) => !!state.idToken,
+        loggedIn: (state) => !!state.refreshToken,
         idTokenValid: (state) => state.idTokenExp > Date.now(),
         refreshTokenValid: (state) => state.refreshTokenExp > Date.now(),
     },
@@ -35,22 +43,21 @@ export const useAuthStore = defineStore("auth", {
         initialize() {
             const persistentStateStr = localStorage.getItem("authState");
             if (!persistentStateStr) return;
-            const persistentState = JSON.parse(persistentStateStr);
+            const persistentState: PersistentAuthState = JSON.parse(persistentStateStr);
             this.$patch(persistentState);
             return this.refresh();
         },
         async connect(oauth: OAuthResult) {
             try {
                 this.loading = true;
-                const res = await postOAuth(oauth);
-                const { idToken, refreshToken, refreshTokenExp } = res;
+                const { idToken, refreshToken, refreshTokenExpJs } = await postOAuth(oauth);
                 const idPayload = jwtDecode<JwtPayload>(idToken);
                 const persistentState = {
                     email: idPayload.email,
                     name: idPayload.name,
                     avatarUrl: idPayload.avatarUrl,
                     refreshToken,
-                    refreshTokenExp,
+                    refreshTokenExp: refreshTokenExpJs,
                 };
                 this.$state = {
                     idToken,
@@ -75,15 +82,17 @@ export const useAuthStore = defineStore("auth", {
         },
         disconnect() {
             this.$reset();
+            localStorage.removeItem("authState");
         },
         async refresh() {
             if (!this.refreshToken || !this.refreshTokenValid) {
+                console.log("will reset");
                 this.$reset();
                 return;
             }
             try {
                 this.loading = true;
-                const { idToken, refreshToken, refreshTokenExp } = await postAuthToken({
+                const { idToken, refreshToken, refreshTokenExpJs } = await postAuthToken({
                     refreshToken: this.refreshToken,
                 });
 
@@ -93,7 +102,7 @@ export const useAuthStore = defineStore("auth", {
                     name: idPayload.name,
                     avatarUrl: idPayload.avatarUrl,
                     refreshToken,
-                    refreshTokenExp,
+                    refreshTokenExp: refreshTokenExpJs,
                 };
                 this.$state = {
                     idToken,

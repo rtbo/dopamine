@@ -13,6 +13,8 @@ async function login(provider: Provider) {
   const res = await oauth.authenticate(provider);
   await authStore.connect(res)
   const redirect = route.query?.["redirectTo"] as string ?? '/';
+  console.log(redirect);
+  console.log("logged in: ", authStore.loggedIn);
   if (authStore.loggedIn)
     router.push({ path: redirect });
 }
