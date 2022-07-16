@@ -1,6 +1,7 @@
 module pgd.conv;
 
 import pgd.libpq;
+import pgd.maybe;
 import pgd.conv.nullable;
 import pgd.conv.time;
 
@@ -71,7 +72,7 @@ enum isScalar(T) = is(T == bool) ||
     isByteArray!T ||
     is(Unqual!T == Date) ||
     is(Unqual!T == SysTime) ||
-    (isNullable!T && !is(NullableTarget!T == T) && isScalar!(NullableTarget!T));
+    (isNullable!T && isScalar!(NullableTarget!T));
 
 enum isRow(R) = is(R == struct) && allSatisfy!(isScalar, Fields!R);
 
@@ -261,14 +262,18 @@ private T toScalar(T)(BinValue val) @safe if (is(T == SysTime))
 }
 
 private T toScalar(T)(BinValue val) @safe
-        if (isNullable!T && !is(NullableTarget!T == T))
+        if (isNullable!T)
 {
     if (val.val.length == 0)
         return nullValue!T();
 
     auto nonNull = toScalar!(NullableTarget!T)(val);
 
-    static if (__traits(isSame, TemplateOf!T, Nullable))
+    static if (isNullableTemplate!T)
+    {
+        return T(nonNull);
+    }
+    else static if (isMayBe!T)
     {
         return T(nonNull);
     }
@@ -302,7 +307,7 @@ private template pgTypeOf(TT)
         enum pgTypeOf = PgType.date;
     else static if (is(T == SysTime))
         enum pgTypeOf = PgType.timestamptz;
-    else static if (isNullable!T && !is(NullableTarget!T == T))
+    else static if (isNullable!T)
         enum pgTypeOf = pgTypeOf!(NullableTarget!T);
     else
         static assert(false, "unsupported scalar type: " ~ T.stringof);
@@ -345,7 +350,7 @@ private size_t scalarBinSize(T)(T val) @safe if (isScalar!T)
         return val.length;
     else static if (isByteArray!T)
         return val.length;
-    else static if (isNullable!T && !is(NullableTarget!T == T))
+    else static if (isNullable!T)
         return isNull(val) ? 0 : scalarBinSize(getNonNull(val));
     else
         static assert(false, "unimplemented scalar type " ~ T.stringof);
@@ -382,7 +387,7 @@ private size_t emplaceScalar(T)(T val, scope ubyte[] buf) @safe
         buf[0 .. 8] = nativeToBigEndian(pgTime);
         return 8;
     }
-    else static if (isNullable!T && !is(NullableTarget!T == T))
+    else static if (isNullable!T)
     {
         if (isNull(val))
             return 0;

@@ -6,13 +6,19 @@ module pgd.maybe;
 import std.exception;
 import std.range;
 
+@safe:
+
 /// Stores may be a instance of T, and a boolean
 struct MayBe(T)
 {
     private T _value;
     private bool _valid;
 
-    private this (T value, bool valid)
+    // for isMayBe. kind of dirty but easy trick
+    // to make isMayBe compatible with MayBe!(T) and MayBe!(T, invalidValue)
+    private enum mark = "MayBe";
+
+    private this(T value, bool valid)
     {
         _value = value;
         _valid = valid;
@@ -23,6 +29,12 @@ struct MayBe(T)
     {
         _value = value;
         _valid = true;
+    }
+
+    this(MayBe!T mb)
+    {
+        _value = mb._value;
+        _valid = mb._valid;
     }
 
     @property T value() const
@@ -145,9 +157,18 @@ struct MayBe(T, T invalidValue)
 {
     private T _value = invalidValue;
 
+    // for isMayBe. kind of dirty but easy trick
+    // to make isMayBe compatible with MayBe!(T) and MayBe!(T, invalidValue)
+    private enum mark = "MayBe";
+
     this(T value)
     {
         _value = value;
+    }
+
+    this(MayBe!(T, invalidValue) mb)
+    {
+        _value = mb._value;
     }
 
     @property T value() const
@@ -289,6 +310,7 @@ unittest
 /// Construct a may be valid MayBe valid.
 /// validity depends on the invalidValue template parameter
 MayBe!(T, invalidValue) mayBe(T, T invalidValue)(T value = invalidValue)
+        if (!isInputRange!T)
 {
     return MayBe!(T, invalidValue)(value);
 }
@@ -325,6 +347,30 @@ auto mayBe(I)(I input) if (isInputRange!I)
     return res;
 }
 
+template mayBe(T, T invalidValue)
+{
+    /// Construct a MayBe value from a range where an invalid value is represented by invalidValue.
+    /// The returned value is valid if the range has one element
+    /// Throws if the range has more than one element or if the range yields invalidValue.
+    auto mayBe(I)(I input) if (isInputRange!I)
+    {
+        MayBe!(T, invalidValue) res;
+
+        if (!input.empty)
+        {
+            auto val = input.front;
+
+            enforce(val != invalidValue, "Range returned invalidValue");
+
+            res = val;
+            input.popFront();
+            enforce(input.empty, "Range provided to mayBe must have one or zero element");
+        }
+
+        return res;
+    }
+}
+
 @("mayBe with range")
 unittest
 {
@@ -346,4 +392,57 @@ unittest
     assert(mb1Bis.valid && mb1Bis.value == 2);
     assert(!arr0Bis.valid);
     assert(arr1Bis.valid && arr1Bis.value == 2);
+}
+
+@("mayBe with range and string")
+unittest
+{
+    import std.algorithm;
+    import std.string;
+
+    alias MayBeString = MayBe!(string, null);
+
+    MayBeString mb;
+    MayBeString mbs = "hello";
+    string[] arr0 = [];
+    string[] arr1 = ["hello"];
+    string[] arr2 = ["hello", "hollo"];
+
+    MayBeString mbBis = mb.map!(s => s.toUpper())
+        .mayBe!(string, null)();
+    MayBeString mbsBis = mbs.map!(s => s.toUpper())
+        .mayBe!(string, null)();
+    MayBeString arr0Bis = arr0.map!(s => s.toUpper())
+        .mayBe!(string, null)();
+    MayBeString arr1Bis = arr1.map!(s => s.toUpper())
+        .mayBe!(string, null)();
+    assertThrown(arr2.map!(s => s.toUpper())
+            .mayBe!(string, null)());
+
+    assert(!mbBis.valid);
+    assert(mbsBis.valid && mbsBis.value == "HELLO");
+    assert(!arr0Bis.valid);
+    assert(arr1Bis.valid && arr1Bis.value == "HELLO");
+}
+
+/// check whether type T is built with MayBe template
+template isMayBe(T)
+{
+    static if (is(typeof(T.mark)))
+    {
+        enum isMayBe = T.mark == "MayBe";
+    }
+    else
+    {
+        enum isMayBe = false;
+    }
+}
+
+static assert(isMayBe!(MayBe!(int)));
+static assert(isMayBe!(MayBe!(string, null)));
+
+/// Get the type targetted by MB
+template MayBeTarget(MB) if (isMayBe!MB)
+{
+    alias MayBeTarget = typeof(MB.init.value);
 }
