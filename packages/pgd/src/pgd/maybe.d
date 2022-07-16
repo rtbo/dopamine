@@ -3,6 +3,7 @@
 /// better range interoperability and less compatibility with corner cases.
 module pgd.maybe;
 
+import std.datetime.systime;
 import std.exception;
 import std.range;
 
@@ -49,7 +50,17 @@ struct MayBe(T)
         return _value;
     }
 
+    T valueOr(lazy T def) const
+    {
+        return _valid ? _value : def;
+    }
+
     @property bool valid() const
+    {
+        return _valid;
+    }
+
+    @property bool opCast(T : bool)() const
     {
         return _valid;
     }
@@ -197,9 +208,19 @@ struct MayBe(T, T invalidValue)
         return _value;
     }
 
+    T valueOr(lazy T def) const
+    {
+        return _value != invalidValue ? _value : def;
+    }
+
     @property bool valid() const
     {
         return _value != invalidValue;
+    }
+
+    @property bool opCast(T : bool)() const
+    {
+        return valid;
     }
 
     /// Make this object invalid.
@@ -338,11 +359,11 @@ unittest
 
 /// Construct a may be valid MayBe valid.
 /// validity depends on the invalidValue template parameter
-MayBe!(T, invalidValue) mayBe(T, T invalidValue)(T value = invalidValue)
-        if (!isInputRange!T)
-{
-    return MayBe!(T, invalidValue)(value);
-}
+// MayBe!(T, invalidValue) mayBe(T, T invalidValue)(T value = invalidValue)
+//         if (!isInputRange!T)
+// {
+//     return MayBe!(T, invalidValue)(value);
+// }
 
 @("mayBe with invalidValue")
 unittest
@@ -378,6 +399,11 @@ auto mayBe(I)(I input) if (isInputRange!I)
 
 template mayBe(T, T invalidValue)
 {
+    MayBe!(T, invalidValue) mayBe(T value = invalidValue)
+    {
+        return MayBe!(T, invalidValue)(value);
+    }
+
     /// Construct a MayBe value from a range where an invalid value is represented by invalidValue.
     /// The returned value is valid if the range has one element
     /// Throws if the range has more than one element or if the range yields invalidValue.
@@ -429,30 +455,40 @@ unittest
     import std.algorithm;
     import std.string;
 
-    alias MayBeString = MayBe!(string, null);
-
-    MayBeString mb;
-    MayBeString mbs = "hello";
+    MayBeText mb;
+    MayBeText mbs = "hello";
     string[] arr0 = [];
     string[] arr1 = ["hello"];
     string[] arr2 = ["hello", "hollo"];
 
-    MayBeString mbBis = mb.map!(s => s.toUpper())
-        .mayBe!(string, null)();
-    MayBeString mbsBis = mbs.map!(s => s.toUpper())
-        .mayBe!(string, null)();
-    MayBeString arr0Bis = arr0.map!(s => s.toUpper())
-        .mayBe!(string, null)();
-    MayBeString arr1Bis = arr1.map!(s => s.toUpper())
-        .mayBe!(string, null)();
+    MayBeText mbBis = mb.map!(s => s.toUpper())
+        .mayBeText();
+    MayBeText mbsBis = mbs.map!(s => s.toUpper())
+        .mayBeText();
+    MayBeText arr0Bis = arr0.map!(s => s.toUpper())
+        .mayBeText();
+    MayBeText arr1Bis = arr1.map!(s => s.toUpper())
+        .mayBeText();
     assertThrown(arr2.map!(s => s.toUpper())
-            .mayBe!(string, null)());
+            .mayBeText());
 
     assert(!mbBis.valid);
     assert(mbsBis.valid && mbsBis.value == "HELLO");
     assert(!arr0Bis.valid);
     assert(arr1Bis.valid && arr1Bis.value == "HELLO");
 }
+
+/// Type suitable to map to Postgres nullable text column
+alias MayBeText = MayBe!(string, null);
+
+/// ditto
+alias mayBeText = mayBe!(string, null);
+
+/// Type suitable to map to Postgres nullable timestamptz column
+alias MayBeTimestamp = MayBe!(SysTime, SysTime.init);
+
+/// ditto
+alias mayBeTimestamp = mayBe!(SysTime, SysTime.init);
 
 /// check whether type T is built with MayBe template
 template isMayBe(T)
@@ -468,10 +504,14 @@ template isMayBe(T)
 }
 
 static assert(isMayBe!(MayBe!(int)));
-static assert(isMayBe!(MayBe!(string, null)));
+static assert(isMayBe!(MayBeText));
 
 /// Get the type targetted by MB
 template MayBeTarget(MB) if (isMayBe!MB)
 {
     alias MayBeTarget = typeof(MB.init.value);
 }
+
+static assert(is(MayBeTarget!(MayBe!int) == int));
+static assert(is(MayBeTarget!MayBeText == string));
+static assert(is(MayBeTarget!MayBeTimestamp == SysTime));

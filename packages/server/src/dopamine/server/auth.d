@@ -7,6 +7,7 @@ import dopamine.server.utils;
 import crypto;
 import jwt;
 import pgd.conn;
+import pgd.maybe;
 
 import vibe.core.log;
 import vibe.data.json;
@@ -23,7 +24,6 @@ import std.exception;
 import std.format;
 import std.string;
 import std.traits;
-import std.typecons;
 
 @safe:
 
@@ -34,8 +34,8 @@ struct UserInfo
 {
     int id;
     string email;
-    string name;
-    string avatarUrl;
+    MayBeText name;
+    MayBeText avatarUrl;
 }
 
 private alias UserRow = UserInfo;
@@ -244,9 +244,9 @@ class AuthApi
         static struct Row
         {
             int userId;
-            Nullable!SysTime exp;
-            Nullable!SysTime revoked;
-            string name;
+            MayBeTimestamp exp;
+            MayBeTimestamp revoked;
+            MayBeText name;
             bool cli;
         }
 
@@ -271,9 +271,9 @@ class AuthApi
             {
                 statusError(401, "Unknown token");
             }
-            const revoked = !row.revoked.isNull;
+            const revoked = row.revoked.valid;
             const now = Clock.currTime;
-            if (revoked || (!row.exp.isNull && row.exp.get <= now))
+            if (revoked || (row.exp.valid && row.exp.value <= now))
             {
                 logTrace("Revoking all tokens of user %s", row.userId);
 
@@ -292,14 +292,13 @@ class AuthApi
             // all good let's generate a new Jwt and refresh token
             // FIXME: should we here re-authenticate to provider?
 
-            // for CLI, we keep the same expiration date
-            Nullable!SysTime refreshTokenExp = row.cli ? row.exp
-                : nullable(now + refreshTokenDuration);
-
             const userRow = db.execRow!UserRow(
                 `SELECT id, email, name, avatar_url FROM "user" WHERE id = $1`,
                 row.userId
             );
+
+            // for CLI, we keep the same expiration date
+            auto refreshTokenExp = row.cli ? row.exp : mayBeTimestamp(now + refreshTokenDuration);
 
             const newToken = db.execScalar!string(
                 `
@@ -316,10 +315,9 @@ class AuthApi
                 "refreshToken": Json(newToken),
             ]);
 
-            if (!refreshTokenExp.isNull)
-            {
-                json["refreshTokenExpJs"] = Json(refreshTokenExp.get.toUnixTime() * 1000);
-            }
+            refreshTokenExp.each!((exp) {
+                json["refreshTokenExpJs"] = exp.toUnixTime() * 1000;
+            });
 
             resp.writeJsonBody(json);
         });
@@ -331,7 +329,7 @@ class AuthApi
         int id;
         const(ubyte)[] token;
         string name;
-        Nullable!SysTime expiration;
+        MayBeTimestamp expiration;
 
         static CliTokenRow[] byUserId(scope DbConn db, int userId)
         {
@@ -349,8 +347,8 @@ class AuthApi
             js["id"] = id;
             js["elidedToken"] = elidedToken(Base64.encode(token).idup);
             js["name"] = name;
-            if (!expiration.isNull)
-                js["expJs"] = Json(expiration.get.toUnixTime() * 1000);
+            if (expiration.valid)
+                js["expJs"] = Json(expiration.value.toUnixTime() * 1000);
             return js;
         }
     }
@@ -371,20 +369,20 @@ class AuthApi
 
         const name = req.json["name"].opt!string(null);
 
-        auto days = req.json["expDays"];
-        Nullable!SysTime expiration;
-        if (days.type == Json.Type.int_)
-            expiration = Clock.currTime + dur!"days"(days.get!int);
+        MayBe!(int, -1) days = req.json["expDays"].opt!int(-1);
+        const expiration = days
+            .map!(d => Clock.currTime + dur!"days"(d))
+            .mayBeTimestamp();
 
         @OrderedCols
         static struct Row
         {
             string token;
             string name;
-            Nullable!SysTime exp;
+            MayBeTimestamp exp;
         }
 
-        const row = client.connect((scope db) @safe {
+        auto row = client.connect((scope db) @safe {
             return db.execRow!Row(`
                 INSERT INTO refresh_token (user_id, token, name, expiration, cli)
                 VALUES($1, GEN_RANDOM_BYTES($2), $3, $4, TRUE)
@@ -394,10 +392,8 @@ class AuthApi
 
         auto json = Json.emptyObject;
         json["token"] = Json(row.token);
-        if (row.name)
-            json["name"] = Json(row.name);
-        if (!row.exp.isNull)
-            json["expJs"] = Json(row.exp.get.toUnixTime() * 1000);
+        row.name.each!(n => json["name"] = n);
+        row.exp.each!(t => json["expJs"] = t.toUnixTime() * 1000);
 
         resp.writeJsonBody(json);
     }
@@ -441,8 +437,8 @@ private Json idPayload(UserRow row)
         row.id,
         toJwtTime(Clock.currTime + idTokenDuration),
         row.email,
-        row.name,
-        row.avatarUrl,
+        row.name.valueOr(null),
+        row.avatarUrl.valueOr(null),
     );
     return serializeToJson(payload);
 }
@@ -526,6 +522,8 @@ UserInfo enforceAuth(scope HTTPServerRequest req) @safe
     );
     try
     {
+        import std.typecons : Yes;
+
         const conf = Config.get;
         const jwt = Jwt.verify(
             head[bearer.length .. $].strip(),
@@ -536,8 +534,8 @@ UserInfo enforceAuth(scope HTTPServerRequest req) @safe
         return UserInfo(
             payload["sub"].get!int,
             payload["email"].get!string,
-            payload["name"].opt!string,
-            payload["avatarUrl"].opt!string,
+            payload["name"].opt!string.mayBeText(),
+            payload["avatarUrl"].opt!string.mayBeText(),
         );
     }
     catch (JwtException ex)
