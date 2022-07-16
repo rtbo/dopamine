@@ -1,27 +1,28 @@
 module pgd.conv.nullable;
 
+import pgd.maybe;
+
 import std.traits;
 import std.typecons;
 
 template isNullable(T)
 {
-    enum isNullable = __traits(isSame, TemplateOf!T, Nullable) ||
-        (!isStaticArray!T && is(typeof({ T val = null; })));
+    enum isNullable = isInstanceOf!(Nullable, T) || isInstanceOf!(MayBe, T) || isPointer!T;
 }
 
 template NullableTarget(T)
 {
-    static if (__traits(isSame, TemplateOf!T, Nullable))
+    static if (isInstanceOf!(Nullable, T))
     {
         alias NullableTarget = typeof(T.init.get());
+    }
+    else static if (isInstanceOf!(MayBe, T))
+    {
+        alias NullableTarget = MayBeTarget!T;
     }
     else static if (isPointer!T)
     {
         alias NullableTarget = PointerTarget!T;
-    }
-    else static if (isNullable!T)
-    {
-        alias NullableTarget = T;
     }
     else
     {
@@ -31,19 +32,23 @@ template NullableTarget(T)
 
 static assert(isNullable!(int*));
 static assert(isNullable!(Nullable!int));
-static assert(isNullable!(string));
-static assert(isNullable!(ubyte[]));
+static assert(isNullable!(MayBe!(string, null)));
+static assert(!isNullable!(string));
+static assert(!isNullable!(ubyte[]));
 static assert(!isNullable!(ubyte[32]));
 static assert(is(NullableTarget!(int*) == int));
 static assert(is(NullableTarget!(Nullable!int) == int));
-static assert(is(NullableTarget!(string) == string));
-static assert(is(NullableTarget!(ubyte[]) == ubyte[]));
+static assert(is(NullableTarget!(string) == void));
 
 bool isNull(T)(T maybe) if (isNullable!T)
 {
-    static if (__traits(isSame, TemplateOf!T, Nullable))
+    static if (isInstanceOf!(Nullable, T))
     {
         return maybe.isNull;
+    }
+    else static if (isInstanceOf!(MayBe, T))
+    {
+        return !maybe.valid;
     }
     else
     {
@@ -75,9 +80,13 @@ unittest
 auto getNonNull(T)(T val) if (isNullable!T)
 in (!isNull(val))
 {
-    static if (__traits(isSame, TemplateOf!T, Nullable))
+    static if (isInstanceOf!(Nullable, T))
     {
         return val.get;
+    }
+    else static if (isInstanceOf!(MayBe, T))
+    {
+        return val.value;
     }
     else static if (isPointer!T)
     {
@@ -93,11 +102,15 @@ in (!isNull(val))
 
 T nullValue(T)() if (isNullable!T)
 {
-    static if (__traits(isSame, TemplateOf!T, Nullable))
+    static if (isInstanceOf!(Nullable, T))
     {
         return T.init;
     }
-    else
+    else static if (isInstanceOf!(MayBe, T))
+    {
+        return T.init;
+    }
+    else static if (isPointer!T)
     {
         return null;
     }
@@ -107,17 +120,17 @@ T fromNonNull(T)(NullableTarget!T nonNull) if (isNullable!T)
 {
     T res;
 
-    static if (__traits(isSame, TemplateOf!T, Nullable))
+    static if (isInstanceOf!(Nullable, T))
+    {
+        res = nonNull;
+    }
+    else static if (isInstanceOf!(MayBe, T))
     {
         res = nonNull;
     }
     else static if (isPointer!T)
     {
         res = new NullableTarget!T(nonNull);
-    }
-    else
-    {
-        res = nonNull;
     }
 
     return res;

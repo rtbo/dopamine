@@ -9,6 +9,7 @@ pgd_src = files([
     'src/pgd/conv/nullable.d',
     'src/pgd/conv/package.d',
     'src/pgd/conv/time.d',
+    'src/pgd/maybe.d',
     'src/pgd/result.d',
 ])
 
@@ -33,6 +34,7 @@ if get_option('enable_test')
         'src/pgd/conv/test.d',
         'src/pgd/conv/time.d',
         'src/pgd/connstring.d',
+        'src/pgd/maybe.d',
     ])
 
     pgd_stupid = custom_target('pgd_stupid',

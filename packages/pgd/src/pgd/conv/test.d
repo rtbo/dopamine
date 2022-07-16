@@ -1,7 +1,10 @@
 /// Tests that would normally go to pgd/conv/package.d
 module pgd.conv.test;
 
+version(unittest):
+
 import pgd.conv;
+import pgd.maybe;
 import pgd.libpq.defs;
 
 import std.typecons;
@@ -11,7 +14,7 @@ unittest
 {
     int i = 21;
     string s = "blabla";
-    string ns;
+    MayBe!(string, null) ns;
     ubyte[] blob = [4, 5, 6, 7];
     int* pi;
     Nullable!int ni = 12;
