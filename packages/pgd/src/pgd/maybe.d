@@ -1,11 +1,14 @@
 /// This module defines MayBe and related utilities.
-/// MayBe is semantically the same as std.typecons.Nullable, but has
-/// better range interoperability and less compatibility with corner cases.
+/// MayBe is a generic utility that is semantically identical to std.typecons.Nullable, but has
+/// better range interoperability and probably less compatibility with corner cases.
+///
+/// MayBe can be used with PGD to map to nullable column values.
 module pgd.maybe;
 
 import std.datetime.systime;
 import std.exception;
 import std.range;
+import std.traits;
 
 @safe:
 
@@ -14,10 +17,6 @@ struct MayBe(T)
 {
     private T _value;
     private bool _valid;
-
-    // for isMayBe. kind of dirty but easy trick
-    // to make isMayBe compatible with MayBe!(T) and MayBe!(T, invalidValue)
-    private enum mark = "MayBe";
 
     private this(T value, bool valid)
     {
@@ -182,10 +181,6 @@ unittest
 struct MayBe(T, T invalidValue)
 {
     private T _value = invalidValue;
-
-    // for isMayBe. kind of dirty but easy trick
-    // to make isMayBe compatible with MayBe!(T) and MayBe!(T, invalidValue)
-    private enum mark = "MayBe";
 
     this(T value)
     {
@@ -490,24 +485,8 @@ alias MayBeTimestamp = MayBe!(SysTime, SysTime.init);
 /// ditto
 alias mayBeTimestamp = mayBe!(SysTime, SysTime.init);
 
-/// check whether type T is built with MayBe template
-template isMayBe(T)
-{
-    static if (is(typeof(T.mark)))
-    {
-        enum isMayBe = T.mark == "MayBe";
-    }
-    else
-    {
-        enum isMayBe = false;
-    }
-}
-
-static assert(isMayBe!(MayBe!(int)));
-static assert(isMayBe!(MayBeText));
-
 /// Get the type targetted by MB
-template MayBeTarget(MB) if (isMayBe!MB)
+template MayBeTarget(MB) if (isInstanceOf!(MayBe, MB))
 {
     alias MayBeTarget = typeof(MB.init.value);
 }

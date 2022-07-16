@@ -269,11 +269,11 @@ private T toScalar(T)(BinValue val) @safe
 
     auto nonNull = toScalar!(NullableTarget!T)(val);
 
-    static if (isNullableTemplate!T)
+    static if (isInstanceOf!(Nullable, T))
     {
         return T(nonNull);
     }
-    else static if (isMayBe!T)
+    else static if (isInstanceOf!(MayBe, T))
     {
         return T(nonNull);
     }

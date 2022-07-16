@@ -5,23 +5,18 @@ import pgd.maybe;
 import std.traits;
 import std.typecons;
 
-package template isNullableTemplate(T)
-{
-    enum isNullableTemplate = __traits(isSame, TemplateOf!T, Nullable);
-}
-
 template isNullable(T)
 {
-    enum isNullable = isNullableTemplate!T || isMayBe!T || isPointer!T;
+    enum isNullable = isInstanceOf!(Nullable, T) || isInstanceOf!(MayBe, T) || isPointer!T;
 }
 
 template NullableTarget(T)
 {
-    static if (isNullableTemplate!T)
+    static if (isInstanceOf!(Nullable, T))
     {
         alias NullableTarget = typeof(T.init.get());
     }
-    else static if (isMayBe!T)
+    else static if (isInstanceOf!(MayBe, T))
     {
         alias NullableTarget = MayBeTarget!T;
     }
@@ -47,11 +42,11 @@ static assert(is(NullableTarget!(string) == void));
 
 bool isNull(T)(T maybe) if (isNullable!T)
 {
-    static if (isNullableTemplate!T)
+    static if (isInstanceOf!(Nullable, T))
     {
         return maybe.isNull;
     }
-    else static if (isMayBe!T)
+    else static if (isInstanceOf!(MayBe, T))
     {
         return !maybe.valid;
     }
@@ -85,11 +80,11 @@ unittest
 auto getNonNull(T)(T val) if (isNullable!T)
 in (!isNull(val))
 {
-    static if (isNullableTemplate!T)
+    static if (isInstanceOf!(Nullable, T))
     {
         return val.get;
     }
-    else static if (isMayBe!T)
+    else static if (isInstanceOf!(MayBe, T))
     {
         return val.value;
     }
@@ -107,11 +102,11 @@ in (!isNull(val))
 
 T nullValue(T)() if (isNullable!T)
 {
-    static if (isNullableTemplate!T)
+    static if (isInstanceOf!(Nullable, T))
     {
         return T.init;
     }
-    else static if (isMayBe!T)
+    else static if (isInstanceOf!(MayBe, T))
     {
         return T.init;
     }
@@ -125,11 +120,11 @@ T fromNonNull(T)(NullableTarget!T nonNull) if (isNullable!T)
 {
     T res;
 
-    static if (isNullableTemplate!T)
+    static if (isInstanceOf!(Nullable, T))
     {
         res = nonNull;
     }
-    else static if (isMayBe!T)
+    else static if (isInstanceOf!(MayBe, T))
     {
         res = nonNull;
     }
