@@ -37,6 +37,12 @@ struct MayBe(T)
         _valid = mb._valid;
     }
 
+    this(typeof(null))
+    {
+        _value = T.init;
+        _valid = false;
+    }
+
     @property T value() const
     {
         enforce(_valid, "instance is not valid");
@@ -59,6 +65,11 @@ struct MayBe(T)
     {
         _value = val;
         _valid = true;
+    }
+
+    void opAssign(typeof(null))
+    {
+        invalidate();
     }
 
     /// range interface
@@ -123,33 +134,37 @@ unittest
     import std.algorithm;
     import std.array;
 
-    MayBe!int mb1;
+    MayBe!int mb;
 
-    assert(!mb1.valid);
-    assert(mb1.length == 0);
-    assert(mb1.empty);
-    assertThrown(mb1.value);
-    assertThrown(mb1.front);
-    assertThrown(mb1.back);
-    assertThrown(mb1[0]);
+    assert(!mb.valid);
+    assert(mb.length == 0);
+    assert(mb.empty);
+    assertThrown(mb.value);
+    assertThrown(mb.front);
+    assertThrown(mb.back);
+    assertThrown(mb[0]);
 
-    mb1 = 1;
+    mb = 1;
 
-    assert(mb1.valid);
-    assert(mb1.length == 1);
-    assert(!mb1.empty);
-    assert(mb1.value == 1);
-    assert(mb1.front == 1);
-    assert(mb1.back == 1);
-    assert(mb1[0] == 1);
+    assert(mb.valid);
+    assert(mb.length == 1);
+    assert(!mb.empty);
+    assert(mb.value == 1);
+    assert(mb.front == 1);
+    assert(mb.back == 1);
+    assert(mb[0] == 1);
 
-    mb1.invalidate();
+    mb.invalidate();
 
-    assert(!mb1.valid);
+    assert(!mb.valid);
 
-    mb1 = 1;
-    const arr = mb1.map!(i => i * 2).array;
+    mb = 1;
+    const arr = mb.map!(i => i * 2).array;
     assert(arr == [2]);
+
+    mb = 1;
+    mb = null;
+    assert(!mb.valid);
 }
 
 /// Stores an instance of T and use "invalidValue" as invalid state indicator
@@ -169,6 +184,11 @@ struct MayBe(T, T invalidValue)
     this(MayBe!(T, invalidValue) mb)
     {
         _value = mb._value;
+    }
+
+    this(typeof(null))
+    {
+        _value = invalidValue;
     }
 
     @property T value() const
@@ -191,6 +211,11 @@ struct MayBe(T, T invalidValue)
     void opAssign(T val)
     {
         _value = val;
+    }
+
+    void opAssign(typeof(null))
+    {
+        invalidate();
     }
 
     /// range interface
@@ -283,6 +308,10 @@ unittest
     mb = 1;
     const arr = mb.map!(i => i * 2).array;
     assert(arr == [2]);
+
+    mb = 1;
+    mb = null;
+    assert(!mb.valid);
 }
 
 /// Construct a valid MayBe value
