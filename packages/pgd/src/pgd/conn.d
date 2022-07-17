@@ -76,6 +76,7 @@ alias TransacHandler(T) = T delegate() @safe;
 /// from the server.
 /// To perform asynchronous calls, the PgConn class shall be subclassed
 /// and the pollResult method provide implementation to poll on the socket.
+/// This is done in the dopamine.server package (see dopamine.server.db)
 class PgConn
 {
     private PGconn* conn;
@@ -174,8 +175,9 @@ class PgConn
         PQuntrace(conn);
     }
 
-    /// wait for result by polling on the socket
-    /// default impl does nothing
+    /// Wait for result by polling on the socket.
+    /// Default impl does nothing, which has the effect that
+    /// exec, execScalar etc. will block the current thread while waiting.
     protected void pollResult() @safe
     {
     }

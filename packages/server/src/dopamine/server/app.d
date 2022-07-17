@@ -18,7 +18,7 @@ import std.format;
 
 version (DopServerMain) void main(string[] args)
 {
-    setLogLevel(LogLevel.trace);
+    setLogLevel(LogLevel.debugV);
 
     auto registry = new DopRegistry();
     auto listener = registry.listen();
