@@ -75,12 +75,15 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
         depInfos = buildDependencies(dag, recipe, profile, service);
     }
 
+    const cwd = getcwd();
+    scope (success)
+        chdir(cwd);
+
+    chdir(rdir.dir);
     const srcDir = recipe.inTreeSrc ? rdir.dir : recipe.source();
 
     auto config = BuildConfig(profile.subset(recipe.langs));
     const cdirs = rdir.configDirs(config);
-
-    const cwd = getcwd();
 
     const root = absolutePath(rdir.dir, cwd);
     const src = absolutePath(srcDir, rdir.dir);
@@ -89,8 +92,6 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
     mkdirRecurse(cdirs.buildDir);
 
     chdir(cdirs.buildDir);
-    scope (success)
-        chdir(cwd);
     recipe.build(bdirs, config, depInfos);
 }
 
@@ -206,6 +207,7 @@ int publishMain(string[] args)
     try
     {
         enforceRecipeIntegrity(RecipeDir.enforced(extractPath), profile, cacheDir);
+        rmdirRecurse(extractPath);
     }
     catch (ServerDownException ex)
     {
