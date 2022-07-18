@@ -213,6 +213,17 @@ class FormatLogException : Exception
         }
     }
 
+    this(Args...)(Exception next, LogLevel level, string fmt, Args args)
+    {
+        super(format(fmt, args), next);
+        this.level = level;
+        this.fmt = fmt;
+        static foreach (arg; args)
+        {
+            values ~= new TDynLogValue!(typeof(arg))(arg);
+        }
+    }
+
     void log()
     {
         import std.exception : enforce;
@@ -305,6 +316,11 @@ class ErrorLogException : FormatLogException
     {
         super(LogLevel.error, "%s " ~ fmsg, error("Error:"), args);
     }
+
+    this(Args...)(Exception next, string fmsg, Args args)
+    {
+        super(next, LogLevel.error, "%s " ~ fmsg, error("Error:"), args);
+    }
 }
 
 /// A FormatLogException with Warning log level as well as
@@ -314,6 +330,11 @@ class WarningLogException : FormatLogException
     this(Args...)(string fmsg, Args args)
     {
         super(LogLevel.warning, "%s " ~ fmsg, warning("Warning:"), args);
+    }
+
+    this(Args...)(Exception next, string fmsg, Args args)
+    {
+        super(next, LogLevel.warning, "%s " ~ fmsg, warning("Warning:"), args);
     }
 }
 
