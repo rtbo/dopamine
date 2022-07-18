@@ -35,10 +35,10 @@ void enforceBuildReady(RecipeDir rdir, ConfigDirs cdirs)
         );
     }
 
-    logInfo("Build: %s", success("OK"));
+    logInfo("%s: %s", info("Build"), success("OK"));
 }
 
-void buildPackage(RecipeDir rdir, Recipe recipe, BuildConfig config, DepInfo[string] depInfos)
+string buildPackage(RecipeDir rdir, Recipe recipe, BuildConfig config, DepInfo[string] depInfos)
 {
     string reason;
     const srcDir = enforce(checkSourceReady(rdir, recipe, reason));
@@ -63,6 +63,8 @@ void buildPackage(RecipeDir rdir, Recipe recipe, BuildConfig config, DepInfo[str
     ConfigState state = cdirs.stateFile.read();
     state.buildTime = Clock.currTime;
     cdirs.stateFile.write(state);
+
+    return cdirs.installDir;
 }
 
 int buildMain(string[] args)
@@ -76,6 +78,7 @@ int buildMain(string[] args)
     auto helpInfo = getopt(args,
         "profile|p",    &profileName,
         "no-network|N", &noNetwork,
+        "force|f",      &force,
     );
     // dfmt on
 
@@ -131,8 +134,9 @@ int buildMain(string[] args)
 
     destroy(lock);
 
-    buildPackage(rdir, recipe, config, depInfos);
+    const dir = buildPackage(rdir, recipe, config, depInfos);
 
-    logInfo("Build: %s", success("OK"));
+    logInfo("%s: %s - %s", info("Build"), success("OK"), dir);
+
     return 0;
 }

@@ -162,8 +162,8 @@ int publishMain(string[] args)
         enforce(
             isRepoClean(cvs, absRdir),
             new ErrorLogException(
-                "Publish is only possible if repo is clean.\n" ~
-                "Run with %s to skip this check.", info("--skip-repo-clean")
+                "%s repo isn't clean. By default, %s is only possible with clean repo.\n" ~
+                "Run with %s to skip this check.", info(cvs), info("publish"), info("--skip-repo-clean")
         ),
         );
     }
@@ -226,7 +226,7 @@ int publishMain(string[] args)
     }
     catch (Exception ex)
     {
-        new ErrorLogException(
+        throw new ErrorLogException(
             "Publishing requires to be logged-in. Get a login key on the registry front-end.");
     }
     PostRecipe req;
