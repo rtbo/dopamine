@@ -77,6 +77,8 @@ in (dag.resolved)
 
         chdir(rdir.dir);
 
+        mkdirRecurse(rdir.dopDir);
+
         string reason;
         auto srcDir = checkSourceReady(rdir, rec, reason);
         if (!srcDir)
