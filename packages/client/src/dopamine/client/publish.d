@@ -240,7 +240,7 @@ int publishMain(string[] args)
     auto resp = registry.sendRequest(req);
     if (!resp)
     {
-        logErrorH("Error during recipe creation on server. %s: %s", error(resp.code), resp.error);
+        logErrorH("Creation of new recipe failed: %s", resp.error);
         return 1;
     }
     else

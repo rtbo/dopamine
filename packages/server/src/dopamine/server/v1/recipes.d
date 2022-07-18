@@ -328,7 +328,7 @@ class RecipesApi
                 req.name, req.ver, req.revision
             );
             enforceStatus(
-                !recExists, 400,
+                !recExists, 409,
                 format!"recipe %s/%s/%s already exists!"(req.name, req.ver, req.revision)
             );
 
