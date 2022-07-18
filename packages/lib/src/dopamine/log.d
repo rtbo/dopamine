@@ -134,7 +134,7 @@ void logDebug(Args...)(string msgf, Args args) @safe
 {
     if (debugEnabled)
     {
-        doLog(debugOutput, msgf, args);
+        (() @trusted => doLog(debugOutput, msgf, args))();
     }
 }
 
