@@ -19,7 +19,7 @@ string enforceSourceReady(RecipeDir dir, Recipe recipe)
     string reason;
     string srcDir = checkSourceReady(dir, recipe, reason);
     enforce(srcDir, new ErrorLogException("%s. Try to run %s", reason, info("dop source")));
-    logInfo("Source: %s - %s", success("OK"), info(srcDir));
+    logInfo("%s: %s - %s", info("Source"), success("OK"), srcDir);
     return srcDir;
 }
 
