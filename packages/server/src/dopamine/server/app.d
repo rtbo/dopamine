@@ -67,7 +67,18 @@ class DopRegistry
 
     HTTPListener listen()
     {
-        return listenHTTP(settings, router);
+        return listenHTTP(settings, &rootHandler);
+    }
+
+    void rootHandler(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    {
+        if (req.path == "/" && req.method == HTTPMethod.GET) {
+            const conf = Config.get;
+            resp.redirect("http://" ~ conf.frontendOrigin);
+            return;
+        }
+
+        router.handleRequest(req, resp);
     }
 
     void stop(HTTPServerRequest req, HTTPServerResponse resp)
