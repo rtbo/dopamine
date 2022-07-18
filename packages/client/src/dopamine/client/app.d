@@ -106,17 +106,28 @@ int main(string[] args)
     args[0] = format("dop-%s", cmdName);
     args = args.remove(1);
 
+    debugEnabled = true;
+
     try
     {
         return cmd[0].func(args);
     }
-    catch (FormatLogException ex)
-    {
-        ex.log();
-    }
     catch (Exception ex)
     {
-        logError("%s: %s", error("Error"), ex.msg);
+        Throwable next = ex;
+        while (next)
+        {
+            logDebug("%s\n%s", next.msg, next.info);
+            next = next.next();
+            if (next)
+                logDebug("\ncaused by:");
+        }
+
+        auto fex = cast(FormatLogException)ex;
+        if (fex)
+            fex.log();
+        else
+            logErrorH("%s", ex.msg);
     }
     return 1;
 }

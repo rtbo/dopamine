@@ -115,8 +115,8 @@ int profileMain(string[] args)
     if (opt.isRead)
     {
         enforce(exists(dir.profileFile), new ErrorLogException(
-                "No profile file to read from: %s: No such file",
-                info(dir.profileFile)
+                "No profile selected. Run %s to set an initial compilation profile.",
+                info("dop profile --discover")
         ));
         auto profile = Profile.loadFromFile(dir.profileFile);
         if (opt.describe)

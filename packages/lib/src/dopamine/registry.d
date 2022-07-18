@@ -1,6 +1,7 @@
 module dopamine.registry;
 
 import dopamine.api.attrs;
+import dopamine.log;
 import dopamine.login;
 
 import std.algorithm;
@@ -42,15 +43,16 @@ class AuthRequiredException : Exception
     /// The URL of the request
     string url;
 
-    this(string url, string file = __FILE__, size_t line = __LINE__)
+    this(Method method, string url, string file = __FILE__, size_t line = __LINE__)
     {
         import std.format : format;
 
         this.url = url;
         super(format(
-                "Request \"%s\" requires authentication. You need to get a token from " ~
-                environment.get("DOP_REGISTRY", defaultRegistry) ~ ".",
-                url
+                "%s \"%s\" requires authentication. You need to get a token from " ~
+                environment.get(
+                "DOP_REGISTRY", defaultRegistry) ~ ".",
+                method, url
         ), file, line);
     }
 }
@@ -205,11 +207,20 @@ class Registry
             return;
         string registry = _host.find("://")[3 .. $];
 
+        (() @trusted {
+            enforce(hasLoginToken(registry), new ErrorLogException(
+                "No token found for registry %s", info(registry)
+            ));
+        })();
+
         auto req = PostAuthToken(readLoginToken(registry));
         AuthToken resp = sendRequest(req).payload;
         writeLoginToken(registry, resp.refreshToken);
         _idToken = resp.idToken;
-        _idTokenExp = fromJwtTime(ClientJwt(_idToken).payload["exp"].get!long);
+        const payload = ClientJwt(_idToken).payload;
+        _idTokenExp = fromJwtTime(payload["exp"].get!long);
+
+        logInfo("Authenticated on %s - %s", info(registry), info(payload["email"]));
     }
 
     Response!(ResponseType!ReqT) sendRequest(ReqT)(auto ref const ReqT req) @safe
@@ -234,7 +245,7 @@ class Registry
         }
         static if (requiresAuth)
         {
-            enforce(isLoggedIn, new AuthRequiredException(reqAttr.resource));
+            enforce(isLoggedIn, new AuthRequiredException(method, reqAttr.resource));
             raw.headers["Authorization"] = format!"Bearer %s"(_idToken);
         }
 

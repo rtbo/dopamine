@@ -113,16 +113,15 @@ int resolveMain(string[] args)
 
         write(dir.depsLockFile, json.toPrettyString());
 
-        logInfo("Dependency resolution: %s", success("OK"));
+        logInfo("%s: %s", info("Dependency resolution"), success("OK"));
     }
     catch (ServerDownException ex)
     {
         assert(registry);
-        logErrorH(
+        throw new ErrorLogException(ex,
             "Server %s appears down (%s), or you might be offline. Try with %s.",
             info(ex.host), ex.reason, info("--no-network"),
         );
-        return 1;
     }
 
     return 0;

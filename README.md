@@ -67,41 +67,41 @@ langs = {'c'}
 
 dependencies = {zlib = '>=1.2.5'}
 
-function source ()
+function source()
     local folder = 'libpng-' .. version
     local archive = folder .. '.tar.xz'
     dop.download {
-        url = 'https://download.sourceforge.net/libpng/' .. archive,
+        'https://download.sourceforge.net/libpng/' .. archive,
         dest = archive,
     }
     dop.checksum {
         archive,
         sha256 = '505e70834d35383537b6491e7ae8641f1a4bed1876dbfe361201fc80868d88ca',
     }
-    dop.extract_archive {archive = archive, outdir = '.'}
+    dop.extract_archive { archive, outdir = '.' }
 
     return folder
 end
 
-function build (dirs, config, dep_infos)
-    -- build is executed from a directory suitable for out-of-tree build
-    local zlib = dep_infos.zlib
-
-    cmake_defs = {
-        ['PNG_TESTS'] = false,
-    }
-
-    if not zlib.system then
-        cmake_defs['ZLIB_INCLUDE_DIR'] = dop.path(zlib.install_dir, 'include')
-        cmake_defs['ZLIB_LIBRARY'] = dop.path(zlib.install_dir, 'lib', 'libz.so')
-    end
+function build(dirs, config, dep_infos)
 
     local cmake = dop.CMake:new(config.profile)
+
+    local defs = {
+        ['PNG_TESTS'] = false,
+    }
+    -- if zlib is not in the system but in the dependency cache
+    if dep_infos and dep_infos.zlib then
+        local zlib = dep_infos.zlib.install_dir
+        local libname = dop.windows and 'zlibstatic' or 'z'
+        defs['ZLIB_INCLUDE_DIR'] = dop.path(zlib, 'include')
+        defs['ZLIB_LIBRARY'] = dop.find_libfile(dop.path(zlib, 'lib'), libname, 'static')
+    end
 
     cmake:configure({
         src_dir = dirs.src,
         install_dir = dirs.install,
-        defs = cmake_defs,
+        defs = defs,
     })
     cmake:build()
     cmake:install()

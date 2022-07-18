@@ -10,6 +10,7 @@ import dopamine.registry;
 import dopamine.semver;
 
 import std.typecons;
+import std.string;
 
 class DependencyException : Exception
 {
@@ -174,7 +175,7 @@ final class DependencyService : DepService
             {
                 return [];
             }
-            return [AvailVersion(Semver(result.output), DepLocation.system)];
+            return [AvailVersion(Semver(result.output.strip()), DepLocation.system)];
         }
         catch (ProcessException ex)
         {
@@ -216,6 +217,7 @@ final class DependencyService : DepService
 
     Recipe packRecipe(string packname, const(AvailVersion) aver, string revision = null) @system
     in (_registry || aver.location != DepLocation.network, "Network access is disabled")
+    in (aver.location != DepLocation.system, "System dependencies do not have recipe")
     {
         if (revision)
         {

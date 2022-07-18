@@ -75,12 +75,18 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
         depInfos = buildDependencies(dag, recipe, profile, service);
     }
 
+    const cwd = getcwd();
+    scope (exit)
+        chdir(cwd);
+
+    chdir(rdir.dir);
+
+    if (!recipe.inTreeSrc)
+        logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
     const srcDir = recipe.inTreeSrc ? rdir.dir : recipe.source();
 
     auto config = BuildConfig(profile.subset(recipe.langs));
     const cdirs = rdir.configDirs(config);
-
-    const cwd = getcwd();
 
     const root = absolutePath(rdir.dir, cwd);
     const src = absolutePath(srcDir, rdir.dir);
@@ -89,8 +95,8 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
     mkdirRecurse(cdirs.buildDir);
 
     chdir(cdirs.buildDir);
-    scope (success)
-        chdir(cwd);
+
+    logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
     recipe.build(bdirs, config, depInfos);
 }
 
@@ -162,8 +168,8 @@ int publishMain(string[] args)
         enforce(
             isRepoClean(cvs, absRdir),
             new ErrorLogException(
-                "Publish is only possible if repo is clean.\n" ~
-                "Run with %s to skip this check.", info("--skip-repo-clean")
+                "%s repo isn't clean. By default, %s is only possible with clean repo.\n" ~
+                "Run with %s to skip this check.", info(cvs), info("publish"), info("--skip-repo-clean")
         ),
         );
     }
@@ -206,6 +212,7 @@ int publishMain(string[] args)
     try
     {
         enforceRecipeIntegrity(RecipeDir.enforced(extractPath), profile, cacheDir);
+        rmdirRecurse(extractPath);
     }
     catch (ServerDownException ex)
     {
@@ -226,7 +233,7 @@ int publishMain(string[] args)
     }
     catch (Exception ex)
     {
-        new ErrorLogException(
+        throw new ErrorLogException(
             "Publishing requires to be logged-in. Get a login key on the registry front-end.");
     }
     PostRecipe req;
@@ -238,7 +245,7 @@ int publishMain(string[] args)
     auto resp = registry.sendRequest(req);
     if (!resp)
     {
-        logErrorH("Error during recipe creation on server. %s: %s", error(resp.code), resp.error);
+        logErrorH("Creation of new recipe failed: %s", resp.error);
         return 1;
     }
     else
