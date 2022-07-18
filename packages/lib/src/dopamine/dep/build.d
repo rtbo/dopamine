@@ -59,6 +59,9 @@ in (dag.resolved)
 
     foreach (depNode; dag.traverseBottomUpResolved())
     {
+        if (depNode.location == DepLocation.system)
+            continue;
+
         auto rec = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         auto rdir = RecipeDir.enforced(dirName(rec.filename));
         auto prof = profile.subset(rec.langs);
@@ -129,6 +132,9 @@ in (node.isResolved)
     DepInfo[string] res;
     foreach (k, v; node.collectDependencies())
     {
+        if (v.location == DepLocation.system)
+            continue;
+
         auto obj = cast(DepInfoObj)v.userData;
         assert(obj);
         res[k] = obj.info;
@@ -144,6 +150,9 @@ private Lang[] collectLangs(DepDAG dag, DepService service)
 
     foreach (depNode; dag.traverseTopDownResolved)
     {
+        if (depNode.location == DepLocation.system)
+            continue;
+
         auto drec = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         foreach (l; drec.langs)
         {
