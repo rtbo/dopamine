@@ -31,7 +31,7 @@ int loginMain(string[] args)
         return usage(1);
     }
 
-    if (isLoggedIn(registry))
+    if (hasLoginToken(registry))
     {
         logInfo("Replacing revoked login token");
     }
