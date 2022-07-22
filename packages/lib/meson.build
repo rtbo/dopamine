@@ -6,7 +6,6 @@ dop_src = files([
     'src/dopamine/c/lua/macros.d',
     'src/dopamine/c/lua/package.d',
 
-    'src/dopamine/archive.d',
     'src/dopamine/build_id.d',
     'src/dopamine/cache.d',
     'src/dopamine/dep/build.d',
