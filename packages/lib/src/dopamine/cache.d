@@ -140,7 +140,7 @@ class PackageCache
 
         only(archiveData)
             .decompressXz()
-            .readTarArchive()
+            .unboxTar()
             .each!(e => e.extractTo(revDir.dir));
 
         RecipeDir.enforced(revDir.dir);

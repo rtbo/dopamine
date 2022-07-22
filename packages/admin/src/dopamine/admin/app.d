@@ -263,7 +263,7 @@ void populateRegistry(PgConn db, string regDir)
                     .array;
 
                 auto recipeFileBlob = fileEntries
-                    .createTarArchive()
+                    .boxTar()
                     .compressXz()
                     .join();
 
