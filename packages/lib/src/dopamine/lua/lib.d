@@ -5,6 +5,7 @@
 /// The dop module re-exports all symbols of the dop_native module
 module dopamine.lua.lib;
 
+import dopamine.log;
 import dopamine.c.lua;
 import dopamine.lua.util;
 
@@ -809,7 +810,11 @@ int luaCreateArchive(lua_State* L) nothrow
         auto algo = BoxAlgo.forFilename(archive);
         auto entries = dirEntries(indir, SpanMode.breadth, false)
             .filter!(e => !e.isDir)
-            .map!(e => fileEntry(e.name, indir));
+            .map!((dirEntry) {
+                auto boxEntry = fileEntry(dirEntry.name, indir);
+                logVerbose("archiving %s", boxEntry.path);
+                return boxEntry;
+            });
         algo.box(entries)
             .writeBinaryFile(archive);
 
@@ -839,6 +844,7 @@ int luaExtractArchive(lua_State* L) nothrow
         auto bytes = readBinaryFile(archive);
         auto entries = algo.unbox(bytes);
         entries.each!((e) {
+            logVerbose("extracting %s", e.path);
             e.extractTo(outdir);
         });
 
