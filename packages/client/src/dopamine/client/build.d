@@ -57,8 +57,6 @@ string buildPackage(
     const src = absolutePath(srcDir, rdir.dir);
     const bdirs = BuildDirs(root, src, stageDest ? stageDest : bPaths.install);
 
-    const lock = acquireBuildLockFile(bPaths);
-
     mkdirRecurse(bPaths.build);
 
     {
