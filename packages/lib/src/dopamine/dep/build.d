@@ -14,8 +14,9 @@ import std.file;
 import std.path;
 
 DepInfo[string] collectDepInfos(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepService service, string stageFalseDest=null)
+    const(Profile) profile, DepService service, string stageDest=null)
 in (dag.resolved)
+in (!stageDest || isAbsolute(stageDest))
 {
     const langs = collectLangs(dag, service);
     enforceHasLangs(profile, langs, recipe);
@@ -23,24 +24,22 @@ in (dag.resolved)
     foreach (depNode; dag.traverseTopDownResolved())
     {
         auto rec = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        auto rdir = RecipeDir.enforced(dirName(rec.filename));
-        auto prof = profile.subset(rec.langs);
-        auto conf = BuildConfig(prof);
-        if (rec.stageFalse && stageFalseDest)
-        {
-            conf.stageFalseDest = stageFalseDest;
-        }
-        auto cdirs = rdir.configDirs(conf);
+        const rdir = RecipeDir.enforced(dirName(rec.filename));
+        const prof = profile.subset(rec.langs);
+        const conf = BuildConfig(prof);
+        const buildId = BuildId(rec, conf, stageDest);
+        const bidPaths = BuildIdPaths(rdir, buildId);
 
-        depNode.userData = new DepInfoObj(cdirs.installDir);
+        depNode.userData = new DepInfoObj(bidPaths.install);
     }
 
     return collectNodeDepInfos(dag.root.resolvedNode);
 }
 
 DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepService service, string stageFalseDest=null)
+    const(Profile) profile, DepService service, string stageDest=null)
 in (dag.resolved)
+in (!stageDest || isAbsolute(stageDest))
 {
     import std.algorithm : map, maxElement;
     import std.datetime : Clock;
@@ -63,14 +62,11 @@ in (dag.resolved)
             continue;
 
         auto rec = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        auto rdir = RecipeDir.enforced(dirName(rec.filename));
-        auto prof = profile.subset(rec.langs);
-        auto conf = BuildConfig(prof);
-        if (rec.stageFalse && stageFalseDest)
-        {
-            conf.stageFalseDest = stageFalseDest;
-        }
-        auto cdirs = rdir.configDirs(conf);
+        const rdir = RecipeDir.enforced(dirName(rec.filename));
+        const prof = profile.subset(rec.langs);
+        const conf = BuildConfig(prof);
+        const bid = BuildId(rec, conf, stageDest);
+        const bidPaths = BuildIdPaths(rdir, bid);
 
         const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
         const packNameHead = format("%*s", maxLen, packHumanName);
@@ -92,27 +88,27 @@ in (dag.resolved)
 
         srcDir = absolutePath(srcDir, rdir.dir);
 
-        if (!checkBuildReady(rdir, cdirs, reason))
+        if (!checkBuildReady(rdir, bidPaths, reason))
         {
             logInfo("%s: Building", info(packNameHead));
-            mkdirRecurse(cdirs.buildDir);
+            mkdirRecurse(bidPaths.build);
 
             auto depInfos = collectNodeDepInfos(depNode);
-            const bd = BuildDirs(rdir.dir, srcDir, cdirs.installDir);
-            auto state = cdirs.stateFile.read();
+            const bd = BuildDirs(rdir.dir, srcDir, stageDest ? stageDest : bidPaths.install);
+            auto state = bidPaths.stateFile.read();
 
-            chdir(cdirs.buildDir);
+            chdir(bidPaths.build);
             rec.build(bd, conf, depInfos);
 
             state.buildTime = Clock.currTime;
-            cdirs.stateFile.write(state);
+            bidPaths.stateFile.write(state);
         }
         else
         {
             logInfo("%s: Up-to-date", info(packNameHead));
         }
 
-        depNode.userData = new DepInfoObj(cdirs.installDir);
+        depNode.userData = new DepInfoObj(bidPaths.install);
     }
 
     return collectNodeDepInfos(dag.root.resolvedNode);

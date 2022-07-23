@@ -630,7 +630,7 @@ struct Test
         string[string] env;
         env["DOP"] = dopExe;
         env["DOP_HOME"] = sandboxHomePath();
-        env["DOP_E2E_TEST_CONFIG"] = sandboxPath("config.hash");
+        env["DOP_E2ETEST_BUILDID"] = sandboxPath("build-id.hash");
         return env;
     }
 
@@ -734,11 +734,11 @@ struct Test
             enforce(reg.stop() == 0, "registry did not close normally");
         }
 
-        if (exists(sandboxPath("config.hash")))
+        if (exists(sandboxPath("build-id.hash")))
         {
-            const hash = cast(string) assumeUnique(read(sandboxPath("config.hash")));
-            env["DOP_CONFIG_HASH"] = hash;
-            env["DOP_CONFIG"] = hash[0 .. 10];
+            const hash = cast(string) assumeUnique(read(sandboxPath("build-id.hash")));
+            env["DOP_BID_HASH"] = hash;
+            env["DOP_BID"] = hash[0 .. 10];
         }
 
         auto result = RunResult(
@@ -971,7 +971,7 @@ string expandEnvVars(string input, string[string] environment)
     void expand()
     {
         const val = var in environment;
-        enforce(val, "Could not find %s in sandbox environment");
+        enforce(val, format!"Could not find %s in sandbox environment"(var));
         result ~= *val;
         var = null;
         env = false;

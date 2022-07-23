@@ -43,7 +43,7 @@ string checkSourceReady(RecipeDir dir, Recipe recipe, out string reason)
 }
 
 /// Content of the state relative to a build configuration
-struct ConfigState
+struct BuildState
 {
     import std.datetime : SysTime;
 
@@ -55,33 +55,33 @@ struct ConfigState
     }
 }
 
-alias ConfigStateFile = JsonStateFile!ConfigState;
+alias BuildStateFile = JsonStateFile!BuildState;
 
-@property ConfigStateFile stateFile(const ConfigDirs cdirs)
+@property BuildStateFile stateFile(const BuildIdPaths bidPaths)
 {
-    return ConfigStateFile(cdirs.statePath);
+    return BuildStateFile(bidPaths.state);
 }
 
-bool checkBuildReady(RecipeDir rdir, ConfigDirs cdirs, out string reason)
+bool checkBuildReady(RecipeDir rdir, BuildIdPaths bidPaths, out string reason)
 {
     import std.file : exists;
 
-    if (!exists(cdirs.installDir))
+    if (!exists(bidPaths.install))
     {
-        reason = "Install directory doesn't exist: " ~ cdirs.installDir;
+        reason = "Install directory doesn't exist: " ~ bidPaths.install;
         return false;
     }
 
-    if (!cdirs.stateFile.exists())
+    if (!bidPaths.state.exists())
     {
         reason = "Build config state file doesn't exist";
         return false;
     }
 
     const rtime = rdir.recipeLastModified;
-    auto state = cdirs.stateFile.read();
+    auto state = bidPaths.stateFile.read();
 
-    if (rtime >= cdirs.stateFile.timeLastModified ||
+    if (rtime >= bidPaths.stateFile.timeLastModified ||
         rtime >= state.buildTime)
     {
         reason = "Build is not up-to-date";

@@ -137,11 +137,6 @@ struct RecipeDir
         return _dopDir;
     }
 
-    ConfigDirs configDirs(const(BuildConfig) config) const
-    {
-        return ConfigDirs(this, config.digestHash[0 .. 10]);
-    }
-
     private static bool hasFile(string path)
     {
         import std.file : exists, isFile;
@@ -174,35 +169,41 @@ struct RecipeDir
     private string _dopDir;
 }
 
-/// Directories of a build configuration
-struct ConfigDirs
+/// Paths relative to an identified build
+struct BuildIdPaths
 {
-    private RecipeDir _recipeDir;
+    private RecipeDir _rdir;
     private string _hash;
 
-    @property string buildDir() const
+    this (RecipeDir rdir, BuildId buildId)
     {
-        return _recipeDir._dopPath(_hash) ~ "-build";
+        _rdir = rdir;
+        _hash = buildId.uniqueId[0 .. 10];
     }
 
-    @property string installDir() const
+    @property string build() const
     {
-        return _recipeDir._dopPath(_hash);
+        return _rdir._dopPath(_hash) ~ "-build";
     }
 
-    @property RecipeDir recipeDir() const
+    @property string install() const
     {
-        return _recipeDir;
+        return _rdir._dopPath(_hash);
     }
 
-    @property string lockPath() const
+    @property RecipeDir recipe() const
     {
-        return _recipeDir._dopPath(_hash ~ ".lock");
+        return _rdir;
     }
 
-    @property string statePath() const
+    @property string lock() const
     {
-        return _recipeDir._dopPath(_hash ~ ".json");
+        return _rdir._dopPath(_hash ~ ".lock");
+    }
+
+    @property string state() const
+    {
+        return _rdir._dopPath(_hash ~ ".json");
     }
 }
 

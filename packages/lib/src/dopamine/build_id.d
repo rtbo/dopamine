@@ -1,34 +1,54 @@
 module dopamine.build_id;
 
 import dopamine.profile;
+import dopamine.recipe;
+import dopamine.semver;
 import dopamine.util;
 
 import std.digest.sha;
+import std.path;
 
-@safe:
+// FIXME: make @safe when recipe.revision is @safe
+// FIXME: make const(Recipe) when recipe.revision is const
 
-alias DopDigest = SHA1;
-
-/// The build configuration
-struct BuildConfig
+struct BuildId
 {
-    /// the build profile
-    Profile profile;
+    alias Digest = SHA1;
 
-    /// recipes declaring `stage = false` have the stage directory
-    /// in the digest hash. Such packages cannot be uploaded as binaries.
-    string stageFalseDest;
-
-    @property string digestHash() const
+    this(Recipe recipe, const(BuildConfig) config, string stageDest = null)
+    in (!stageDest || isAbsolute(stageDest))
     {
-        DopDigest digest;
+        Digest digest;
 
-        profile.feedDigest(digest);
-        if (stageFalseDest)
+        feedDigestData(digest, recipe.name);
+        feedDigestData(digest, recipe.ver.toString());
+        feedDigestData(digest, recipe.revision);
+
+        config.feedDigest(digest);
+
+        // recipes that declare `stage = false` have the stage directory
+        // in the build-id. Such recipes can be publised, but the binaries
+        // can't be uploaded
+        if (stageDest && recipe.stageFalse)
         {
-            feedDigestData(digest, stageFalseDest);
+            feedDigestData(digest, stageDest);
         }
 
-        return toHexString!(LetterCase.lower)(digest.finish()).idup;
+        uniqueId = toHexString!(LetterCase.lower)(digest.finish()).idup;
+    }
+
+    /// The unique Id of the build
+    string uniqueId;
+
+    /// ditto
+    @property string toString() const
+    {
+        return uniqueId;
+    }
+
+    /// ditto
+    string opCast(T : string)() const
+    {
+        return uniqueId;
     }
 }

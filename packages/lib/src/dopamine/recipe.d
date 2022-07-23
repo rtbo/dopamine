@@ -10,6 +10,7 @@ import dopamine.semver;
 
 import dopamine.c.lua;
 
+import std.digest;
 import std.exception;
 import std.json;
 import std.string;
@@ -37,6 +38,20 @@ struct BuildDirs
         assert(root.isAbsolute);
         assert(src.isAbsolute);
         assert(install.isAbsolute);
+    }
+}
+
+/// The build configuration
+struct BuildConfig
+{
+    /// the build profile
+    const(Profile) profile;
+
+    // TODO: options
+
+    void feedDigest(D)(ref D digest) const
+    {
+        profile.feedDigest(digest);
     }
 }
 
@@ -267,11 +282,6 @@ struct Recipe
         lua_settable(L, ind);
 
         // TODO options
-
-        const hash = config.digestHash;
-        const shortHash = hash[0 .. 10];
-        luaSetTable(L, ind, "hash", hash);
-        luaSetTable(L, ind, "short_hash", shortHash);
     }
 
     private void pushDepInfos(lua_State* L, DepInfo[string] depInfos) @trusted
