@@ -28,9 +28,9 @@ in (!stageDest || isAbsolute(stageDest))
         const prof = profile.subset(rec.langs);
         const conf = BuildConfig(prof);
         const buildId = BuildId(rec, conf, stageDest);
-        const bidPaths = BuildIdPaths(rdir, buildId);
+        const bPaths = BuildPaths(rdir, buildId);
 
-        depNode.userData = new DepInfoObj(bidPaths.install);
+        depNode.userData = new DepInfoObj(bPaths.install);
     }
 
     return collectNodeDepInfos(dag.root.resolvedNode);
@@ -66,7 +66,7 @@ in (!stageDest || isAbsolute(stageDest))
         const prof = profile.subset(rec.langs);
         const conf = BuildConfig(prof);
         const bid = BuildId(rec, conf, stageDest);
-        const bidPaths = BuildIdPaths(rdir, bid);
+        const bPaths = BuildPaths(rdir, bid);
 
         const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
         const packNameHead = format("%*s", maxLen, packHumanName);
@@ -88,27 +88,27 @@ in (!stageDest || isAbsolute(stageDest))
 
         srcDir = absolutePath(srcDir, rdir.dir);
 
-        if (!checkBuildReady(rdir, bidPaths, reason))
+        if (!checkBuildReady(rdir, bPaths, reason))
         {
             logInfo("%s: Building", info(packNameHead));
-            mkdirRecurse(bidPaths.build);
+            mkdirRecurse(bPaths.build);
 
             auto depInfos = collectNodeDepInfos(depNode);
-            const bd = BuildDirs(rdir.dir, srcDir, stageDest ? stageDest : bidPaths.install);
-            auto state = bidPaths.stateFile.read();
+            const bd = BuildDirs(rdir.dir, srcDir, stageDest ? stageDest : bPaths.install);
+            auto state = bPaths.stateFile.read();
 
-            chdir(bidPaths.build);
+            chdir(bPaths.build);
             rec.build(bd, conf, depInfos);
 
             state.buildTime = Clock.currTime;
-            bidPaths.stateFile.write(state);
+            bPaths.stateFile.write(state);
         }
         else
         {
             logInfo("%s: Up-to-date", info(packNameHead));
         }
 
-        depNode.userData = new DepInfoObj(bidPaths.install);
+        depNode.userData = new DepInfoObj(bPaths.install);
     }
 
     return collectNodeDepInfos(dag.root.resolvedNode);

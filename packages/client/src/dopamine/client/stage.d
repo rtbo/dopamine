@@ -32,10 +32,10 @@ in(isAbsolute(absDest))
     {
         const config = BuildConfig(profile);
         const buildId = BuildId(recipe, config, absDest);
-        const bidPaths = BuildIdPaths(rdir, buildId);
-        acquireBuildLockFile(bidPaths);
+        const bPaths = BuildPaths(rdir, buildId);
+        acquireBuildLockFile(bPaths);
         string reason;
-        if (!checkBuildReady(rdir, bidPaths, reason))
+        if (!checkBuildReady(rdir, bPaths, reason))
         {
             buildPackage(rdir, recipe, config, depInfos, absDest);
         }
@@ -44,10 +44,10 @@ in(isAbsolute(absDest))
 
     auto config = BuildConfig(profile);
     const buildId = BuildId(recipe, config, absDest);
-    const bidPaths = BuildIdPaths(rdir, buildId);
-    acquireBuildLockFile(bidPaths);
+    const bPaths = BuildPaths(rdir, buildId);
+    acquireBuildLockFile(bPaths);
 
-    enforceBuildReady(rdir, bidPaths);
+    enforceBuildReady(rdir, bPaths);
 
     const cwd = getcwd();
     scope(exit)
@@ -55,12 +55,12 @@ in(isAbsolute(absDest))
 
     if (recipe.hasFunction("stage"))
     {
-        chdir(bidPaths.install);
+        chdir(bPaths.install);
         recipe.stage(absDest);
     }
     else
     {
-        installRecurse(bidPaths.install, absDest);
+        installRecurse(bPaths.install, absDest);
     }
 
     if (recipe.hasFunction("post_stage"))

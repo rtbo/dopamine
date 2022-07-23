@@ -170,7 +170,7 @@ struct RecipeDir
 }
 
 /// Paths relative to an identified build
-struct BuildIdPaths
+struct BuildPaths
 {
     private RecipeDir _rdir;
     private string _hash;

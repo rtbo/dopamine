@@ -57,31 +57,31 @@ struct BuildState
 
 alias BuildStateFile = JsonStateFile!BuildState;
 
-@property BuildStateFile stateFile(const BuildIdPaths bidPaths)
+@property BuildStateFile stateFile(const BuildPaths bPaths)
 {
-    return BuildStateFile(bidPaths.state);
+    return BuildStateFile(bPaths.state);
 }
 
-bool checkBuildReady(RecipeDir rdir, BuildIdPaths bidPaths, out string reason)
+bool checkBuildReady(RecipeDir rdir, BuildPaths bPaths, out string reason)
 {
     import std.file : exists;
 
-    if (!exists(bidPaths.install))
+    if (!exists(bPaths.install))
     {
-        reason = "Install directory doesn't exist: " ~ bidPaths.install;
+        reason = "Install directory doesn't exist: " ~ bPaths.install;
         return false;
     }
 
-    if (!bidPaths.state.exists())
+    if (!bPaths.state.exists())
     {
         reason = "Build config state file doesn't exist";
         return false;
     }
 
     const rtime = rdir.recipeLastModified;
-    auto state = bidPaths.stateFile.read();
+    auto state = bPaths.stateFile.read();
 
-    if (rtime >= bidPaths.stateFile.timeLastModified ||
+    if (rtime >= bPaths.stateFile.timeLastModified ||
         rtime >= state.buildTime)
     {
         reason = "Build is not up-to-date";

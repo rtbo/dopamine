@@ -115,7 +115,7 @@ auto acquireRecipeLockFile(RecipeDir dir)
     return acquireSomeLockFile(dir.lockPath, "recipe");
 }
 
-auto acquireBuildLockFile(BuildIdPaths bidPaths)
+auto acquireBuildLockFile(BuildPaths bPaths)
 {
-    return acquireSomeLockFile(bidPaths.lock, "build");
+    return acquireSomeLockFile(bPaths.lock, "build");
 }

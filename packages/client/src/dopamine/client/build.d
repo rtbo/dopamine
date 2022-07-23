@@ -24,10 +24,10 @@ import std.path;
 import std.process;
 import std.typecons;
 
-void enforceBuildReady(RecipeDir rdir, BuildIdPaths bidPaths)
+void enforceBuildReady(RecipeDir rdir, BuildPaths bPaths)
 {
     string reason;
-    if (!checkBuildReady(rdir, bidPaths, reason))
+    if (!checkBuildReady(rdir, bPaths, reason))
     {
         throw new FormatLogException(
             "Build: %s - %s. Try to run %s.",
@@ -49,30 +49,30 @@ string buildPackage(
     const srcDir = enforce(checkSourceReady(rdir, recipe, reason));
 
     const buildId = BuildId(recipe, config, stageDest);
-    const bidPaths = BuildIdPaths(rdir, buildId);
+    const bPaths = BuildPaths(rdir, buildId);
 
     const cwd = getcwd();
 
     const root = absolutePath(rdir.dir, cwd);
     const src = absolutePath(srcDir, rdir.dir);
-    const bdirs = BuildDirs(root, src, stageDest ? stageDest : bidPaths.install);
+    const bdirs = BuildDirs(root, src, stageDest ? stageDest : bPaths.install);
 
-    const lock = acquireBuildLockFile(bidPaths);
+    const lock = acquireBuildLockFile(bPaths);
 
-    mkdirRecurse(bidPaths.build);
+    mkdirRecurse(bPaths.build);
 
     {
-        chdir(bidPaths.build);
+        chdir(bPaths.build);
         scope (success)
             chdir(cwd);
         recipe.build(bdirs, config, depInfos);
     }
 
-    BuildState state = bidPaths.stateFile.read();
+    BuildState state = bPaths.stateFile.read();
     state.buildTime = Clock.currTime;
-    bidPaths.stateFile.write(state);
+    bPaths.stateFile.write(state);
 
-    return bidPaths.install;
+    return bPaths.install;
 }
 
 int buildMain(string[] args)
@@ -127,10 +127,10 @@ int buildMain(string[] args)
         write(environment["DOP_E2ETEST_BUILDID"], buildId.toString());
     }
 
-    const bidPaths = BuildIdPaths(rdir, buildId);
-    auto bLock = acquireBuildLockFile(bidPaths);
+    const bPaths = BuildPaths(rdir, buildId);
+    auto bLock = acquireBuildLockFile(bPaths);
 
-    auto state = bidPaths.stateFile.read();
+    auto state = bPaths.stateFile.read();
 
     if (!recipe.inTreeSrc && state.buildTime > rdir.recipeLastModified && !force)
     {

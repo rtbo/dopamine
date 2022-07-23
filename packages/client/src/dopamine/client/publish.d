@@ -87,15 +87,15 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
 
     const config = BuildConfig(profile.subset(recipe.langs));
     const buildId = BuildId(recipe, config);
-    const bidPaths = BuildIdPaths(rdir, buildId);
+    const bPaths = BuildPaths(rdir, buildId);
 
     const root = absolutePath(rdir.dir, cwd);
     const src = absolutePath(srcDir, rdir.dir);
-    const bdirs = BuildDirs(root, src, bidPaths.install);
+    const bdirs = BuildDirs(root, src, bPaths.install);
 
-    mkdirRecurse(bidPaths.build);
+    mkdirRecurse(bPaths.build);
 
-    chdir(bidPaths.build);
+    chdir(bPaths.build);
 
     logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
     recipe.build(bdirs, config, depInfos);
