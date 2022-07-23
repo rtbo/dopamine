@@ -139,8 +139,7 @@ class PackageCache
         mkdirRecurse(revDir.dir);
 
         only(archiveData)
-            .decompressXz()
-            .unboxTar()
+            .unboxTarXz()
             .each!(e => e.extractTo(revDir.dir));
 
         RecipeDir.enforced(revDir.dir);

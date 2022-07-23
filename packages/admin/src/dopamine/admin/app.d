@@ -263,8 +263,7 @@ void populateRegistry(PgConn db, string regDir)
                     .array;
 
                 auto recipeFileBlob = fileEntries
-                    .boxTar()
-                    .compressXz()
+                    .boxTarXz()
                     .join();
 
                 const sha1 = sha1Of(recipeFileBlob);

@@ -279,8 +279,7 @@ class RecipesApi
 
         RecipeFile[] files;
         auto entries = only(archiveData)
-            .decompressXz()
-            .unboxTar();
+            .unboxTarXz();
 
         bool seenRecipe;
         foreach (e; entries)
