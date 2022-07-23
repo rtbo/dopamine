@@ -5,6 +5,7 @@
 /// The dop module re-exports all symbols of the dop_native module
 module dopamine.lua.lib;
 
+import dopamine.log;
 import dopamine.c.lua;
 import dopamine.lua.util;
 
@@ -796,7 +797,9 @@ int luaChecksum(lua_State* L) nothrow
 
 int luaCreateArchive(lua_State* L) nothrow
 {
-    import dopamine.archive : ArchiveBackend;
+    import squiz_box;
+    import std.algorithm : filter, map;
+    import std.file : dirEntries, SpanMode;
 
     luaL_checktype(L, 1, LUA_TTABLE);
 
@@ -804,14 +807,26 @@ int luaCreateArchive(lua_State* L) nothrow
         const indir = luaGetTable!string(L, 1, "indir");
         const archive = luaGetTable!string(L, 1, "archive");
 
-        ArchiveBackend.get.create(indir, archive);
+        auto algo = BoxAlgo.forFilename(archive);
+        auto entries = dirEntries(indir, SpanMode.breadth, false)
+            .filter!(e => !e.isDir)
+            .map!((dirEntry) {
+                auto boxEntry = fileEntry(dirEntry.name, indir);
+                logVerbose("archiving %s", boxEntry.path);
+                return boxEntry;
+            });
+        algo.box(entries)
+            .writeBinaryFile(archive);
+
         return 0;
     });
 }
 
 int luaExtractArchive(lua_State* L) nothrow
 {
-    import dopamine.archive : ArchiveBackend;
+    import squiz_box;
+    import std.algorithm : each;
+
 
     luaL_checktype(L, 1, LUA_TTABLE);
 
@@ -825,7 +840,14 @@ int luaExtractArchive(lua_State* L) nothrow
     return L.catchAll!({
         const outdir = luaGetTable!string(L, 1, "outdir");
 
-        ArchiveBackend.get.extract(archive, outdir);
+        auto algo = BoxAlgo.forFilename(archive);
+        auto bytes = readBinaryFile(archive);
+        auto entries = algo.unbox(bytes);
+        entries.each!((e) {
+            logVerbose("extracting %s", e.path);
+            e.extractTo(outdir);
+        });
+
         return 0;
     });
 }

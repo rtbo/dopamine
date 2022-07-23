@@ -194,7 +194,7 @@ int publishMain(string[] args)
     auto files = isCvsRoot(cvs, absRdir) ? listRepoFiles(cvs, absRdir) : guessRecipeFiles(rdir);
     files
         .map!(f => fileEntry(f, absRdir))
-        .createTarArchive()
+        .boxTar()
         .compressXz()
         .tee(&dig)
         .writeBinaryFile(archivePath);
@@ -204,7 +204,7 @@ int publishMain(string[] args)
 
     readBinaryFile(archivePath)
         .decompressXz()
-        .readTarArchive()
+        .unboxTar()
         .each!(e => e.extractTo(extractPath));
 
     logInfo("Checking recipe integrity in %s", info(extractPath));
