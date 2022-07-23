@@ -66,6 +66,29 @@ auto catchAll(alias fun)(lua_State* L) nothrow
     {
         luaL_error(L, ex.msg.toStringz);
     }
+    catch (Throwable th)
+    {
+        // catching throwable here avoids sometimes complicated debug
+        // as we can have stack corruption when the D runtime unwinds
+        // the stack inside a lua call
+        import std.stdio : fprintf, stderr;
+        import core.stdc.stdlib : exit;
+
+        try
+        {
+            (() @trusted {
+                fprintf(stderr.getFP(),
+                    "Unrecoverable error in dop.lua D function: %s\n%s\n",
+                    th.msg.toStringz,
+                    th.info.toString().toStringz);
+            })();
+        }
+        catch (Throwable th)
+        {
+        }
+        exit(1);
+    }
+
     assert(false);
 }
 
@@ -825,8 +848,7 @@ int luaCreateArchive(lua_State* L) nothrow
 int luaExtractArchive(lua_State* L) nothrow
 {
     import squiz_box;
-    import std.algorithm : each;
-
+    import std.algorithm : each, canFind;
 
     luaL_checktype(L, 1, LUA_TTABLE);
 
