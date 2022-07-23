@@ -30,22 +30,24 @@ in(isAbsolute(absDest))
     const rdir = RecipeDir.enforced(dirName(recipe.filename));
     if (recipe.stageFalse)
     {
-        auto config = BuildConfig(profile, absDest);
-        const cdirs = rdir.configDirs(config);
-        acquireConfigLockFile(cdirs);
+        const config = BuildConfig(profile);
+        const buildId = BuildId(recipe, config, absDest);
+        const bPaths = BuildPaths(rdir, buildId);
+        acquireBuildLockFile(bPaths);
         string reason;
-        if (!checkBuildReady(rdir, cdirs, reason))
+        if (!checkBuildReady(rdir, bPaths, reason))
         {
-            buildPackage(rdir, recipe, config, depInfos);
+            buildPackage(rdir, recipe, config, depInfos, absDest);
         }
         return;
     }
 
     auto config = BuildConfig(profile);
-    const cdirs = rdir.configDirs(config);
-    acquireConfigLockFile(cdirs);
+    const buildId = BuildId(recipe, config, absDest);
+    const bPaths = BuildPaths(rdir, buildId);
+    acquireBuildLockFile(bPaths);
 
-    enforceBuildReady(rdir, cdirs);
+    enforceBuildReady(rdir, bPaths);
 
     const cwd = getcwd();
     scope(exit)
@@ -53,12 +55,12 @@ in(isAbsolute(absDest))
 
     if (recipe.hasFunction("stage"))
     {
-        chdir(cdirs.installDir);
+        chdir(bPaths.install);
         recipe.stage(absDest);
     }
     else
     {
-        installRecurse(cdirs.installDir, absDest);
+        installRecurse(bPaths.install, absDest);
     }
 
     if (recipe.hasFunction("post_stage"))

@@ -85,16 +85,17 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
     const srcDir = recipe.inTreeSrc ? rdir.dir : recipe.source();
 
-    auto config = BuildConfig(profile.subset(recipe.langs));
-    const cdirs = rdir.configDirs(config);
+    const config = BuildConfig(profile.subset(recipe.langs));
+    const buildId = BuildId(recipe, config);
+    const bPaths = BuildPaths(rdir, buildId);
 
     const root = absolutePath(rdir.dir, cwd);
     const src = absolutePath(srcDir, rdir.dir);
-    const bdirs = BuildDirs(root, src, cdirs.installDir);
+    const bdirs = BuildDirs(root, src, bPaths.install);
 
-    mkdirRecurse(cdirs.buildDir);
+    mkdirRecurse(bPaths.build);
 
-    chdir(cdirs.buildDir);
+    chdir(bPaths.build);
 
     logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
     recipe.build(bdirs, config, depInfos);

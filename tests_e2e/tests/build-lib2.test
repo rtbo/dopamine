@@ -9,7 +9,7 @@ CACHE=base
 REGISTRY=base
 
 EXPECT_MATCH=Recipe: OK - lib2-1.0.0
-EXPECT_DIR=.dop/$DOP_CONFIG-build
-EXPECT_LIB=.dop/$DOP_CONFIG-build/lib2
-EXPECT_LIB=.dop/$DOP_CONFIG/lib/lib2
-EXPECT_FILE=.dop/$DOP_CONFIG/include/lib2/lib2.h
+EXPECT_DIR=.dop/$DOP_BID-build
+EXPECT_LIB=.dop/$DOP_BID-build/lib2
+EXPECT_LIB=.dop/$DOP_BID/lib/lib2
+EXPECT_FILE=.dop/$DOP_BID/include/lib2/lib2.h

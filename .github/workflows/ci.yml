@@ -67,7 +67,7 @@ jobs:
           dub run dub-build-deep --yes -- vibe-d:http@0.9.4
           dub run dub-build-deep --yes -- unit-threaded:assertions@2.0.3
 
-      - name: Meson Build
+      - name: Build
         uses: BSFishy/meson-build@v1.0.3
         with:
           action: build
@@ -75,6 +75,12 @@ jobs:
           setup-options: --buildtype=${{ matrix.bt }} -Denable_server=true -Denable_test=true -Denable_client=true
           meson-version: ${{ matrix.meson }}
 
-      - name: Run dopamine tests
-        run: meson test --print-errorlogs
+      - name: Run tests
+        run: meson test
         working-directory: build
+
+      - name: Print test log
+        if: ${{ always() }}
+        run: cat meson-logs/testlog.txt
+        working-directory: build
+        shell: bash

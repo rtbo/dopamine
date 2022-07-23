@@ -6,5 +6,5 @@ CMD=$DOP build
 RECIPE=lib1
 
 EXPECT_MATCH=Recipe: OK - lib1-1.0.0
-EXPECT_DIR=.dop/$DOP_CONFIG-build
-EXPECT_LIB=.dop/$DOP_CONFIG-build/lib1
+EXPECT_DIR=.dop/$DOP_BID-build
+EXPECT_LIB=.dop/$DOP_BID-build/lib1

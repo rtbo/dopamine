@@ -24,10 +24,10 @@ import std.path;
 import std.process;
 import std.typecons;
 
-void enforceBuildReady(RecipeDir rdir, ConfigDirs cdirs)
+void enforceBuildReady(RecipeDir rdir, BuildPaths bPaths)
 {
     string reason;
-    if (!checkBuildReady(rdir, cdirs, reason))
+    if (!checkBuildReady(rdir, bPaths, reason))
     {
         throw new FormatLogException(
             "Build: %s - %s. Try to run %s.",
@@ -38,33 +38,39 @@ void enforceBuildReady(RecipeDir rdir, ConfigDirs cdirs)
     logInfo("%s: %s", info("Build"), success("OK"));
 }
 
-string buildPackage(RecipeDir rdir, Recipe recipe, BuildConfig config, DepInfo[string] depInfos)
+string buildPackage(
+    const(RecipeDir) rdir,
+    Recipe recipe,
+    const(BuildConfig) config,
+    DepInfo[string] depInfos,
+    string stageDest = null)
 {
     string reason;
     const srcDir = enforce(checkSourceReady(rdir, recipe, reason));
 
-    const cdirs = rdir.configDirs(config);
+    const buildId = BuildId(recipe, config, stageDest);
+    const bPaths = BuildPaths(rdir, buildId);
 
     const cwd = getcwd();
 
     const root = absolutePath(rdir.dir, cwd);
     const src = absolutePath(srcDir, rdir.dir);
-    const bdirs = BuildDirs(root, src, cdirs.installDir);
+    const bdirs = BuildDirs(root, src, stageDest ? stageDest : bPaths.install);
 
-    mkdirRecurse(cdirs.buildDir);
+    mkdirRecurse(bPaths.build);
 
     {
-        chdir(cdirs.buildDir);
-        scope(success)
+        chdir(bPaths.build);
+        scope (success)
             chdir(cwd);
         recipe.build(bdirs, config, depInfos);
     }
 
-    ConfigState state = cdirs.stateFile.read();
+    BuildState state = bPaths.stateFile.read();
     state.buildTime = Clock.currTime;
-    cdirs.stateFile.write(state);
+    bPaths.stateFile.write(state);
 
-    return cdirs.installDir;
+    return bPaths.install;
 }
 
 int buildMain(string[] args)
@@ -95,7 +101,7 @@ int buildMain(string[] args)
 
     const srcDir = enforceSourceReady(rdir, recipe).absolutePath();
 
-    auto profile = enforceProfileReady(rdir, recipe, profileName);
+    const profile = enforceProfileReady(rdir, recipe, profileName);
 
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
@@ -109,19 +115,20 @@ int buildMain(string[] args)
         depInfos = buildDependencies(dag, recipe, profile, service);
     }
 
-    auto config = BuildConfig(profile.subset(recipe.langs));
-    if (environment.get("DOP_E2E_TEST_CONFIG"))
+    const config = BuildConfig(profile.subset(recipe.langs));
+    const buildId = BuildId(recipe, config);
+
+    if (environment.get("DOP_E2ETEST_BUILDID"))
     {
         // undocumented env var used to dump the config hash in a file.
         // Used by end-to-end tests to locate build config directory
-        write(environment["DOP_E2E_TEST_CONFIG"], config.digestHash);
+        write(environment["DOP_E2ETEST_BUILDID"], buildId.toString());
     }
 
-    const cdirs = rdir.configDirs(config);
-    auto cLock = acquireConfigLockFile(cdirs);
+    const bPaths = BuildPaths(rdir, buildId);
+    auto bLock = acquireBuildLockFile(bPaths);
 
-
-    auto state = cdirs.stateFile.read();
+    auto state = bPaths.stateFile.read();
 
     if (!recipe.inTreeSrc && state.buildTime > rdir.recipeLastModified && !force)
     {
