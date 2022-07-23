@@ -111,12 +111,16 @@ int luaDopModule(lua_State* L) nothrow
         // we write the content to a file rather than executing the string
         // in otder to have better error reporting
         const libFile = homeLuaScript();
+
         if (!exists(libFile))
         {
+            logVerbose("creating %s", info(libFile));
             mkdirRecurse(dirName(libFile));
             const content = import("dop.lua");
             write(libFile, content);
         }
+
+        logVerbose("loading %s", info(libFile));
 
         if (luaL_dofile(L, libFile.toStringz) != LUA_OK)
         {
@@ -375,7 +379,10 @@ int luaChangeDir(lua_State* L) nothrow
     import std.file : chdir;
 
     const dir = checkString(L, 1);
-    L.catchAll!({ chdir(dir); });
+    L.catchAll!({
+        logVerbose("changing dir to %s", dir);
+        chdir(dir);
+    });
     return 0;
 }
 
@@ -422,6 +429,8 @@ int luaMkdir(lua_State* L) nothrow
 
         const recurse = luaGetTable!bool(L, 1, "recurse", false);
 
+        logVerbose("mkdir%s %s", recurse ? " (with parents)" : "", dir);
+
         if (recurse)
             mkdirRecurse(dir);
         else
@@ -449,6 +458,7 @@ int luaCopy(lua_State* L) nothrow
         {
             dest = buildPath(dest, baseName(src));
         }
+        logVerbose("copy %s to %s", src, dest);
         copy(src, dest);
     });
 
@@ -466,6 +476,7 @@ int luaInstallFile(lua_State* L) nothrow
         import std.file : exists, isFile;
 
         enforce(exists(src) && isFile(src), src ~ ": No such file");
+        logVerbose("installing %s to %s", src, dest);
         installFile(src, dest);
     });
 
@@ -483,6 +494,7 @@ int luaInstallDir(lua_State* L) nothrow
         import std.file : exists, isDir;
 
         enforce(exists(src) && isDir(src), src ~ ": No such file or directory");
+        logVerbose("installing (recursive) %s to %s", src, dest);
         installRecurse(src, dest);
     });
 
@@ -730,6 +742,7 @@ int luaDownload(lua_State* L) nothrow
         {
             throw new Exception("dop.download expects dest key argument");
         }
+        logVerbose("downloading %s to %s", url, info(dest));
         download(url, dest);
         return 0;
     });
@@ -830,6 +843,8 @@ int luaCreateArchive(lua_State* L) nothrow
         const indir = luaGetTable!string(L, 1, "indir");
         const archive = luaGetTable!string(L, 1, "archive");
 
+        logVerbose("creating %s", info(archive));
+
         auto algo = BoxAlgo.forFilename(archive);
         auto entries = dirEntries(indir, SpanMode.breadth, false)
             .filter!(e => !e.isDir)
@@ -862,11 +877,12 @@ int luaExtractArchive(lua_State* L) nothrow
     return L.catchAll!({
         const outdir = luaGetTable!string(L, 1, "outdir");
 
+        logVerbose("extracting %s", info(archive));
         auto algo = BoxAlgo.forFilename(archive);
         auto bytes = readBinaryFile(archive);
         auto entries = algo.unbox(bytes);
         entries.each!((e) {
-            logVerbose("extracting %s", e.path);
+            logVerbose("    %s", e.path);
             e.extractTo(outdir);
         });
 
