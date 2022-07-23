@@ -597,10 +597,6 @@ final class Profile
             c.writeIniSection(app);
         }
 
-        app.put("\n");
-        app.put("[digest]\n");
-        app.put(format("hash=%s\n", digestHash()));
-
         return app.data();
     }
 
@@ -680,17 +676,7 @@ final class Profile
         }
         const basename = mainSec.get("basename", defaultName);
 
-        auto p = new Profile(basename, hostInfo, buildType, compilers);
-
-        const digestSect = ini.get("digest");
-        if (digestSect)
-        {
-            const hash = enforceKey(digestSect, "hash");
-            enforce(p.digestHash() == hash,
-                "Digest hash do not match with the one of the profile file");
-        }
-
-        return p;
+        return new Profile(basename, hostInfo, buildType, compilers);
     }
 }
 
