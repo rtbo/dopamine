@@ -7,6 +7,12 @@ dependencies = {
     pkga = '>=1.0.0',
 }
 
+include = {
+    'lib2.c',
+    'lib2.h',
+    'meson.build',
+}
+
 function build (dirs, config, deps)
     local profile = config.profile
     local meson = dop.Meson:new(profile)

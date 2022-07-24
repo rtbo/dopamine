@@ -56,33 +56,6 @@ in (cvs != Cvs.none)
     return res.output.strip().length == 0;
 }
 
-string[] listRepoFiles(Cvs cvs, string dir = getcwd())
-in (cvs != Cvs.none)
-{
-    import std.algorithm;
-
-    const cmd = cvs == Cvs.git ?
-        ["git", "ls-files"] : ["hg", "locate"];
-
-    auto res = execute(cmd, null, Config.none, size_t.max, dir);
-    enforce(
-        res.status == 0,
-        new ErrorLogException("Could not run %s: %s", info(cmd.join(" ")), res.output)
-    );
-    return lineSplitter(res.output)
-        .map!(l => buildPath(dir, l))
-        .array;
-}
-
-bool isCvsRoot(Cvs cvs, string dir = getcwd())
-{
-    if (cvs == Cvs.none)
-        return false;
-
-    const cvsDir = buildPath(dir, cvs == Cvs.git ? ".git" : ".hg");
-    return exists(cvsDir) && isDir(cvsDir);
-}
-
 Recipe parseRecipe(RecipeDir dir)
 {
     import std.format : format;

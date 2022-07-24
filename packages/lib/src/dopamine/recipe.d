@@ -236,6 +236,34 @@ struct Recipe
         return d.revision;
     }
 
+    string[] include() @system
+    {
+        if (d.included)
+            return d.included;
+
+        auto L = d.L;
+
+        lua_getglobal(L, "include");
+        if (lua_type(L, -1) == LUA_TNIL)
+        {
+            lua_pop(L, 1);
+            return null;
+        }
+
+        assert(lua_type(L, -1) == LUA_TFUNCTION,
+            "function expected for 'include'"
+        );
+
+        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        {
+            throw new Exception("Cannot get files included with recipe: " ~ luaPop!string(L));
+        }
+
+        string[] result = luaReadStringArray(L, -1);
+        lua_pop(L, 1);
+        return result;
+    }
+
     /// Returns: whether the source is included with the package
     @property bool inTreeSrc() const @safe
     {
@@ -389,6 +417,7 @@ package class RecipePayload
     string license;
     string copyright;
     Lang[] langs;
+    string[] included;
 
     DepSpec[] dependencies;
     string[] funcs;
@@ -545,6 +574,31 @@ package class RecipePayload
                     throw new Exception("Invalid revision specification");
                 }
             }
+
+            {
+                lua_getglobal(L, "include");
+                scope (exit)
+                    lua_pop(L, 1);
+
+                switch (lua_type(L, -1))
+                {
+                case LUA_TTABLE:
+                    d.included = luaReadStringArray(L, -1);
+                    break;
+                case LUA_TSTRING:
+                    d.included = [luaTo!string(L, -1)];
+                    break;
+                case LUA_TFUNCTION:
+                    d.funcs ~= "include";
+                    break;
+                case LUA_TNIL:
+                    break;
+                default:
+                    throw new Exception(
+                        "Invalid 'include' key: expected a function, a table, a string or nil");
+                }
+            }
+
             {
                 lua_getglobal(L, "source");
                 scope (exit)

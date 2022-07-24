@@ -101,35 +101,6 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
     recipe.build(bdirs, config, depInfos);
 }
 
-string[] guessRecipeFiles(RecipeDir rdir)
-{
-    string[] res;
-    const rd = buildNormalizedPath(absolutePath(rdir.dir));
-    foreach (e; dirEntries(rd, SpanMode.shallow))
-    {
-        const bn = baseName(e.name);
-
-        if (bn.startsWith("."))
-            continue;
-        if (bn == "dop.lock")
-            continue;
-
-        if (e.isDir)
-        {
-            foreach (e2; dirEntries(e.name, SpanMode.breadth))
-            {
-                if (!e2.isDir)
-                    res ~= e2.name;
-            }
-        }
-        else
-        {
-            res ~= e.name;
-        }
-    }
-    return res;
-}
-
 int publishMain(string[] args)
 {
     string profileName;
@@ -192,7 +163,7 @@ int publishMain(string[] args)
 
     auto dig = makeDigest!SHA256();
 
-    auto files = isCvsRoot(cvs, absRdir) ? listRepoFiles(cvs, absRdir) : guessRecipeFiles(rdir);
+    auto files = [rdir.recipeFile] ~ recipe.include();
     files
         .map!(f => fileEntry(f, absRdir))
         .boxTarXz()
