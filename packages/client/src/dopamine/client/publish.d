@@ -47,15 +47,23 @@ void enforceRecipeIdentity(Recipe recipe)
     );
 
     enforce(
-        recipe.revision,
+        recipe.hasRevision,
         new ErrorLogException("Recipe needs a revision"),
     );
 }
 
-void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
+void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, string revision)
 {
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = parseRecipe(rdir);
+
+    const cwd = getcwd();
+    scope (exit)
+        chdir(cwd);
+
+    chdir(rdir.dir);
+
+    recipe.revision = revision;
 
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
@@ -74,12 +82,6 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
 
         depInfos = buildDependencies(dag, recipe, profile, service);
     }
-
-    const cwd = getcwd();
-    scope (exit)
-        chdir(cwd);
-
-    chdir(rdir.dir);
 
     if (!recipe.inTreeSrc)
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
@@ -147,39 +149,28 @@ int publishMain(string[] args)
         );
     }
 
+    recipe.revision = calcRecipeRevision(recipe);
+    logInfo("revision: %s", info(recipe.revision));
+
     enforceRecipeIdentity(recipe);
 
     const cacheDir = tempPath(null, "dop-cache", null);
-    const archiveExt = ".tar.xz";
-    const archivePath = tempPath(null, format!"%s-%s-%s"(recipe.name, recipe.ver, recipe.revision), archiveExt);
-    const extractPath = archivePath[0 .. $ - archiveExt.length];
+    const archivePath = buildPath(tempDir(), format!"%s-%s-%s.tar.xz"(recipe.name, recipe.ver, recipe.revision));
+    const extractPath = archivePath[0 .. $ - ".tar.xz".length];
 
     mkdirRecurse(extractPath);
     mkdirRecurse(cacheDir);
     scope (exit)
     {
-        mkdirRecurse(extractPath);
-        mkdirRecurse(cacheDir);
+        rmdirRecurse(cacheDir);
+        rmdirRecurse(extractPath);
     }
 
     logInfo("%s: preparing recipe archive...", info("Publish"));
 
-    const cwd = buildNormalizedPath(getcwd());
-
-    auto files = only(rdir.recipeFile)
-        .chain(recipe.include())
-        // normalize paths relative to .
-        .map!((f) {
-            const n = buildNormalizedPath(absolutePath(f));
-            return relativePath(n, cwd);
-        })
-        .array;
-
-    sort(files);
-
     auto dig = makeDigest!SHA256();
-    files
-        .uniq() // ensure no file is counted twice (git ls-files will also include the recipe file)
+
+    getAllRecipeFiles(recipe)
         .tee!(f => logInfo("    Including %s", info(f)))
         .map!(f => fileEntry(f, absRdir))
         .boxTarXz()
@@ -197,8 +188,7 @@ int publishMain(string[] args)
 
     try
     {
-        enforceRecipeIntegrity(RecipeDir.enforced(extractPath), profile, cacheDir);
-        rmdirRecurse(extractPath);
+        enforceRecipeIntegrity(RecipeDir.enforced(extractPath), profile, cacheDir, recipe.revision);
     }
     catch (ServerDownException ex)
     {
