@@ -219,14 +219,14 @@ struct Recipe
     /// Get the revision of the recipe
     @property string revision() const @safe
     in (isPackage, "Light recipes do not have revision")
-    in (hasRevision, "Revision was not set")
+    in (hasRevision, "Revision was not set: " ~ name)
     {
         return d.revision;
     }
 
     /// Set the revision of the recipe
     @property void revision(string rev) @safe
-    in (!hasRevision || revision == rev, "Revision already set")
+    in (!hasRevision || revision == rev, "Revision already set: " ~ name)
     {
         d.revision = rev;
     }
@@ -603,31 +603,7 @@ package class RecipePayload
             d.copyright = luaGetGlobal!string(L, "copyright", null);
 
             if (revision)
-            {
                 d.revision = revision;
-            }
-            else
-            {
-                lua_getglobal(L, "revision");
-                scope (exit)
-                    lua_pop(L, 1);
-
-                switch (lua_type(L, -1))
-                {
-                case LUA_TFUNCTION:
-                    d.funcs ~= "revision";
-                    // will be called from Recipe.revision
-                    break;
-                case LUA_TNIL:
-                    // revision will be lazily computed from the file content in Recipe.revision
-                    break;
-                case LUA_TSTRING:
-                    d.revision = luaToString(L, -1);
-                    break;
-                default:
-                    throw new Exception("Invalid revision specification");
-                }
-            }
 
             {
                 lua_getglobal(L, "include");
@@ -725,22 +701,6 @@ package class RecipePayload
 }
 
 private:
-
-string sha1RevisionFromContent(const(char)[] luaContent) @safe
-{
-    import std.digest.sha : sha1Of;
-    import std.digest : toHexString, LetterCase;
-
-    const hash = sha1Of(luaContent);
-    return toHexString!(LetterCase.lower)(hash).idup;
-}
-
-string sha1RevisionFromFile(string filename) @safe
-{
-    import std.file : read;
-
-    return sha1RevisionFromContent(cast(const(char)[]) read(filename));
-}
 
 /// Read a dependency table from top of the stack.
 /// The table is left on the stack after return
