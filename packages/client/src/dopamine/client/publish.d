@@ -134,14 +134,15 @@ int publishMain(string[] args)
             cvs != Cvs.none,
             new ErrorLogException(
                 "Publish requires the recipe to be under version control.\n" ~
-                "Run with %s to skip this check.", info("--skip-repo-clean")
+                "Run with %s to skip this check.", info("--skip-cvs-clean")
         ),
         );
         enforce(
             isRepoClean(cvs, absRdir),
             new ErrorLogException(
                 "%s repo isn't clean. By default, %s is only possible with clean repo.\n" ~
-                "Run with %s to skip this check.", info(cvs), info("publish"), info("--skip-repo-clean")
+                "Run with %s to skip this check.", info(cvs), info("publish"), info(
+                "--skip-cvs-clean")
         ),
         );
     }
