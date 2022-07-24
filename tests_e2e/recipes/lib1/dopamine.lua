@@ -1,7 +1,6 @@
 name = 'lib1'
 version = '1.0.0'
 langs = {'c'}
-revision = '1'
 
 include = {
     'lib1.c',

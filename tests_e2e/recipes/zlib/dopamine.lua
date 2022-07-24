@@ -6,8 +6,6 @@ license = 'MIT'
 copyright = 'Copyright (C) 1995-2017 Jean-loup Gailly and Mark Adler'
 langs = {'c'}
 
-revision = '1'
-
 function source ()
     local folder = 'zlib-' .. version
     local archive = folder .. '.tar.gz'

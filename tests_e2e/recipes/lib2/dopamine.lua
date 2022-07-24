@@ -1,7 +1,6 @@
 name = 'lib2'
 version = '1.0.0'
 langs = {'c'}
-revision = '1'
 
 dependencies = {
     pkga = '>=1.0.0',
