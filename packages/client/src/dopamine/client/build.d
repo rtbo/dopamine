@@ -99,6 +99,10 @@ int buildMain(string[] args)
 
     auto recipe = parseRecipe(rdir);
 
+    enforce(recipe.isPackage, new ErrorLogException(
+            "Light recipes can't be built by dopamine"
+    ));
+
     const srcDir = enforceSourceReady(rdir, recipe).absolutePath();
 
     const profile = enforceProfileReady(rdir, recipe, profileName);

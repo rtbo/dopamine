@@ -125,6 +125,10 @@ int publishMain(string[] args)
     const rdir = RecipeDir.enforced(".");
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = parseRecipe(rdir);
+    enforce(recipe.isPackage, new ErrorLogException(
+            "Light recipes can't be published"
+    ));
+
     auto profile = enforceProfileReady(rdir, recipe, profileName);
 
     const absRdir = buildNormalizedPath(absolutePath(rdir.dir));
@@ -150,7 +154,7 @@ int publishMain(string[] args)
     }
 
     recipe.revision = calcRecipeRevision(recipe);
-    logInfo("revision: %s", info(recipe.revision));
+    logInfo("%s: %s", info("Revision"), info(recipe.revision));
 
     enforceRecipeIdentity(recipe);
 
