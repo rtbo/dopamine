@@ -5,6 +5,13 @@ for k, v in pairs(require('dop_native')) do
     dop[k] = v
 end
 
+local function create_class(name)
+    local cls = {}
+    cls.__index = cls
+    dop[name] = cls
+    return cls
+end
+
 function dop.assert(pred, msg, level)
     if pred then return pred end
     if not msg then
@@ -18,11 +25,25 @@ function dop.assert(pred, msg, level)
     error(msg, level)
 end
 
-local function create_class(name)
-    local cls = {}
-    cls.__index = cls
-    dop[name] = cls
-    return cls
+function dop.git_ls_files(opts)
+    return function ()
+        local cmd = {
+            'git', 'ls-files'
+        }
+        if opts and opts.submodules then
+            table.insert(cmd, '--recurse-submodules')
+        end
+        cmd.catch_output = true
+        if opts and opts.workdir then
+            cmd.workdir = opts.workdir
+        end
+        local cmd_out = dop.run_cmd(cmd)
+        local files = {}
+        for l in cmd_out:gmatch('[^\r\n]+') do
+            table.insert(files, l)
+        end
+        return files
+    end
 end
 
 -- perform closure func from the directory dir

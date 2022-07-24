@@ -101,35 +101,6 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir)
     recipe.build(bdirs, config, depInfos);
 }
 
-string[] guessRecipeFiles(RecipeDir rdir)
-{
-    string[] res;
-    const rd = buildNormalizedPath(absolutePath(rdir.dir));
-    foreach (e; dirEntries(rd, SpanMode.shallow))
-    {
-        const bn = baseName(e.name);
-
-        if (bn.startsWith("."))
-            continue;
-        if (bn == "dop.lock")
-            continue;
-
-        if (e.isDir)
-        {
-            foreach (e2; dirEntries(e.name, SpanMode.breadth))
-            {
-                if (!e2.isDir)
-                    res ~= e2.name;
-            }
-        }
-        else
-        {
-            res ~= e.name;
-        }
-    }
-    return res;
-}
-
 int publishMain(string[] args)
 {
     string profileName;
@@ -163,14 +134,15 @@ int publishMain(string[] args)
             cvs != Cvs.none,
             new ErrorLogException(
                 "Publish requires the recipe to be under version control.\n" ~
-                "Run with %s to skip this check.", info("--skip-repo-clean")
+                "Run with %s to skip this check.", info("--skip-cvs-clean")
         ),
         );
         enforce(
             isRepoClean(cvs, absRdir),
             new ErrorLogException(
                 "%s repo isn't clean. By default, %s is only possible with clean repo.\n" ~
-                "Run with %s to skip this check.", info(cvs), info("publish"), info("--skip-repo-clean")
+                "Run with %s to skip this check.", info(cvs), info("publish"), info(
+                "--skip-cvs-clean")
         ),
         );
     }
@@ -190,10 +162,25 @@ int publishMain(string[] args)
         mkdirRecurse(cacheDir);
     }
 
-    auto dig = makeDigest!SHA256();
+    logInfo("%s: preparing recipe archive...", info("Publish"));
 
-    auto files = isCvsRoot(cvs, absRdir) ? listRepoFiles(cvs, absRdir) : guessRecipeFiles(rdir);
+    const cwd = buildNormalizedPath(getcwd());
+
+    auto files = only(rdir.recipeFile)
+        .chain(recipe.include())
+        // normalize paths relative to .
+        .map!((f) {
+            const n = buildNormalizedPath(absolutePath(f));
+            return relativePath(n, cwd);
+        })
+        .array;
+
+    sort(files);
+
+    auto dig = makeDigest!SHA256();
     files
+        .uniq() // ensure no file is counted twice (git ls-files will also include the recipe file)
+        .tee!(f => logInfo("    Including %s", info(f)))
         .map!(f => fileEntry(f, absRdir))
         .boxTarXz()
         .tee(&dig)
@@ -223,7 +210,7 @@ int publishMain(string[] args)
         return 1;
     }
 
-    logInfo("Publish: Recipe integrity %s", success("OK"));
+    logInfo("%s: Recipe integrity %s", info("Publish"), success("OK"));
 
     auto registry = new Registry();
     try
@@ -233,7 +220,8 @@ int publishMain(string[] args)
     catch (Exception ex)
     {
         throw new ErrorLogException(
-            "Publishing requires to be logged-in. Get a login key on the registry front-end.");
+            "Could not log to %s. Publishing requires to be logged-in. Get a login key on the registry front-end.",
+            info(registry.host));
     }
     PostRecipe req;
     req.name = recipe.name;

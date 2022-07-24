@@ -3,6 +3,12 @@ version = '1.0.0'
 langs = {'c'}
 revision = '1'
 
+include = {
+    'lib1.c',
+    'lib1.h',
+    'meson.build',
+}
+
 -- called from the config directory
 function build (dirs, config)
     local meson = dop.Meson:new(config.profile)
