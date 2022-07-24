@@ -162,10 +162,25 @@ int publishMain(string[] args)
         mkdirRecurse(cacheDir);
     }
 
-    auto dig = makeDigest!SHA256();
+    logInfo("%s: preparing recipe archive...", info("Publish"));
 
-    auto files = [rdir.recipeFile] ~ recipe.include();
+    const cwd = buildNormalizedPath(getcwd());
+
+    auto files = only(rdir.recipeFile)
+        .chain(recipe.include())
+        // normalize paths relative to .
+        .map!((f) {
+            const n = buildNormalizedPath(absolutePath(f));
+            return relativePath(n, cwd);
+        })
+        .array;
+
+    sort(files);
+
+    auto dig = makeDigest!SHA256();
     files
+        .uniq() // ensure no file is counted twice (git ls-files will also include the recipe file)
+        .tee!(f => logInfo("    Including %s", info(f)))
         .map!(f => fileEntry(f, absRdir))
         .boxTarXz()
         .tee(&dig)
