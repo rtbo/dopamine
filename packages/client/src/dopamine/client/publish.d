@@ -223,7 +223,7 @@ int publishMain(string[] args)
         return 1;
     }
 
-    logInfo("Publish: Recipe integrity %s", success("OK"));
+    logInfo("%s: Recipe integrity %s", info("Publish"), success("OK"));
 
     auto registry = new Registry();
     try
@@ -233,7 +233,8 @@ int publishMain(string[] args)
     catch (Exception ex)
     {
         throw new ErrorLogException(
-            "Publishing requires to be logged-in. Get a login key on the registry front-end.");
+            "Could not log to %s. Publishing requires to be logged-in. Get a login key on the registry front-end.",
+            info(registry.host));
     }
     PostRecipe req;
     req.name = recipe.name;
