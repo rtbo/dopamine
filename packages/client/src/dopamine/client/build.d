@@ -103,6 +103,9 @@ int buildMain(string[] args)
 
     const profile = enforceProfileReady(rdir, recipe, profileName);
 
+    recipe.revision = calcRecipeRevision(recipe);
+    logInfo("%s: %s", info("Revision"), info(recipe.revision));
+
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {

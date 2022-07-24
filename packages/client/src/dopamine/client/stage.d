@@ -100,6 +100,9 @@ int stageMain(string[] args)
 
     auto profile = enforceProfileReady(rdir, recipe, profileName);
 
+    recipe.revision = calcRecipeRevision(recipe);
+    logInfo("%s: %s", info("Revision"), info(recipe.revision));
+
     DepInfo[string] depInfos;
 
     if (recipe.hasDependencies)
