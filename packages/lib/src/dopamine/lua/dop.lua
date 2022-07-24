@@ -130,31 +130,6 @@ function dop.find_libfile(dir, name, libtype)
     end
 end
 
-
-local Git = create_class('Git')
-
--- Return a function that checks if the git repo is clean and return the commit revision
--- Assign this to your package revision if you want to use git as package revision tracker
-function Git.revision()
-    return function()
-        local status = dop.run_cmd({
-            'git',
-            'status',
-            '--porcelain',
-            catch_output = true,
-        })
-        if status ~= '' then
-            error('Git repo not clean', 2)
-        end
-        return dop.trim(dop.run_cmd({
-            'git',
-            'rev-parse',
-            'HEAD',
-            catch_output = true,
-        }))
-    end
-end
-
 local CMake = create_class('CMake')
 
 function CMake:new(profile)
