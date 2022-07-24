@@ -85,8 +85,7 @@ async function revoke(tok: ElidedCliToken) {
               }}
             </p>
             <p>This token will be showed only once. Run the following command to
-              use
-              it locally:</p>
+              use it locally:</p>
             <code class="bg-base-300 p-2 break-words"> {{ createdCommand }} </code>
             <div class="card-actions justify-end">
               <button class="btn btn-ghost" @click="commandCopy()">
