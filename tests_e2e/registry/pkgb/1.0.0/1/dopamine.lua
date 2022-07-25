@@ -1,7 +1,6 @@
 name = 'pkgb'
 version = '1.0.0'
 langs = {'d'}
-revision = '1'
 
 dependencies = {
     pkga = '>=1.0.0'

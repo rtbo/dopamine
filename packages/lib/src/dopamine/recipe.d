@@ -12,9 +12,10 @@ import dopamine.c.lua;
 
 import std.digest;
 import std.exception;
+import std.file : getcwd;
 import std.json;
+import std.path;
 import std.string;
-import std.stdio;
 import std.variant;
 
 /// A recipe dependency specification
@@ -33,8 +34,6 @@ struct BuildDirs
 
     invariant
     {
-        import std.path : isAbsolute;
-
         assert(root.isAbsolute);
         assert(src.isAbsolute);
         assert(install.isAbsolute);
@@ -68,13 +67,10 @@ enum RecipeType
 
 struct Recipe
 {
-    import std.path : isAbsolute;
-
     // Implementation note:
     //  - the Recipe struct acts as a reference counter to the payload (d)
     //  - the payload carries a Lua state that is unique to the recipe (no state sharing between recipes)
-    //  - in case of a light recipe, the lua stack stays clean between function calls
-    //  - in case of a package recipe, the lua stack keeps the recipe table (self) on top between function calls (and only this table)
+    //  - the lua stack is always cleaned before returning from functions
 
     private RecipePayload d;
 
@@ -108,6 +104,12 @@ struct Recipe
     bool opCast(T : bool)() const @safe
     {
         return d !is null;
+    }
+
+    /// the recipe directory
+    @property string rootDir() const @safe
+    {
+        return d.rootDir;
     }
 
     @property string filename() const @safe
@@ -208,34 +210,29 @@ struct Recipe
         return readDependencies(L);
     }
 
-    @property string revision() @system
-    in (isPackage, "Light recipes do not have revision")
+    /// Check if the revision of the recipe was set
+    @property bool hasRevision() const @safe
     {
-        if (d.revision)
-            return d.revision;
+        return d.revision.length != 0;
+    }
 
-        auto L = d.L;
-
-        lua_getglobal(L, "revision");
-
-        if (d.filename && lua_type(L, -1) == LUA_TNIL)
-        {
-            lua_pop(L, 1);
-            return sha1RevisionFromFile(d.filename);
-        }
-
-        enforce(lua_type(L, -1) == LUA_TFUNCTION,
-            "Wrong revision field: expected a function or nil");
-
-        if (lua_pcall(L, /* nargs = */ 0, /* nresults = */ 1, 0) != LUA_OK)
-        {
-            throw new Exception("Cannot get recipe revision: " ~ luaPop!string(L));
-        }
-
-        d.revision = luaTo!string(L, -1);
+    /// Get the revision of the recipe
+    @property string revision() const @safe
+    in (isPackage, "Light recipes do not have revision")
+    in (hasRevision, "Revision was not set: " ~ name)
+    {
         return d.revision;
     }
 
+    /// Set the revision of the recipe
+    @property void revision(string rev) @safe
+    in (!hasRevision || revision == rev, "Revision already set: " ~ name)
+    {
+        d.revision = rev;
+    }
+
+    /// Get the files included with the recipe (may or may not return 'dopamine.lua' in the list)
+    /// Effectively return or call the 'include' field of the recipe
     string[] include() @system
     {
         if (d.included)
@@ -259,9 +256,9 @@ struct Recipe
             throw new Exception("Cannot get files included with recipe: " ~ luaPop!string(L));
         }
 
-        string[] result = luaReadStringArray(L, -1);
+        d.included = luaReadStringArray(L, -1);
         lua_pop(L, 1);
-        return result;
+        return d.included;
     }
 
     /// Returns: whether the source is included with the package
@@ -408,6 +405,61 @@ struct Recipe
     }
 }
 
+/// Get all the files included in the recipe, included the recipe file itself.
+/// The caller must ensure that current directory is set to the recipe root directory.
+/// Returns: A range to the recipe files, sorted and relative to the recipe directory.
+const(string)[] getAllRecipeFiles(Recipe recipe) @system
+in(buildNormalizedPath(getcwd()) == recipe.rootDir, "getAllRecipeFiles must be called from the recipe dir")
+{
+    import std.algorithm : map, sort, uniq;
+    import std.array : array;
+    import std.range : only, chain;
+
+    if (recipe.d.allFiles)
+        return recipe.d.allFiles;
+
+    const cwd = buildNormalizedPath(getcwd());
+
+    auto files = only(recipe.filename)
+        .chain(recipe.include())
+        // normalize paths relative to .
+        .map!((f) {
+            const a = buildNormalizedPath(absolutePath(f, cwd));
+            return relativePath(a, cwd);
+        })
+        .array;
+
+    sort(files);
+
+    // ensure no file is counted twice (e.g. git ls-files will also include the recipe file)
+    recipe.d.allFiles = files.uniq().array;
+
+    return recipe.d.allFiles;
+}
+
+/// Compute the revision of the recipe. That is the SHA-1 checksum of all the files
+/// included in the recipe, truncated to 8 bytes and encoded in lowercase hexadecimal.
+/// The caller must ensure that current directory is set to the recipe root directory.
+/// Returns: the recipe revision
+string calcRecipeRevision(Recipe recipe) @system
+in(buildNormalizedPath(getcwd()) == recipe.rootDir, "calcRecipeRevision must be called from the recipe dir")
+{
+    import std.digest.sha : SHA1;
+    import squiz_box : readBinaryFile;
+
+    auto dig = makeDigest!SHA1();
+    ubyte[8192] buf;
+
+    foreach (fn; getAllRecipeFiles(recipe))
+    {
+        foreach (chunk; readBinaryFile(fn, buf[]))
+            dig.put(chunk);
+    }
+
+    const sha1 = dig.finish();
+    return toHexString!(LetterCase.lower)(sha1[0 .. 8]).idup;
+}
+
 package class RecipePayload
 {
     RecipeType type;
@@ -424,8 +476,10 @@ package class RecipePayload
     string inTreeSrc;
     bool stageFalse;
 
+    string rootDir;
     string filename;
     string revision;
+    string[] allFiles;
 
     lua_State* L;
     int rc;
@@ -462,8 +516,6 @@ package class RecipePayload
     private static RecipePayload parse(string filename, string revision) @system
     in (filename !is null)
     {
-        import std.path : isAbsolute;
-
         auto d = new RecipePayload();
         auto L = d.L;
 
@@ -474,7 +526,9 @@ package class RecipePayload
             throw new Exception("cannot parse package recipe file: " ~ luaPop!string(L));
         }
 
-        d.filename = filename;
+        const cwd = getcwd();
+        d.filename = buildNormalizedPath(absolutePath(filename, cwd));
+        d.rootDir = d.filename.dirName();
 
         enforce(
             lua_gettop(L) == 0,
@@ -549,31 +603,7 @@ package class RecipePayload
             d.copyright = luaGetGlobal!string(L, "copyright", null);
 
             if (revision)
-            {
                 d.revision = revision;
-            }
-            else
-            {
-                lua_getglobal(L, "revision");
-                scope (exit)
-                    lua_pop(L, 1);
-
-                switch (lua_type(L, -1))
-                {
-                case LUA_TFUNCTION:
-                    d.funcs ~= "revision";
-                    // will be called from Recipe.revision
-                    break;
-                case LUA_TNIL:
-                    // revision will be lazily computed from the file content in Recipe.revision
-                    break;
-                case LUA_TSTRING:
-                    d.revision = luaToString(L, -1);
-                    break;
-                default:
-                    throw new Exception("Invalid revision specification");
-                }
-            }
 
             {
                 lua_getglobal(L, "include");
@@ -671,22 +701,6 @@ package class RecipePayload
 }
 
 private:
-
-string sha1RevisionFromContent(const(char)[] luaContent) @safe
-{
-    import std.digest.sha : sha1Of;
-    import std.digest : toHexString, LetterCase;
-
-    const hash = sha1Of(luaContent);
-    return toHexString!(LetterCase.lower)(hash).idup;
-}
-
-string sha1RevisionFromFile(string filename) @safe
-{
-    import std.file : read;
-
-    return sha1RevisionFromContent(cast(const(char)[]) read(filename));
-}
 
 /// Read a dependency table from top of the stack.
 /// The table is left on the stack after return

@@ -99,9 +99,16 @@ int buildMain(string[] args)
 
     auto recipe = parseRecipe(rdir);
 
+    enforce(recipe.isPackage, new ErrorLogException(
+            "Light recipes can't be built by dopamine"
+    ));
+
     const srcDir = enforceSourceReady(rdir, recipe).absolutePath();
 
     const profile = enforceProfileReady(rdir, recipe, profileName);
+
+    recipe.revision = calcRecipeRevision(recipe);
+    logInfo("%s: %s", info("Revision"), info(recipe.revision));
 
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)

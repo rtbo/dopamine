@@ -320,7 +320,7 @@ final class DependencyService : DepService
                 auto lock = File(revLock, "r");
                 lock.lock(LockType.read);
 
-                return Recipe.parseFile(recDir.recipeFile);
+                return Recipe.parseFile(recDir.recipeFile, revDir.revision);
             }
         }
 

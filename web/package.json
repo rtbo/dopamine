@@ -11,6 +11,8 @@
     "@iconify/iconify": "^2.2.1",
     "@iconify/vue": "^3.2.1",
     "@vueuse/core": "^8.7.5",
+    "axios": "^0.27.2",
+    "crypto-random-string": "^5.0.0",
     "jwt-decode": "^3.1.2",
     "pinia": "^2.0.14",
     "vue": "^3.2.25",
