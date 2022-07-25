@@ -8,6 +8,7 @@ REGISTRY=base
 
 EXPECT_MATCH=^Recipe: OK - lib2-1.0.0$
 EXPECT_MATCH=Dependency resolution: OK
+EXPECT_MATCH=pkga/1.0.0/1
 ASSERT_FILE=dop.lock
 EXPECT_MATCH[dop.lock]="preferCache"
 EXPECT_VERSION[pkga]=1.0.0
