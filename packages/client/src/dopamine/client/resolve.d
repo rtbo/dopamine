@@ -114,6 +114,11 @@ int resolveMain(string[] args)
         write(dir.depsLockFile, json.toPrettyString());
 
         logInfo("%s: %s", info("Dependency resolution"), success("OK"));
+        foreach (dep; dag.traverseTopDownResolved())
+        {
+            logInfo("    %s/%s%s%s - from %s", dep.name, dep.ver,
+                dep.revision ? "/" : "", dep.revision, dep.location);
+        }
     }
     catch (ServerDownException ex)
     {
