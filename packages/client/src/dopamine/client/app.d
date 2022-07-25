@@ -5,6 +5,7 @@ import dopamine.client.login;
 import dopamine.client.profile;
 import dopamine.client.publish;
 import dopamine.client.resolve;
+import dopamine.client.revision;
 import dopamine.client.source;
 import dopamine.client.stage;
 
@@ -37,6 +38,7 @@ int main(string[] args)
         Command("resolve", &resolveMain, "Resolve and lock dependencies versions"),
         Command("source", &sourceMain, "Download and prepare the source code"),
         Command("build", &buildMain, "Build the package"),
+        Command("revision", &revisionMain, "Get the package revision of a recipe"),
         Command("stage", &stageMain, "Stage the package"),
         Command("publish", &publishMain, "Publish the package"),
     ];
