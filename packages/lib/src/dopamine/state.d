@@ -1,7 +1,7 @@
 module dopamine.state;
 
 import dopamine.paths;
-import dopamine.recipe_old;
+import dopamine.recipe;
 import dopamine.util;
 
 /// Content of the main state for the package dir state

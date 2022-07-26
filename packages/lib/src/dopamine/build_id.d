@@ -1,7 +1,7 @@
 module dopamine.build_id;
 
 import dopamine.profile;
-import dopamine.recipe_old;
+import dopamine.recipe;
 import dopamine.semver;
 import dopamine.util;
 
@@ -29,7 +29,7 @@ struct BuildId
         // recipes that declare `stage = false` have the stage directory
         // in the build-id. Such recipes can be publised, but the binaries
         // can't be uploaded
-        if (stageDest && recipe.stageFalse)
+        if (stageDest && !recipe.canStage)
         {
             feedDigestData(digest, stageDest);
         }

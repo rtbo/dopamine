@@ -2,7 +2,7 @@ module test.util;
 
 import dopamine.paths;
 import dopamine.profile;
-import dopamine.recipe_old;
+import dopamine.recipe;
 import dopamine.semver;
 
 import std.file;

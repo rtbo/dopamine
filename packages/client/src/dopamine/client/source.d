@@ -4,7 +4,7 @@ import dopamine.client.utils;
 
 import dopamine.log;
 import dopamine.paths;
-import dopamine.recipe_old;
+import dopamine.recipe;
 import dopamine.util;
 import dopamine.state;
 

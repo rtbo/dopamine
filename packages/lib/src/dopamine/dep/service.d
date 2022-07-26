@@ -5,7 +5,8 @@ import dopamine.cache;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
-import dopamine.recipe_old;
+import dopamine.recipe;
+import dopamine.recipe.dop;
 import dopamine.registry;
 import dopamine.semver;
 
@@ -286,7 +287,7 @@ final class DependencyService : DepService
             return Recipe.init;
         }
 
-        return Recipe.parseFile(rdir.recipeFile, revision);
+        return new DopRecipe(rdir.recipeFile, revision);
     }
 
     private Recipe findRecipeCache(string packname, const ref Semver ver)
@@ -320,7 +321,7 @@ final class DependencyService : DepService
                 auto lock = File(revLock, "r");
                 lock.lock(LockType.read);
 
-                return Recipe.parseFile(recDir.recipeFile, revDir.revision);
+                return new DopRecipe(recDir.recipeFile, revDir.revision);
             }
         }
 
@@ -335,7 +336,7 @@ final class DependencyService : DepService
 
         auto recDir = RecipeDir(revDir.dir);
 
-        return Recipe.parseFile(recDir.recipeFile, revDir.revision);
+        return new DopRecipe(recDir.recipeFile, revDir.revision);
     }
 
     private string depId(string packname, Semver ver, string revision) @safe

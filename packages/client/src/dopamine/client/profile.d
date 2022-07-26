@@ -5,7 +5,7 @@ import dopamine.client.utils;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
-import dopamine.recipe_old;
+import dopamine.recipe;
 
 import std.array;
 import std.exception;
@@ -158,7 +158,7 @@ int profileMain(string[] args)
 
     if (opt.addMissing)
     {
-        enforce(cast(bool) recipe, new FormatLogException(
+        enforce(recipe, new FormatLogException(
                 "%s recipe file is needed to know which languages are missing.",
                 error("Error:"),
         ));

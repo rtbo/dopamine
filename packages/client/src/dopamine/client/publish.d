@@ -12,7 +12,7 @@ import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
-import dopamine.recipe_old;
+import dopamine.recipe;
 import dopamine.registry;
 import dopamine.semver;
 import dopamine.util;
@@ -47,7 +47,7 @@ void enforceRecipeIdentity(Recipe recipe)
     );
 
     enforce(
-        recipe.hasRevision,
+        recipe.revision.length,
         new ErrorLogException("Recipe needs a revision"),
     );
 }

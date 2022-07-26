@@ -19,7 +19,7 @@ module dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.dep.spec;
 import dopamine.profile;
-import dopamine.recipe_old;
+import dopamine.recipe;
 import dopamine.semver;
 
 /// Heuristics to help choosing a package version in a set of compatible versions.
@@ -452,7 +452,6 @@ struct DepDAG
         root.resolvedNode = root.nodes[0];
         resolveDeps(root);
     }
-
 
     // 2nd phase of filtering to eliminate all incompatible versions in the DAG.
     // Unless [preFilter] was disabled during the [prepare] phase, this algorithm will only handle
@@ -1464,7 +1463,7 @@ struct TestPackage
         {
             if (n.ver == ver)
             {
-                return Recipe.mock(name, Semver(ver), n.deps, langs, "1");
+                return new MockRecipe(name, Semver(ver), "1",  n.deps, langs);
             }
         }
         assert(false, "wrong version");
@@ -1670,6 +1669,6 @@ final class MockDepService : DepService
         TestPackage p = packs[packname];
         TestPackVersion pv = p.nodes.find!(pv => pv.aver == aver).front;
         const revision = rev ? rev : "1";
-        return Recipe.mock(packname, aver.ver, pv.deps, p.langs, revision);
+        return new MockRecipe(packname, aver.ver, revision, pv.deps, p.langs);
     }
 }

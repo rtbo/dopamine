@@ -2,7 +2,8 @@ module dopamine.client.utils;
 
 import dopamine.log;
 import dopamine.paths;
-import dopamine.recipe_old;
+import dopamine.recipe;
+import dopamine.recipe.dop;
 
 import std.array;
 import std.exception;
@@ -60,7 +61,7 @@ Recipe parseRecipe(RecipeDir dir)
 {
     import std.format : format;
 
-    auto recipe = Recipe.parseFile(dir.recipeFile());
+    auto recipe = new DopRecipe(dir.recipeFile(), null);
 
     string namever;
     if (!recipe.isLight)

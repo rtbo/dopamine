@@ -13,7 +13,7 @@ import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
-import dopamine.recipe_old;
+import dopamine.recipe;
 import dopamine.registry;
 import dopamine.state;
 import dopamine.util;
@@ -28,7 +28,7 @@ void stagePackage(Recipe recipe, Profile profile, string absDest, DepInfo[string
 in(isAbsolute(absDest))
 {
     const rdir = RecipeDir.enforced(dirName(recipe.filename));
-    if (recipe.stageFalse)
+    if (!recipe.canStage)
     {
         const config = BuildConfig(profile);
         const buildId = BuildId(recipe, config, absDest);
@@ -50,24 +50,11 @@ in(isAbsolute(absDest))
     enforceBuildReady(rdir, bPaths);
 
     const cwd = getcwd();
+    chdir(rdir.dir);
     scope(exit)
         chdir(cwd);
 
-    if (recipe.hasFunction("stage"))
-    {
-        chdir(bPaths.install);
-        recipe.stage(absDest);
-    }
-    else
-    {
-        installRecurse(bPaths.install, absDest);
-    }
-
-    if (recipe.hasFunction("post_stage"))
-    {
-        chdir(absDest);
-        recipe.postStage();
-    }
+    recipe.stage(bPaths.install, absDest);
 }
 
 int stageMain(string[] args)
