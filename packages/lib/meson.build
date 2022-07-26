@@ -23,6 +23,8 @@ dop_src = files([
     'src/dopamine/paths.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe_old.d',
+    'src/dopamine/recipe/dop.d',
+    'src/dopamine/recipe/package.d',
     'src/dopamine/registry.d',
     'src/dopamine/state.d',
     'src/dopamine/util.d',
