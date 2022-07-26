@@ -12,7 +12,7 @@ import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
-import dopamine.recipe;
+import dopamine.recipe_old;
 import dopamine.registry;
 import dopamine.state;
 

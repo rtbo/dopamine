@@ -6,7 +6,7 @@ import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
-import dopamine.recipe;
+import dopamine.recipe_old;
 import dopamine.state;
 
 import std.exception;

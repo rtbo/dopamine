@@ -5,7 +5,7 @@ import dopamine.cache;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
-import dopamine.recipe;
+import dopamine.recipe_old;
 import dopamine.registry;
 import dopamine.semver;
 

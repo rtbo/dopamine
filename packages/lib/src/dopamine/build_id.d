@@ -1,7 +1,7 @@
 module dopamine.build_id;
 
 import dopamine.profile;
-import dopamine.recipe;
+import dopamine.recipe_old;
 import dopamine.semver;
 import dopamine.util;
 

@@ -19,7 +19,7 @@ module dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.dep.spec;
 import dopamine.profile;
-import dopamine.recipe;
+import dopamine.recipe_old;
 import dopamine.semver;
 
 /// Heuristics to help choosing a package version in a set of compatible versions.

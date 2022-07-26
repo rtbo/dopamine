@@ -1,4 +1,4 @@
-module dopamine.recipe;
+module dopamine.recipe_old;
 
 import dopamine.build_id;
 import dopamine.dep.spec;
