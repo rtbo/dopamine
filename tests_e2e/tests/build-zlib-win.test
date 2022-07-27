@@ -7,7 +7,7 @@ PRE_CMD=$DOP source
 CMD=$DOP build
 RECIPE=zlib
 
-# EXPECT_MATCH=Recipe: OK - zlib-1.2.11
+EXPECT_MATCH=Recipe: OK - zlib/1.2.11
 EXPECT_MATCH=Source: OK - zlib-1.2.11
 EXPECT_DIR=.dop/$DOP_BID-build
 EXPECT_SHARED_LIB=.dop/$DOP_BID-build/zlib

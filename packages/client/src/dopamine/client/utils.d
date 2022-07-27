@@ -17,7 +17,7 @@ enum Cvs
     hg,
 }
 
-Cvs getCvs(string dir=getcwd())
+Cvs getCvs(string dir = getcwd())
 {
     dir = buildNormalizedPath(absolutePath(dir));
 
@@ -57,12 +57,18 @@ in (cvs != Cvs.none)
 
 RecipeDir enforceRecipe(string root)
 {
-    return enforce(
+    auto rdir = enforce(
         RecipeDir.fromDir(root), new ErrorLogException(
             "%s is not a Dopamine package directory",
             info(absolutePath(root)),
-        )
+    )
     );
+    if (rdir.recipe.isLight)
+        logInfo("%s: %s", info("Recipe"), success("OK"));
+    else
+        logInfo("%s: %s - %s/%s", info("Recipe"), success("OK"), rdir.recipe.name, rdir.recipe.ver);
+
+    return rdir;
 }
 
 private auto acquireSomeLockFile(string path, string desc)
