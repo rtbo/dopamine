@@ -4,7 +4,6 @@ import dopamine.build_id;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
-import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.state;
@@ -23,12 +22,11 @@ in (!stageDest || isAbsolute(stageDest))
 
     foreach (depNode; dag.traverseTopDownResolved())
     {
-        auto rec = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        const rdir = RecipeDir.enforced(dirName(rec.filename));
-        const prof = profile.subset(rec.langs);
+        auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
+        const prof = profile.subset(rdir.recipe.langs);
         const conf = BuildConfig(prof);
-        const buildId = BuildId(rec, conf, stageDest);
-        const bPaths = BuildPaths(rdir, buildId);
+        const buildId = BuildId(rdir.recipe, conf, stageDest);
+        const bPaths = rdir.buildPaths(buildId);
 
         depNode.userData = new DepInfoObj(bPaths.install);
     }
@@ -61,32 +59,31 @@ in (!stageDest || isAbsolute(stageDest))
         if (depNode.location == DepLocation.system)
             continue;
 
-        auto rec = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        const rdir = RecipeDir.enforced(dirName(rec.filename));
-        const prof = profile.subset(rec.langs);
+        auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
+        const prof = profile.subset(rdir.recipe.langs);
         const conf = BuildConfig(prof);
-        const bid = BuildId(rec, conf, stageDest);
-        const bPaths = BuildPaths(rdir, bid);
+        const bid = BuildId(rdir.recipe, conf, stageDest);
+        const bPaths = rdir.buildPaths(bid);
 
         const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
         const packNameHead = format("%*s", maxLen, packHumanName);
 
-        chdir(rdir.dir);
+        chdir(rdir.root);
 
-        mkdirRecurse(rdir.dopDir);
+        mkdirRecurse(rdir.dopPath());
 
         string reason;
-        auto srcDir = checkSourceReady(rdir, rec, reason);
+        auto srcDir = checkSourceReady(rdir, rdir.recipe, reason);
         if (!srcDir)
         {
             logInfo("%s: Fetching source code", info(packNameHead));
             auto state = rdir.stateFile.read();
-            srcDir = state.srcDir = rec.source();
+            srcDir = state.srcDir = rdir.recipe.source();
             rdir.stateFile.write(state);
         }
         assert(srcDir && exists(srcDir));
 
-        srcDir = absolutePath(srcDir, rdir.dir);
+        srcDir = absolutePath(srcDir, rdir.root);
 
         if (!checkBuildReady(rdir, bPaths, reason))
         {
@@ -94,11 +91,11 @@ in (!stageDest || isAbsolute(stageDest))
             mkdirRecurse(bPaths.build);
 
             auto depInfos = collectNodeDepInfos(depNode);
-            const bd = BuildDirs(rdir.dir, srcDir, stageDest ? stageDest : bPaths.install);
+            const bd = BuildDirs(rdir.root, srcDir, stageDest ? stageDest : bPaths.install);
             auto state = bPaths.stateFile.read();
 
             chdir(bPaths.build);
-            rec.build(bd, conf, depInfos);
+            rdir.recipe.build(bd, conf, depInfos);
 
             state.buildTime = Clock.currTime;
             bPaths.stateFile.write(state);
@@ -151,8 +148,8 @@ private Lang[] collectLangs(DepDAG dag, DepService service)
         if (depNode.location == DepLocation.system)
             continue;
 
-        auto drec = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        foreach (l; drec.langs)
+        auto drdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
+        foreach (l; drdir.recipe.langs)
         {
             if (!allLangs.canFind(l))
                 allLangs ~= l;

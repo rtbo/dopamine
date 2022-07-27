@@ -1,7 +1,6 @@
 module dopamine.client.utils;
 
 import dopamine.log;
-import dopamine.paths;
 import dopamine.recipe;
 
 import std.array;
@@ -56,20 +55,6 @@ in (cvs != Cvs.none)
     return res.output.strip().length == 0;
 }
 
-Recipe parseRecipe(RecipeDir dir)
-{
-    import std.format : format;
-
-    auto recipe = new DopRecipe(dir.recipeFile(), null);
-
-    string namever;
-    if (!recipe.isLight)
-        namever = format(" - %s-%s", recipe.name, recipe.ver);
-
-    logInfo("%s: %s%s", info("Recipe"), success("OK"), namever);
-    return recipe;
-}
-
 private auto acquireSomeLockFile(string path, string desc)
 {
     import dopamine.util : acquireLockFile, tryAcquireLockFile;
@@ -85,7 +70,7 @@ private auto acquireSomeLockFile(string path, string desc)
 
 auto acquireRecipeLockFile(RecipeDir dir)
 {
-    return acquireSomeLockFile(dir.lockPath, "recipe");
+    return acquireSomeLockFile(dir.lockFile, "recipe");
 }
 
 auto acquireBuildLockFile(BuildPaths bPaths)

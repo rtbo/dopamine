@@ -3,7 +3,6 @@ module dopamine.dep.service;
 import dopamine.api.v1;
 import dopamine.cache;
 import dopamine.log;
-import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.registry;
@@ -123,15 +122,16 @@ interface DepService
     AvailVersion[] packAvailVersions(string packname) @safe;
 
     /// Get the recipe of a package in the specified version (and optional revision)
-    Recipe packRecipe(string packname, const(AvailVersion) aver, string rev = null) @system
-    in (aver.location != DepLocation.system, "System dependencies have no recipe!");
+    RecipeDir packRecipe(string packname, const(AvailVersion) aver, string rev = null) @system
+    in (aver.location != DepLocation.system, "System dependencies have no recipe!")
+    out(rdir; !rdir.recipe || rdir.recipe.revision.length);
 }
 
 /// Actual implementation of [DepService]
 final class DependencyService : DepService
 {
     private PackageResource[string] _packMem;
-    private Recipe[string] _recipeMem;
+    private RecipeDir[string] _recipeMem;
 
     private PackageCache _cache;
     private Registry _registry;
@@ -215,59 +215,62 @@ final class DependencyService : DepService
         return pack.versions.map!(v => AvailVersion(Semver(v), DepLocation.network)).array;
     }
 
-    Recipe packRecipe(string packname, const(AvailVersion) aver, string revision = null) @system
+    RecipeDir packRecipe(string packname, const(AvailVersion) aver, string revision = null) @system
     in (_registry || aver.location != DepLocation.network, "Network access is disabled")
     in (aver.location != DepLocation.system, "System dependencies do not have recipe")
     {
         if (revision)
         {
-            auto recipe = packRecipeMem(packname, aver.ver, revision);
-            if (recipe)
+            auto rdir = packRecipeMem(packname, aver.ver, revision);
+            if (rdir.recipe)
             {
-                return recipe;
+                return rdir;
             }
         }
 
-        Recipe recipe;
+        RecipeDir rdir;
 
         final switch (aver.location)
         {
         case DepLocation.cache:
-            recipe = packRecipeCache(packname, aver.ver, revision);
+            rdir = packRecipeCache(packname, aver.ver, revision);
             break;
         case DepLocation.network:
-            recipe = packRecipeRegistry(packname, aver.ver, revision);
+            rdir = packRecipeRegistry(packname, aver.ver, revision);
             break;
         case DepLocation.system:
             assert(false);
         }
 
-        if (recipe)
+        if (rdir.recipe)
         {
-            memRecipe(recipe);
-            return recipe;
+            memRecipe(rdir);
+            return rdir;
         }
 
         throw verOrRevException(packname, aver.ver, revision);
     }
 
-    private void memRecipe(Recipe recipe)
+    private void memRecipe(RecipeDir rdir)
     {
+        auto recipe = rdir.recipe;
         const id = depId(recipe.name, recipe.ver, recipe.revision);
-        _recipeMem[id] = recipe;
+        _recipeMem[id] = rdir;
     }
 
-    private Recipe packRecipeMem(string packname, const ref Semver ver, string revision)
+    private RecipeDir packRecipeMem(string packname, const ref Semver ver, string revision)
+    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
     {
         const id = depId(packname, ver, revision);
 
         if (auto p = id in _recipeMem)
             return *p;
 
-        return Recipe.init;
+        return RecipeDir.init;
     }
 
-    private Recipe packRecipeCache(string packname, const ref Semver ver, string revision)
+    private RecipeDir packRecipeCache(string packname, const ref Semver ver, string revision)
+    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
     {
         if (!revision)
             return findRecipeCache(packname, ver);
@@ -277,19 +280,22 @@ final class DependencyService : DepService
                 .revisionDir(revision);
 
         if (!dir)
-            return Recipe.init;
+            return RecipeDir.init;
 
-        const rdir = RecipeDir(dir.dir);
-        if (!rdir.hasRecipeFile)
+        auto rdir = RecipeDir.fromDir(dir.dir);
+        if (!rdir.recipe)
         {
-            logWarningH("Cached package revision %s has no recipe!", info(rdir.dir));
-            return Recipe.init;
+            logWarningH("Cached package revision %s has no recipe!", info(rdir.root));
+            return RecipeDir.init;
         }
 
-        return new DopRecipe(rdir.recipeFile, revision);
+        rdir.recipe.revision = revision;
+
+        return rdir;
     }
 
-    private Recipe findRecipeCache(string packname, const ref Semver ver)
+    private RecipeDir findRecipeCache(string packname, const ref Semver ver)
+    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
     {
         import std.file : dirEntries, exists, SpanMode;
         import std.path : baseName;
@@ -299,12 +305,12 @@ final class DependencyService : DepService
             .versionDir(ver);
 
         if (!vDir)
-            return Recipe.init;
+            return RecipeDir.init;
 
         foreach (revDir; vDir.revisionDirs())
         {
-            const recDir = RecipeDir(revDir.dir);
-            if (recDir.hasRecipeFile)
+            const recFile = checkDopRecipeFile(revDir.dir);
+            if (recFile)
             {
                 const revLock = revDir.lockFile;
                 if (!exists(revLock))
@@ -320,22 +326,24 @@ final class DependencyService : DepService
                 auto lock = File(revLock, "r");
                 lock.lock(LockType.read);
 
-                return new DopRecipe(recDir.recipeFile, revDir.revision);
+                auto recipe = new DopRecipe(recFile, revDir.revision);
+                return RecipeDir(recipe, revDir.dir);
             }
         }
 
-        return Recipe.init;
+        return RecipeDir.init;
     }
 
-    private Recipe packRecipeRegistry(string packname, const ref Semver ver, string revision = null)
+    private RecipeDir packRecipeRegistry(string packname, const ref Semver ver, string revision = null)
     in (_registry)
+    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
     {
         auto pack = packagePayload(packname);
         auto revDir = _cache.cacheRecipe(_registry, pack, ver.toString(), revision);
 
-        auto recDir = RecipeDir(revDir.dir);
-
-        return new DopRecipe(recDir.recipeFile, revDir.revision);
+        auto rdir = RecipeDir.enforceFromDir(revDir.dir);
+        rdir.recipe.revision = revDir.revision;
+        return rdir;
     }
 
     private string depId(string packname, Semver ver, string revision) @safe

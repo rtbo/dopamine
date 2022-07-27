@@ -3,7 +3,6 @@ module dopamine.client.source;
 import dopamine.client.utils;
 
 import dopamine.log;
-import dopamine.paths;
 import dopamine.recipe;
 import dopamine.util;
 import dopamine.state;
@@ -35,8 +34,8 @@ int sourceMain(string[] args)
         return 0;
     }
 
-    const dir = RecipeDir.enforced(".");
-    auto recipe = parseRecipe(dir);
+    auto rdir = RecipeDir.enforceFromDir(".");
+    auto recipe = rdir.recipe;
 
     if (recipe.inTreeSrc)
     {
@@ -44,8 +43,8 @@ int sourceMain(string[] args)
                 absolutePath(recipe.source())));
     }
 
-    auto lock = acquireRecipeLockFile(dir);
-    auto stateFile = dir.stateFile();
+    auto lock = acquireRecipeLockFile(rdir);
+    auto stateFile = rdir.stateFile();
 
     auto state = stateFile.read();
 

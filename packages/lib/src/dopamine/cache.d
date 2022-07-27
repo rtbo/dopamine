@@ -3,8 +3,8 @@ module dopamine.cache;
 import dopamine.api.v1;
 import dopamine.cache_dirs;
 import dopamine.log;
+import dopamine.recipe;
 import dopamine.registry;
-import dopamine.paths;
 import dopamine.util;
 
 import squiz_box;
@@ -58,7 +58,7 @@ class PackageCache
         if (revision)
         {
             const revDir = packageDir(pack.name).versionDir(ver).revisionDir(revision);
-            if (revDir && RecipeDir(revDir.dir).hasRecipeFile)
+            if (revDir && checkDopRecipeFile(revDir.dir))
             {
                 return revDir;
             }
@@ -142,7 +142,7 @@ class PackageCache
             .unboxTarXz()
             .each!(e => e.extractTo(revDir.dir));
 
-        RecipeDir.enforced(revDir.dir);
+        RecipeDir.enforceFromDir(revDir.dir);
 
         return revDir;
     }

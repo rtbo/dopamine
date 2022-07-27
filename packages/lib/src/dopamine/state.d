@@ -1,6 +1,5 @@
 module dopamine.state;
 
-import dopamine.paths;
 import dopamine.recipe;
 import dopamine.util;
 
@@ -12,9 +11,9 @@ struct PkgState
 
 alias PkgStateFile = JsonStateFile!PkgState;
 
-@property PkgStateFile stateFile(const RecipeDir rdir)
+@property PkgStateFile stateFile(RecipeDir rdir)
 {
-    return PkgStateFile(rdir._dopPath("state.json"));
+    return PkgStateFile(rdir.dopPath("state.json"));
 }
 
 

@@ -75,14 +75,14 @@ int profileMain(string[] args)
         return usage(0);
     }
 
-    auto dir = RecipeDir(".");
+    auto dir = RecipeDir.fromDir(".");
 
     // Recipe is needed only in a few situations,
     // so we load it only if available.
     Recipe recipe;
-    if (dir.hasRecipeFile)
+    if (dir.recipe)
     {
-        recipe = parseRecipe(dir);
+        recipe = dir.recipe;
     }
     else
     {

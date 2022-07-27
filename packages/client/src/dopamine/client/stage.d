@@ -24,37 +24,36 @@ import std.getopt;
 import std.path;
 import std.typecons;
 
-void stagePackage(Recipe recipe, Profile profile, string absDest, DepInfo[string] depInfos)
+void stagePackage(RecipeDir rdir, Profile profile, string absDest, DepInfo[string] depInfos)
 in(isAbsolute(absDest))
 {
-    const rdir = RecipeDir.enforced(dirName(recipe.filename));
-    if (!recipe.canStage)
+    if (!rdir.recipe.canStage)
     {
         const config = BuildConfig(profile);
-        const buildId = BuildId(recipe, config, absDest);
-        const bPaths = BuildPaths(rdir, buildId);
+        const buildId = BuildId(rdir.recipe, config, absDest);
+        const bPaths = rdir.buildPaths(buildId);
         acquireBuildLockFile(bPaths);
         string reason;
         if (!checkBuildReady(rdir, bPaths, reason))
         {
-            buildPackage(rdir, recipe, config, depInfos, absDest);
+            buildPackage(rdir, config, depInfos, absDest);
         }
         return;
     }
 
     auto config = BuildConfig(profile);
-    const buildId = BuildId(recipe, config, absDest);
-    const bPaths = BuildPaths(rdir, buildId);
+    const buildId = BuildId(rdir.recipe, config, absDest);
+    const bPaths = rdir.buildPaths(buildId);
     acquireBuildLockFile(bPaths);
 
     enforceBuildReady(rdir, bPaths);
 
     const cwd = getcwd();
-    chdir(rdir.dir);
+    chdir(rdir.root);
     scope(exit)
         chdir(cwd);
 
-    recipe.stage(bPaths.install, absDest);
+    rdir.recipe.stage(bPaths.install, absDest);
 }
 
 int stageMain(string[] args)
@@ -78,10 +77,10 @@ int stageMain(string[] args)
     const dest = args[1];
     const absDest = absolutePath(dest);
 
-    const rdir = RecipeDir.enforced(".");
+    auto rdir = RecipeDir.enforceFromDir(".");
     auto lock = acquireRecipeLockFile(rdir);
 
-    auto recipe = parseRecipe(rdir);
+    auto recipe = rdir.recipe;
 
     const srcDir = enforceSourceReady(rdir, recipe).absolutePath();
 
@@ -105,13 +104,13 @@ int stageMain(string[] args)
 
         foreach (dn; dag.traverseTopDownResolved())
         {
-            auto drec = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
-            auto dprof = profile.subset(drec.langs);
-            stagePackage(drec, dprof, absDest, depInfos);
+            auto drdir = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
+            auto dprof = profile.subset(drdir.recipe.langs);
+            stagePackage(drdir, dprof, absDest, depInfos);
         }
     }
 
-    stagePackage(recipe, profile.subset(recipe.langs), absDest, depInfos);
+    stagePackage(rdir, profile.subset(recipe.langs), absDest, depInfos);
 
     logInfo("Stage: %s - %s", success("OK"), info(dest));
 

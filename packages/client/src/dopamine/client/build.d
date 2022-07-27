@@ -39,22 +39,22 @@ void enforceBuildReady(RecipeDir rdir, BuildPaths bPaths)
 }
 
 string buildPackage(
-    const(RecipeDir) rdir,
-    Recipe recipe,
+    RecipeDir rdir,
     const(BuildConfig) config,
     DepInfo[string] depInfos,
     string stageDest = null)
+in (rdir.isAbsolute)
 {
     string reason;
-    const srcDir = enforce(checkSourceReady(rdir, recipe, reason));
+    const srcDir = enforce(checkSourceReady(rdir, rdir.recipe, reason));
 
-    const buildId = BuildId(recipe, config, stageDest);
-    const bPaths = BuildPaths(rdir, buildId);
+    const buildId = BuildId(rdir.recipe, config, stageDest);
+    const bPaths = rdir.buildPaths(buildId);
 
     const cwd = getcwd();
 
-    const root = absolutePath(rdir.dir, cwd);
-    const src = absolutePath(srcDir, rdir.dir);
+    const root = absolutePath(rdir.root, cwd);
+    const src = absolutePath(srcDir, rdir.root);
     const bdirs = BuildDirs(root, src, stageDest ? stageDest : bPaths.install);
 
     mkdirRecurse(bPaths.build);
@@ -63,7 +63,7 @@ string buildPackage(
         chdir(bPaths.build);
         scope (success)
             chdir(cwd);
-        recipe.build(bdirs, config, depInfos);
+        rdir.recipe.build(bdirs, config, depInfos);
     }
 
     BuildState state = bPaths.stateFile.read();
@@ -94,10 +94,10 @@ int buildMain(string[] args)
         return 0;
     }
 
-    const rdir = RecipeDir.enforced(".");
+    auto rdir = RecipeDir.enforceFromDir(".");
     auto lock = acquireRecipeLockFile(rdir);
 
-    auto recipe = parseRecipe(rdir);
+    auto recipe = rdir.recipe;
 
     enforce(recipe.isPackage, new ErrorLogException(
             "Light recipes can't be built by dopamine"
@@ -132,7 +132,7 @@ int buildMain(string[] args)
         write(environment["DOP_E2ETEST_BUILDID"], buildId.toString());
     }
 
-    const bPaths = BuildPaths(rdir, buildId);
+    const bPaths = rdir.buildPaths(buildId);
     auto bLock = acquireBuildLockFile(bPaths);
 
     auto state = bPaths.stateFile.read();
@@ -148,7 +148,7 @@ int buildMain(string[] args)
 
     destroy(lock);
 
-    const dir = buildPackage(rdir, recipe, config, depInfos);
+    const dir = buildPackage(rdir.asAbsolute(), config, depInfos);
 
     logInfo("%s: %s - %s", info("Build"), success("OK"), dir);
 

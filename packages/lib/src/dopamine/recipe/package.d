@@ -7,6 +7,7 @@ import dopamine.semver;
 import std.file;
 import std.path;
 
+public import dopamine.recipe.dir;
 public import dopamine.recipe.dop;
 
 /// A recipe dependency specification

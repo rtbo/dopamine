@@ -6,6 +6,7 @@ import dopamine.cache;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
+import dopamine.recipe;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.registry;
@@ -66,8 +67,8 @@ int resolveMain(string[] args)
         return 0;
     }
 
-    auto dir = RecipeDir.enforced(".");
-    auto recipe = parseRecipe(dir);
+    auto rdir = RecipeDir.enforceFromDir(".");
+    auto recipe = rdir.recipe;
 
     if (!recipe.hasDependencies)
     {
@@ -75,19 +76,19 @@ int resolveMain(string[] args)
         return 0;
     }
 
-    enforce(dir.hasProfileFile, new ErrorLogException(
+    enforce(rdir.hasProfileFile, new ErrorLogException(
             "A compilation profile is needed to resolve dependencies. You may try %s.",
             info("dop profile default")
         )
     );
-    auto profile = Profile.loadFromFile(dir.profileFile);
+    auto profile = Profile.loadFromFile(rdir.profileFile);
 
     // FIXME: add options to modify existing lock file
 
-    if (dir.hasDepsLockFile && !force)
+    if (rdir.hasDepsLockFile && !force)
     {
         throw new ErrorLogException(
-            "%s already exist, use %s to overwrite", dir.depsLockFile, info("--force")
+            "%s already exist, use %s to overwrite", rdir.depsLockFile, info("--force")
         );
     }
 
@@ -104,14 +105,14 @@ int resolveMain(string[] args)
 
     try
     {
-        auto dag = DepDAG.prepare(recipe, profile, service, heuristics);
+        auto dag = DepDAG.prepare(rdir, profile, service, heuristics);
         dag.resolve();
 
         auto json = dag.toJson();
 
         import std.file : write;
 
-        write(dir.depsLockFile, json.toPrettyString());
+        write(rdir.depsLockFile, json.toPrettyString());
 
         logInfo("%s: %s", info("Dependency resolution"), success("OK"));
         foreach (dep; dag.traverseTopDownResolved())
