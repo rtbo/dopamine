@@ -11,13 +11,12 @@ int revisionMain(string[] args)
 {
     auto rdir = RecipeDir.enforceFromDir(".");
 
-    auto recipe = rdir.recipe;
-
-    enforce(recipe.isPackage, new ErrorLogException(
+    enforce(rdir.recipe.isPackage, new ErrorLogException(
             "Light recipes do not have revision"
     ));
 
-    logInfo("%s: %s", info("Revision"), info(calcRecipeRevision(recipe)));
+    rdir.calcRecipeRevision();
+    logInfo("%s: %s", info("Revision"), info(rdir.recipe.revision));
 
     return 0;
 }

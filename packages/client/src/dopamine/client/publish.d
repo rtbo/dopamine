@@ -152,7 +152,7 @@ int publishMain(string[] args)
         );
     }
 
-    recipe.revision = calcRecipeRevision(recipe);
+    rdir.calcRecipeRevision();
     logInfo("%s: %s", info("Revision"), info(recipe.revision));
 
     enforceRecipeIdentity(recipe);
@@ -173,7 +173,7 @@ int publishMain(string[] args)
 
     auto dig = makeDigest!SHA256();
 
-    getAllRecipeFiles(recipe)
+    rdir.getAllRecipeFiles()
         .tee!(f => logInfo("    Including %s", info(f)))
         .map!(f => fileEntry(f, absRdir))
         .boxTarXz()
