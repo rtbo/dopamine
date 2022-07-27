@@ -32,6 +32,19 @@ struct BuildState
 
 alias BuildStateFile = JsonStateFile!BuildState;
 
+// RecipeDir is still WIP. More logic from the client could be moved here.
+
+/// RecipeDir is an abstraction over a recipe directory.
+/// It contain the recipe itself and manage the state:
+///  - the source code
+///  - the build
+///  - the activated profile
+///  - etc.
+///
+/// In a nutshell:
+///  - Recipe knows a to get the source and build the software and could do it anywhere.
+///  - RecipeDir is tied to a particular location (project dir or cache dir) and manage the recipe
+///    and package state at this locaiton.
 struct RecipeDir
 {
     Recipe _recipe;
