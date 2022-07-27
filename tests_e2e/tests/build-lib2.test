@@ -8,7 +8,7 @@ RECIPE=lib2
 CACHE=base
 REGISTRY=base
 
-EXPECT_MATCH=Recipe: OK - lib2-1.0.0
+EXPECT_MATCH=Recipe: OK - lib2/1.0.0
 EXPECT_DIR=.dop/$DOP_BID-build
 EXPECT_LIB=.dop/$DOP_BID-build/lib2
 EXPECT_LIB=.dop/$DOP_BID/lib/lib2

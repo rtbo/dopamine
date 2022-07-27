@@ -1,7 +1,6 @@
 module dopamine.client.utils;
 
 import dopamine.log;
-import dopamine.paths;
 import dopamine.recipe;
 
 import std.array;
@@ -18,7 +17,7 @@ enum Cvs
     hg,
 }
 
-Cvs getCvs(string dir=getcwd())
+Cvs getCvs(string dir = getcwd())
 {
     dir = buildNormalizedPath(absolutePath(dir));
 
@@ -56,18 +55,20 @@ in (cvs != Cvs.none)
     return res.output.strip().length == 0;
 }
 
-Recipe parseRecipe(RecipeDir dir)
+RecipeDir enforceRecipe(string root)
 {
-    import std.format : format;
+    auto rdir = enforce(
+        RecipeDir.fromDir(root), new ErrorLogException(
+            "%s is not a Dopamine package directory",
+            info(absolutePath(root)),
+    )
+    );
+    if (rdir.recipe.isLight)
+        logInfo("%s: %s", info("Recipe"), success("OK"));
+    else
+        logInfo("%s: %s - %s/%s", info("Recipe"), success("OK"), rdir.recipe.name, rdir.recipe.ver);
 
-    auto recipe = Recipe.parseFile(dir.recipeFile());
-
-    string namever;
-    if (!recipe.isLight)
-        namever = format(" - %s-%s", recipe.name, recipe.ver);
-
-    logInfo("%s: %s%s", info("Recipe"), success("OK"), namever);
-    return recipe;
+    return rdir;
 }
 
 private auto acquireSomeLockFile(string path, string desc)
@@ -85,7 +86,7 @@ private auto acquireSomeLockFile(string path, string desc)
 
 auto acquireRecipeLockFile(RecipeDir dir)
 {
-    return acquireSomeLockFile(dir.lockPath, "recipe");
+    return acquireSomeLockFile(dir.lockFile, "recipe");
 }
 
 auto acquireBuildLockFile(BuildPaths bPaths)

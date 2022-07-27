@@ -3,7 +3,7 @@ SKIP_NOINET
 CMD=$DOP source
 RECIPE=zlib
 
-EXPECT_MATCH=Recipe: OK - zlib-1.2.11
+EXPECT_MATCH=Recipe: OK - zlib/1.2.11
 EXPECT_MATCH=Source: OK - zlib-1.2.11
 EXPECT_FILE=zlib-1.2.11.tar.gz
 EXPECT_DIR=zlib-1.2.11

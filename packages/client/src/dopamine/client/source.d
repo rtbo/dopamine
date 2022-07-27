@@ -3,21 +3,19 @@ module dopamine.client.source;
 import dopamine.client.utils;
 
 import dopamine.log;
-import dopamine.paths;
 import dopamine.recipe;
 import dopamine.util;
-import dopamine.state;
 
 import std.getopt;
 import std.file;
 import std.path;
 
-string enforceSourceReady(RecipeDir dir, Recipe recipe)
+string enforceSourceReady(RecipeDir rdir)
 {
     import std.exception : enforce;
 
     string reason;
-    string srcDir = checkSourceReady(dir, recipe, reason);
+    string srcDir = rdir.checkSourceReady(reason);
     enforce(srcDir, new ErrorLogException("%s. Try to run %s", reason, info("dop source")));
     logInfo("%s: %s - %s", info("Source"), success("OK"), srcDir);
     return srcDir;
@@ -35,8 +33,8 @@ int sourceMain(string[] args)
         return 0;
     }
 
-    const dir = RecipeDir.enforced(".");
-    auto recipe = parseRecipe(dir);
+    auto rdir = enforceRecipe(".");
+    auto recipe = rdir.recipe;
 
     if (recipe.inTreeSrc)
     {
@@ -44,8 +42,8 @@ int sourceMain(string[] args)
                 absolutePath(recipe.source())));
     }
 
-    auto lock = acquireRecipeLockFile(dir);
-    auto stateFile = dir.stateFile();
+    auto lock = acquireRecipeLockFile(rdir);
+    auto stateFile = rdir.stateFile();
 
     auto state = stateFile.read();
 

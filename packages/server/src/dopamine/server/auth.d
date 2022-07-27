@@ -22,6 +22,7 @@ import std.base64;
 import std.datetime;
 import std.exception;
 import std.format;
+import std.net.curl;
 import std.string;
 import std.traits;
 
@@ -185,51 +186,68 @@ class AuthApi
         resp.writeJsonBody(json);
     }
 
-    UserResp authImpl(Provider provider)(Json req, ProviderConfig config)
+    UserResp authImpl(Provider provider)(Json req, ProviderConfig config) @trusted
     {
         const code = req.enforceProp!string("code");
         const redirectUri = req.enforceProp!string("redirectUri");
 
         TokenResp!provider token;
 
-        // dfmt off
-        requestHTTP(
-            config.tokenUrl,
-            (scope HTTPClientRequest req) {
-                req.method = HTTPMethod.POST;
-                req.headers["Accept"] = "application/json";
-                const tokReq = TokenReq(
-                    config.clientId,
-                    config.clientSecret,
-                    code,
-                    redirectUri,
-                    "authorization_code",
-                );
-                req.writeJsonBody(tokReq);
-            },
-            (scope HTTPClientResponse resp) {
-                if (resp.statusCode >= 400)
-                {
-                    import vibe.stream.operations;
-                    throw new StatusException(
-                        403,
-                        format!"Could not request token to %s: %s"(config.tokenUrl, resp.bodyReader().readAllUTF8()),
-                    );
-                }
-                auto json = resp.readJson();
-                string error;
-                if (json["error"].type != Json.Type.undefined)
-                    error = json["error"].get!string;
-                else if (json["error_description"].type != Json.Type.undefined)
-                    error = json["error_description"].get!string;
-                enforceStatus (!error, 403, error);
-                deserializeJson(token, json);
-                enforceStatus(token.tokenType.toLower() == "bearer", 500,
-                    "Unsupported token type: " ~ token.tokenType
-                );
-                enforceStatus(token.accessToken, 403, format!"Did not receive token from %s"(provider));
-            }
+        const tokReq = TokenReq(
+            config.clientId,
+            config.clientSecret,
+            code,
+            redirectUri,
+            "authorization_code",
         );
+        const tokJson = serializeToJsonString(tokReq);
+        logInfo("%s", config.tokenUrl);
+        logInfo("%s", tokJson);
+        auto http = HTTP();
+        http.addRequestHeader("Accept", "application/json");
+        http.addRequestHeader("Content-Type", "application/json");
+        const resp = post(config.tokenUrl, tokJson, http);
+        auto json = parseJsonString(resp.idup);
+        deserializeJson(token, json);
+
+        // dfmt off
+        // requestHTTP(
+        //     config.tokenUrl,
+        //     (scope HTTPClientRequest req) {
+        //         req.method = HTTPMethod.POST;
+        //         req.headers["Accept"] = "application/json";
+        //         const tokReq = TokenReq(
+        //             config.clientId,
+        //             config.clientSecret,
+        //             code,
+        //             redirectUri,
+        //             "authorization_code",
+        //         );
+        //         req.writeJsonBody(tokReq);
+        //     },
+        //     (scope HTTPClientResponse resp) {
+        //         if (resp.statusCode >= 400)
+        //         {
+        //             import vibe.stream.operations;
+        //             throw new StatusException(
+        //                 403,
+        //                 format!"Could not request token to %s: %s"(config.tokenUrl, resp.bodyReader().readAllUTF8()),
+        //             );
+        //         }
+        //         auto json = resp.readJson();
+        //         string error;
+        //         if (json["error"].type != Json.Type.undefined)
+        //             error = json["error"].get!string;
+        //         else if (json["error_description"].type != Json.Type.undefined)
+        //             error = json["error_description"].get!string;
+        //         enforceStatus (!error, 403, error);
+        //         deserializeJson(token, json);
+        //         enforceStatus(token.tokenType.toLower() == "bearer", 500,
+        //             "Unsupported token type: " ~ token.tokenType
+        //         );
+        //         enforceStatus(token.accessToken, 403, format!"Did not receive token from %s"(provider));
+        //     }
+        // );
         // dfmt on
 
         static if (provider == Provider.github)

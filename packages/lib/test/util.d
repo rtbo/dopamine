@@ -1,6 +1,5 @@
 module test.util;
 
-import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;

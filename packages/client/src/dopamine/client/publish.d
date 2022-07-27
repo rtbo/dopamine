@@ -10,7 +10,6 @@ import dopamine.dep.build;
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
-import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.registry;
@@ -47,7 +46,7 @@ void enforceRecipeIdentity(Recipe recipe)
     );
 
     enforce(
-        recipe.hasRevision,
+        recipe.revision.length,
         new ErrorLogException("Recipe needs a revision"),
     );
 }
@@ -55,13 +54,13 @@ void enforceRecipeIdentity(Recipe recipe)
 void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, string revision)
 {
     auto lock = acquireRecipeLockFile(rdir);
-    auto recipe = parseRecipe(rdir);
+    auto recipe = rdir.recipe;
 
     const cwd = getcwd();
     scope (exit)
         chdir(cwd);
 
-    chdir(rdir.dir);
+    chdir(rdir.root);
 
     recipe.revision = revision;
 
@@ -75,7 +74,7 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;
 
-        auto dag = DepDAG.prepare(recipe, profile, service, heuristics);
+        auto dag = DepDAG.prepare(rdir, profile, service, heuristics);
         dag.resolve();
         auto json = dag.toJson();
         write(rdir.depsLockFile, json.toPrettyString());
@@ -85,14 +84,14 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
 
     if (!recipe.inTreeSrc)
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
-    const srcDir = recipe.inTreeSrc ? rdir.dir : recipe.source();
+    const srcDir = recipe.inTreeSrc ? rdir.root : recipe.source();
 
     const config = BuildConfig(profile.subset(recipe.langs));
     const buildId = BuildId(recipe, config);
-    const bPaths = BuildPaths(rdir, buildId);
+    const bPaths = rdir.buildPaths(buildId);
 
-    const root = absolutePath(rdir.dir, cwd);
-    const src = absolutePath(srcDir, rdir.dir);
+    const root = absolutePath(rdir.root, cwd);
+    const src = absolutePath(srcDir, rdir.root);
     const bdirs = BuildDirs(root, src, bPaths.install);
 
     mkdirRecurse(bPaths.build);
@@ -122,16 +121,16 @@ int publishMain(string[] args)
         return 0;
     }
 
-    const rdir = RecipeDir.enforced(".");
+    auto rdir = enforceRecipe(".");
     auto lock = acquireRecipeLockFile(rdir);
-    auto recipe = parseRecipe(rdir);
+    auto recipe = rdir.recipe;
     enforce(recipe.isPackage, new ErrorLogException(
             "Light recipes can't be published"
     ));
 
-    auto profile = enforceProfileReady(rdir, recipe, profileName);
+    auto profile = enforceProfileReady(rdir, profileName);
 
-    const absRdir = buildNormalizedPath(absolutePath(rdir.dir));
+    const absRdir = buildNormalizedPath(absolutePath(rdir.root));
 
     const cvs = getCvs(absRdir);
     if (!skipCvsClean)
@@ -153,8 +152,7 @@ int publishMain(string[] args)
         );
     }
 
-    recipe.revision = calcRecipeRevision(recipe);
-    logInfo("%s: %s", info("Revision"), info(recipe.revision));
+    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     enforceRecipeIdentity(recipe);
 
@@ -174,7 +172,7 @@ int publishMain(string[] args)
 
     auto dig = makeDigest!SHA256();
 
-    getAllRecipeFiles(recipe)
+    rdir.getAllRecipeFiles()
         .tee!(f => logInfo("    Including %s", info(f)))
         .map!(f => fileEntry(f, absRdir))
         .boxTarXz()
@@ -192,7 +190,7 @@ int publishMain(string[] args)
 
     try
     {
-        enforceRecipeIntegrity(RecipeDir.enforced(extractPath), profile, cacheDir, recipe.revision);
+        enforceRecipeIntegrity(enforceRecipe(extractPath), profile, cacheDir, recipe.revision);
     }
     catch (ServerDownException ex)
     {

@@ -328,8 +328,9 @@ struct DepDAG
     ///               Default is [Yes.preFilter].
     ///
     /// Returns: a [DepDAG] ready for the next phase
-    static DepDAG prepare(Recipe recipe, Profile profile, DepService service,
+    static DepDAG prepare(RecipeDir rdir, Profile profile, DepService service,
         const Heuristics heuristics = Heuristics.init, Flag!"preFilter" preFilter = Yes.preFilter) @system
+        in(rdir.recipe, "RecipeDir must have a recipe loaded")
     {
         import std.algorithm : canFind, filter, sort, uniq;
         import std.array : array;
@@ -363,13 +364,13 @@ struct DepDAG
             return pack;
         }
 
-        auto root = new DagPack(recipe.name);
-        const aver = AvailVersion(recipe.ver, DepLocation.cache);
+        auto root = new DagPack(rdir.recipe.name);
+        const aver = AvailVersion(rdir.recipe.ver, DepLocation.cache);
         root.allVersions = [aver];
 
         DagNode[] visited;
 
-        void doPackVersion(Recipe rec, DagPack pack, AvailVersion aver)
+        void doPackVersion(RecipeDir rdir, DagPack pack, AvailVersion aver)
         {
             auto node = pack.getOrCreateNode(aver);
 
@@ -379,10 +380,10 @@ struct DepDAG
             }
             visited ~= node;
 
-            const(DepSpec)[] deps = rec.dependencies(profile);
+            const(DepSpec)[] deps = rdir.recipe.dependencies(profile);
             if (pack !is root)
             {
-                node.revision = rec.revision;
+                node.revision = rdir.recipe.revision;
             }
 
             foreach (dep; deps)
@@ -413,7 +414,7 @@ struct DepDAG
             }
         }
 
-        doPackVersion(recipe, root, aver);
+        doPackVersion(rdir, root, aver);
 
         return DepDAG(root, heuristics);
     }
@@ -452,7 +453,6 @@ struct DepDAG
         root.resolvedNode = root.nodes[0];
         resolveDeps(root);
     }
-
 
     // 2nd phase of filtering to eliminate all incompatible versions in the DAG.
     // Unless [preFilter] was disabled during the [prepare] phase, this algorithm will only handle
@@ -1458,13 +1458,13 @@ struct TestPackage
     TestPackVersion[] nodes;
     Lang[] langs;
 
-    Recipe recipe(string ver)
+    RecipeDir recipe(string ver)
     {
         foreach (n; nodes)
         {
             if (n.ver == ver)
             {
-                return Recipe.mock(name, Semver(ver), n.deps, langs, "1");
+                return RecipeDir(new MockRecipe(name, Semver(ver), "1",  n.deps, langs), ".");
             }
         }
         assert(false, "wrong version");
@@ -1662,7 +1662,7 @@ final class MockDepService : DepService
         return packs[packname].nodes.map!(pv => pv.aver).array;
     }
 
-    override Recipe packRecipe(string packname, const(AvailVersion) aver, string rev)
+    override RecipeDir packRecipe(string packname, const(AvailVersion) aver, string rev)
     {
         import std.algorithm : find;
         import std.range : front;
@@ -1670,6 +1670,6 @@ final class MockDepService : DepService
         TestPackage p = packs[packname];
         TestPackVersion pv = p.nodes.find!(pv => pv.aver == aver).front;
         const revision = rev ? rev : "1";
-        return Recipe.mock(packname, aver.ver, pv.deps, p.langs, revision);
+        return RecipeDir(new MockRecipe(packname, aver.ver, revision, pv.deps, p.langs), ".");
     }
 }
