@@ -15,6 +15,30 @@ import std.exception;
 import std.path;
 import std.string;
 
+/// Parse a dopamine recipe file.
+/// A revision can be specified directly if it is known
+/// e.g. loading from a cache directory.
+DopRecipe parseDopRecipe(string filename, string revision)
+{
+    auto L = luaL_newstate();
+    luaL_openlibs(L);
+    luaLoadDopLib(L);
+
+    assert(lua_gettop(L) == 0);
+
+    if (luaL_dofile(L, filename.toStringz))
+    {
+        throw new Exception("cannot parse package recipe file: " ~ luaPop!string(L));
+    }
+
+    enforce(
+        lua_gettop(L) == 0,
+        "Recipes should not return anything"
+    );
+
+    return new DopRecipe(L, revision);
+}
+
 /// The Dopamine Lua based recipe type.
 /// This recipe is supported by Lua script that define recipe info and functions
 /// through global Lua variables.
@@ -42,23 +66,9 @@ final class DopRecipe : Recipe
 
     lua_State* L;
 
-    this(string filename, string revision)
+    private this(lua_State* L, string revision)
     {
-        L = luaL_newstate();
-        luaL_openlibs(L);
-        luaLoadDopLib(L);
-
-        assert(lua_gettop(L) == 0);
-
-        if (luaL_dofile(L, filename.toStringz))
-        {
-            throw new Exception("cannot parse package recipe file: " ~ luaPop!string(L));
-        }
-
-        enforce(
-            lua_gettop(L) == 0,
-            "Recipes should not return anything"
-        );
+        this.L = L;
 
         // start with the build function because it determines whether
         // it is a light recipe or package recipe
@@ -193,7 +203,7 @@ final class DopRecipe : Recipe
                     if (!luaTo!bool(L, -1))
                         _stageFalse = true;
                     else
-                        logWarningH("%s: `stage = true` has no effect.", filename);
+                        logWarningH("%s/%s: `stage = true` has no effect.", name, ver);
                     break;
                 case LUA_TNIL:
                     break;

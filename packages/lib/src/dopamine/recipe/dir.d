@@ -49,7 +49,7 @@ struct RecipeDir
 
         const dopFile = checkDopRecipeFile(root);
         if (dopFile)
-            recipe = new DopRecipe(dopFile, null);
+            recipe = parseDopRecipe(dopFile, null);
 
         return RecipeDir(recipe, root);
     }
