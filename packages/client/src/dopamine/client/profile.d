@@ -18,7 +18,7 @@ import std.typecons;
 /// Enforce the loading of a profile.
 /// If name is null, will load the profile from the profile file in .dop/ directory
 /// If name is not null (can be e.g. "default"), will load the profile from the user profile directory
-Profile enforceProfileReady(RecipeDir dir, Recipe recipe, string name = null)
+Profile enforceProfileReady(RecipeDir dir, string name = null)
 {
     Profile profile;
     if (!name)
@@ -26,17 +26,17 @@ Profile enforceProfileReady(RecipeDir dir, Recipe recipe, string name = null)
         enforce(exists(dir.profileFile),
             new ErrorLogException(
                 "%s has no defined profile. Try to run %s.",
-                info(recipe.name), info("dop profile"),
+                info(dir.recipe.name), info("dop profile"),
         )
         );
         profile = Profile.loadFromFile(dir.profileFile);
     }
     else
     {
-        profile = enforce(checkProfileName(recipe, name),
+        profile = enforce(checkProfileName(dir.recipe, name),
             new ErrorLogException(
                 "%s has no defined profile. Try to run %s",
-                info(recipe.name), info("dop profile")
+                info(dir.recipe.name), info("dop profile")
         )
         );
     }
@@ -75,19 +75,13 @@ int profileMain(string[] args)
         return usage(0);
     }
 
-    auto dir = RecipeDir.fromDir(".");
 
     // Recipe is needed only in a few situations,
     // so we load it only if available.
-    Recipe recipe;
-    if (dir.recipe)
-    {
-        recipe = dir.recipe;
-    }
-    else
-    {
+    auto dir = RecipeDir.fromDir(".");
+    Recipe recipe = dir.recipe;
+    if (!recipe)
         logVerbose("no recipe available");
-    }
 
     if (opt.discover)
     {

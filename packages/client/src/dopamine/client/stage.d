@@ -15,7 +15,6 @@ import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.registry;
-import dopamine.state;
 import dopamine.util;
 
 import std.exception;
@@ -34,7 +33,7 @@ in(isAbsolute(absDest))
         const bPaths = rdir.buildPaths(buildId);
         acquireBuildLockFile(bPaths);
         string reason;
-        if (!checkBuildReady(rdir, bPaths, reason))
+        if (!rdir.checkBuildReady(buildId, reason))
         {
             buildPackage(rdir, config, depInfos, absDest);
         }
@@ -46,7 +45,7 @@ in(isAbsolute(absDest))
     const bPaths = rdir.buildPaths(buildId);
     acquireBuildLockFile(bPaths);
 
-    enforceBuildReady(rdir, bPaths);
+    enforceBuildReady(rdir, buildId);
 
     const cwd = getcwd();
     chdir(rdir.root);
@@ -82,9 +81,9 @@ int stageMain(string[] args)
 
     auto recipe = rdir.recipe;
 
-    const srcDir = enforceSourceReady(rdir, recipe).absolutePath();
+    const srcDir = enforceSourceReady(rdir).absolutePath();
 
-    auto profile = enforceProfileReady(rdir, recipe, profileName);
+    auto profile = enforceProfileReady(rdir, profileName);
 
     recipe.revision = calcRecipeRevision(recipe);
     logInfo("%s: %s", info("Revision"), info(recipe.revision));

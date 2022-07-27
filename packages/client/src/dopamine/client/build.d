@@ -14,7 +14,6 @@ import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
 import dopamine.registry;
-import dopamine.state;
 
 import std.datetime;
 import std.exception;
@@ -24,10 +23,10 @@ import std.path;
 import std.process;
 import std.typecons;
 
-void enforceBuildReady(RecipeDir rdir, BuildPaths bPaths)
+void enforceBuildReady(RecipeDir rdir, BuildId buildId)
 {
     string reason;
-    if (!checkBuildReady(rdir, bPaths, reason))
+    if (!rdir.checkBuildReady(buildId, reason))
     {
         throw new FormatLogException(
             "Build: %s - %s. Try to run %s.",
@@ -45,8 +44,7 @@ string buildPackage(
     string stageDest = null)
 in (rdir.isAbsolute)
 {
-    string reason;
-    const srcDir = enforce(checkSourceReady(rdir, rdir.recipe, reason));
+    const srcDir = enforceSourceReady(rdir);
 
     const buildId = BuildId(rdir.recipe, config, stageDest);
     const bPaths = rdir.buildPaths(buildId);
@@ -103,9 +101,9 @@ int buildMain(string[] args)
             "Light recipes can't be built by dopamine"
     ));
 
-    const srcDir = enforceSourceReady(rdir, recipe).absolutePath();
+    const srcDir = enforceSourceReady(rdir).absolutePath();
 
-    const profile = enforceProfileReady(rdir, recipe, profileName);
+    const profile = enforceProfileReady(rdir, profileName);
 
     recipe.revision = calcRecipeRevision(recipe);
     logInfo("%s: %s", info("Revision"), info(recipe.revision));

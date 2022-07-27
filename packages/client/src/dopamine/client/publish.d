@@ -128,7 +128,7 @@ int publishMain(string[] args)
             "Light recipes can't be published"
     ));
 
-    auto profile = enforceProfileReady(rdir, recipe, profileName);
+    auto profile = enforceProfileReady(rdir, profileName);
 
     const absRdir = buildNormalizedPath(absolutePath(rdir.root));
 

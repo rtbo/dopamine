@@ -6,7 +6,6 @@ import dopamine.dep.service;
 import dopamine.log;
 import dopamine.profile;
 import dopamine.recipe;
-import dopamine.state;
 
 import std.exception;
 import std.file;
@@ -73,7 +72,7 @@ in (!stageDest || isAbsolute(stageDest))
         mkdirRecurse(rdir.dopPath());
 
         string reason;
-        auto srcDir = checkSourceReady(rdir, rdir.recipe, reason);
+        auto srcDir = rdir.checkSourceReady(reason);
         if (!srcDir)
         {
             logInfo("%s: Fetching source code", info(packNameHead));
@@ -85,7 +84,7 @@ in (!stageDest || isAbsolute(stageDest))
 
         srcDir = absolutePath(srcDir, rdir.root);
 
-        if (!checkBuildReady(rdir, bPaths, reason))
+        if (!rdir.checkBuildReady(bid, reason))
         {
             logInfo("%s: Building", info(packNameHead));
             mkdirRecurse(bPaths.build);

@@ -2,11 +2,35 @@ module dopamine.recipe.dir;
 
 import dopamine.build_id;
 import dopamine.recipe;
+import dopamine.util;
 
 import std.datetime;
 import std.exception;
 import std.file;
 import std.path;
+
+/// Content of the main state for the package dir state
+struct PkgState
+{
+    string srcDir;
+}
+
+alias PkgStateFile = JsonStateFile!PkgState;
+
+/// Content of the state relative to a build configuration
+struct BuildState
+{
+    import std.datetime : SysTime;
+
+    SysTime buildTime;
+
+    bool opCast(T : bool)() const
+    {
+        return !!buildDir;
+    }
+}
+
+alias BuildStateFile = JsonStateFile!BuildState;
 
 struct RecipeDir
 {
@@ -116,10 +140,74 @@ struct RecipeDir
         return exists(p) && isFile(p);
     }
 
+    @property PkgStateFile stateFile()
+    {
+        return PkgStateFile(dopPath("state.json"));
+    }
+
+    string checkSourceReady(out string reason)
+    {
+        if (!recipe)
+        {
+            reason = "Not a package directory";
+            return null;
+        }
+
+        if (recipe.inTreeSrc)
+        {
+            const srcDir = recipe.source();
+            return srcDir;
+        }
+
+        auto sf = stateFile;
+        auto state = sf.read();
+        if (!sf || !state.srcDir)
+        {
+            reason = "Source directory is not ready";
+            return null;
+        }
+
+        if (sf.timeLastModified < recipeLastModified)
+        {
+            reason = "Source directory is not up-to-date";
+            return null;
+        }
+        return state.srcDir;
+    }
+
     BuildPaths buildPaths(BuildId buildId) const
     {
         const hash = buildId.uniqueId[0 .. 10];
         return BuildPaths(_root, dopPath(), hash);
+    }
+
+    bool checkBuildReady(BuildId buildId, out string reason)
+    {
+        const bPaths = buildPaths(buildId);
+
+        if (!exists(bPaths.install))
+        {
+            reason = "Install directory doesn't exist: " ~ bPaths.install;
+            return false;
+        }
+
+        if (!bPaths.state.exists())
+        {
+            reason = "Build config state file doesn't exist";
+            return false;
+        }
+
+        const rtime = recipeLastModified;
+        auto state = bPaths.stateFile.read();
+
+        if (rtime >= bPaths.stateFile.timeLastModified ||
+            rtime >= state.buildTime)
+        {
+            reason = "Build is not up-to-date";
+            return false;
+        }
+
+        return true;
     }
 }
 
@@ -142,6 +230,11 @@ struct BuildPaths
         _root = root;
         _dop = dop;
         _hash = hash;
+    }
+
+    bool opCast(T: bool)() const
+    {
+        return _root.length;
     }
 
     @property string root() const
@@ -177,5 +270,10 @@ struct BuildPaths
     @property string state() const
     {
         return buildPath(_dop, _hash ~ "-state.json");
+    }
+
+    @property BuildStateFile stateFile() const
+    {
+        return BuildStateFile(state);
     }
 }

@@ -5,18 +5,17 @@ import dopamine.client.utils;
 import dopamine.log;
 import dopamine.recipe;
 import dopamine.util;
-import dopamine.state;
 
 import std.getopt;
 import std.file;
 import std.path;
 
-string enforceSourceReady(RecipeDir dir, Recipe recipe)
+string enforceSourceReady(RecipeDir rdir)
 {
     import std.exception : enforce;
 
     string reason;
-    string srcDir = checkSourceReady(dir, recipe, reason);
+    string srcDir = rdir.checkSourceReady(reason);
     enforce(srcDir, new ErrorLogException("%s. Try to run %s", reason, info("dop source")));
     logInfo("%s: %s - %s", info("Source"), success("OK"), srcDir);
     return srcDir;
