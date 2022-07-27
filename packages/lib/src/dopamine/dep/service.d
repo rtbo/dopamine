@@ -6,7 +6,6 @@ import dopamine.log;
 import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
-import dopamine.recipe.dop;
 import dopamine.registry;
 import dopamine.semver;
 

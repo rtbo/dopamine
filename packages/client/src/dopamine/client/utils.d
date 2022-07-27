@@ -3,7 +3,6 @@ module dopamine.client.utils;
 import dopamine.log;
 import dopamine.paths;
 import dopamine.recipe;
-import dopamine.recipe.dop;
 
 import std.array;
 import std.exception;
