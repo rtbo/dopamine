@@ -121,7 +121,7 @@ int publishMain(string[] args)
         return 0;
     }
 
-    auto rdir = RecipeDir.enforceFromDir(".");
+    auto rdir = enforceRecipe(".");
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
     enforce(recipe.isPackage, new ErrorLogException(
@@ -152,8 +152,7 @@ int publishMain(string[] args)
         );
     }
 
-    rdir.calcRecipeRevision();
-    logInfo("%s: %s", info("Revision"), info(recipe.revision));
+    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     enforceRecipeIdentity(recipe);
 
@@ -191,7 +190,7 @@ int publishMain(string[] args)
 
     try
     {
-        enforceRecipeIntegrity(RecipeDir.enforceFromDir(extractPath), profile, cacheDir, recipe.revision);
+        enforceRecipeIntegrity(enforceRecipe(extractPath), profile, cacheDir, recipe.revision);
     }
     catch (ServerDownException ex)
     {

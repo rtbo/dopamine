@@ -76,7 +76,7 @@ int stageMain(string[] args)
     const dest = args[1];
     const absDest = absolutePath(dest);
 
-    auto rdir = RecipeDir.enforceFromDir(".");
+    auto rdir = enforceRecipe(".");
     auto lock = acquireRecipeLockFile(rdir);
 
     auto recipe = rdir.recipe;
@@ -85,8 +85,7 @@ int stageMain(string[] args)
 
     auto profile = enforceProfileReady(rdir, profileName);
 
-    rdir.calcRecipeRevision();
-    logInfo("%s: %s", info("Revision"), info(recipe.revision));
+    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     DepInfo[string] depInfos;
 

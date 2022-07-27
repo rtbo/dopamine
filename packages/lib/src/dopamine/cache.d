@@ -142,7 +142,10 @@ class PackageCache
             .unboxTarXz()
             .each!(e => e.extractTo(revDir.dir));
 
-        RecipeDir.enforceFromDir(revDir.dir);
+        enforce(
+            checkDopRecipeFile(revDir.dir),
+            "Could not find recipe file after extracting recipe archive at " ~ revDir.dir
+        );
 
         return revDir;
     }

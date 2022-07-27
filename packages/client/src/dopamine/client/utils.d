@@ -55,6 +55,16 @@ in (cvs != Cvs.none)
     return res.output.strip().length == 0;
 }
 
+RecipeDir enforceRecipe(string root)
+{
+    return enforce(
+        RecipeDir.fromDir(root), new ErrorLogException(
+            "%s is not a Dopamine package directory",
+            info(absolutePath(root)),
+        )
+    );
+}
+
 private auto acquireSomeLockFile(string path, string desc)
 {
     import dopamine.util : acquireLockFile, tryAcquireLockFile;

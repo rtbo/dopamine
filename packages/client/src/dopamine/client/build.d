@@ -92,7 +92,7 @@ int buildMain(string[] args)
         return 0;
     }
 
-    auto rdir = RecipeDir.enforceFromDir(".");
+    auto rdir = enforceRecipe(".");
     auto lock = acquireRecipeLockFile(rdir);
 
     auto recipe = rdir.recipe;
@@ -105,9 +105,7 @@ int buildMain(string[] args)
 
     const profile = enforceProfileReady(rdir, profileName);
 
-    rdir.calcRecipeRevision();
-
-    logInfo("%s: %s", info("Revision"), info(recipe.revision));
+    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)

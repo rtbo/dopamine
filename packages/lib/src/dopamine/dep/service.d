@@ -341,7 +341,8 @@ final class DependencyService : DepService
         auto pack = packagePayload(packname);
         auto revDir = _cache.cacheRecipe(_registry, pack, ver.toString(), revision);
 
-        auto rdir = RecipeDir.enforceFromDir(revDir.dir);
+        auto rdir = RecipeDir.fromDir(revDir.dir);
+        assert(rdir.recipe);
         rdir.recipe.revision = revDir.revision;
         return rdir;
     }

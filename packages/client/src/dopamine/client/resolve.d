@@ -67,7 +67,7 @@ int resolveMain(string[] args)
         return 0;
     }
 
-    auto rdir = RecipeDir.enforceFromDir(".");
+    auto rdir = enforceRecipe(".");
     auto recipe = rdir.recipe;
 
     if (!recipe.hasDependencies)

@@ -54,16 +54,9 @@ struct RecipeDir
         return RecipeDir(recipe, root);
     }
 
-    static RecipeDir enforceFromDir(string root)
+    bool opCast(T : bool)() const
     {
-        auto rdir = fromDir(root);
-        enforce(rdir.recipe, absolutePath(root) ~ " is not a Dopamine package directory");
-        return rdir;
-    }
-
-    @property inout(Recipe) recipe() inout
-    {
-        return _recipe;
+        return recipe !is null;
     }
 
     @property string root() const
@@ -138,6 +131,13 @@ struct RecipeDir
     {
         const p = lockFile;
         return exists(p) && isFile(p);
+    }
+
+    /// Get the recipe of this directory.
+    /// May be null if the directory has no recipe.
+    @property inout(Recipe) recipe() inout
+    {
+        return _recipe;
     }
 
     /// Get all the files included in the recipe, included the recipe file itself.
