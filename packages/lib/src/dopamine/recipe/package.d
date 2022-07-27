@@ -64,10 +64,6 @@ enum RecipeType
 
 interface Recipe
 {
-    // FIXME: remove filename and rootDir to manage it in RecipeDir
-    @property string filename() const @safe;
-    @property string rootDir() const @safe;
-
     /// The type of recipe
     @property RecipeType type() const @safe;
 

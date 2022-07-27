@@ -12,6 +12,7 @@ import dopamine.semver;
 import dopamine.c.lua;
 
 import std.exception;
+import std.path;
 import std.string;
 
 /// The Dopamine Lua based recipe type.
@@ -36,8 +37,6 @@ final class DopRecipe : Recipe
     bool _stageFalse;
 
     RecipeType _type;
-    string _rootDir;
-    string _filename;
     string _revision;
     string[] _allFiles;
 
@@ -60,14 +59,6 @@ final class DopRecipe : Recipe
             lua_gettop(L) == 0,
             "Recipes should not return anything"
         );
-
-        // FIXME: remove filename from recipe
-        import std.file;
-        import std.path;
-
-        const cwd = getcwd();
-        _filename = buildNormalizedPath(absolutePath(filename, cwd));
-        _rootDir = _filename.dirName();
 
         // start with the build function because it determines whether
         // it is a light recipe or package recipe
@@ -234,16 +225,6 @@ final class DopRecipe : Recipe
     ~this()
     {
         lua_close(L);
-    }
-
-    // FIXME: remove filename
-    @property string filename() const @safe
-    {
-        return _filename;
-    }
-    @property string rootDir() const @safe
-    {
-        return _rootDir;
     }
 
     @property RecipeType type() const @safe
