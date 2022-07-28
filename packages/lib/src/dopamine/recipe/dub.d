@@ -1,0 +1,533 @@
+module dopamine.recipe.dub;
+
+import dopamine.dep.spec;
+import dopamine.log;
+import dopamine.profile;
+import dopamine.recipe;
+import dopamine.semver;
+import dopamine.util;
+
+import dub.compilers.buildsettings;
+import dub.internal.vibecompat.inet.path;
+import dub.package_;
+import dub.platform;
+import dub.recipe.io;
+import dub.recipe.packagerecipe;
+
+import std.algorithm;
+import std.array;
+import std.exception;
+import std.file;
+import std.path;
+import std.range;
+import std.stdio : File;
+
+DubRecipe parseDubRecipe(string filename, string root, string ver = null)
+{
+    auto rec = readPackageRecipe(filename);
+    rec.version_ = ver ? ver : "0.0.0";
+    auto dubPack = new Package(rec, NativePath(absolutePath(root)));
+    return new DubRecipe(dubPack);
+}
+
+class DubRecipe : Recipe
+{
+    Package _dubPack;
+    string _defaultConfig;
+
+    private this(Package dubPack)
+    {
+        _dubPack = dubPack;
+        _defaultConfig = _dubPack.configurations[0];
+    }
+
+    @property RecipeType type() const @safe
+    {
+        return RecipeType.dub;
+    }
+
+    @property bool isLight() const @safe
+    {
+        return false;
+    }
+
+    @property string name() const @safe
+    {
+        return (() @trusted => _dubPack.name)();
+    }
+
+    @property Semver ver() const @safe
+    {
+        return (() @trusted => Semver(_dubPack.version_.toString()))();
+    }
+
+    @property string revision() const @safe
+    {
+        return null;
+    }
+
+    @property void revision(string rev) @safe
+    {
+        assert(false, "Dub recipes have no revision");
+    }
+
+    @property const(Lang)[] langs() const @safe
+    {
+        return [Lang.d];
+    }
+
+    @property bool hasDependencies() const @safe
+    {
+        return (() @trusted => _dubPack.rawRecipe.buildSettings.dependencies.length > 0)();
+    }
+
+    const(DepSpec)[] dependencies(const(Profile) profile) @system
+    {
+        auto dubDeps = _dubPack.getDependencies(_defaultConfig);
+        return dubDeps.byKeyValue().map!(dd => DepSpec(dd.key, VersionSpec(dd.value.versionSpec), true))
+            .array;
+    }
+
+    string[] include() @safe
+    {
+        assert(false, "Not implemented. Dub recipes are not meant to be published");
+    }
+
+    @property bool inTreeSrc() const @safe
+    {
+        return true;
+    }
+
+    string source() @system
+    {
+        return ".";
+    }
+
+    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    {
+        const platform = config.profile.toDubPlatform();
+        auto dubBs = _dubPack.getBuildSettings(platform, _defaultConfig);
+
+        enforce(
+            dubBs.targetType == TargetType.staticLibrary || dubBs.targetType == TargetType.library,
+            new ErrorLogException(
+                "Only Dub static libraries are supported. %s is a %s",
+                name, dubBs.targetType
+        ));
+
+        DubTarget target;
+        target.type = dubBs.targetType;
+        target.name = libraryFileName(name);
+        target.sources = dubBs.sourceFiles.map!(s => TargetSource.from(s, dirs)).array;
+        target.importPaths = dubBs.importPaths;
+        target.stringImportPaths = dubBs.stringImportPaths;
+        target.versions = dubBs.versions;
+        target.debugVersions = dubBs.debugVersions;
+        target.dflags = dubBs.dflags;
+        target.libs = dubBs.libs;
+        target.lflags = dubBs.lflags;
+
+        string[string] env;
+        config.profile.collectEnvironment(env);
+
+        target.writeNinja(buildPath(dirs.build, "build.ninja"), dirs, config);
+        runCommand(["ninja"], dirs.build, LogLevel.verbose, env);
+        //runCommand(["ninja", "install"], BuildDirs.build, LogLevel.verbose, env);
+    }
+
+    @property bool canStage() const @safe
+    {
+        return true;
+    }
+
+    void stage(string src, string dest) @system
+    {
+        import dopamine.util;
+
+        return installRecurse(src, dest);
+    }
+}
+
+private:
+
+BuildPlatform toDubPlatform(const(Profile) profile)
+{
+    BuildPlatform res;
+
+    final switch (profile.hostInfo.os)
+    {
+    case OS.linux:
+        res.platform = ["linux"];
+        break;
+    case OS.windows:
+        res.platform = ["windows"];
+        break;
+    }
+    final switch (profile.hostInfo.arch)
+    {
+    case Arch.x86:
+        res.platform = ["x86"];
+        break;
+    case Arch.x86_64:
+        res.platform = ["x86_64"];
+        break;
+    }
+    const dc = profile.compilerFor(Lang.d);
+    res.compiler = baseName(dc.path).stripExtension;
+    res.compilerBinary = dc.path;
+    res.compilerVersion = dc.ver;
+
+    return res;
+}
+
+interface CompilerFlags
+{
+    string[] buildType(BuildType bt);
+
+    string compile();
+    string output(string filename);
+    string makedeps(string filename);
+    string importPath(string path);
+    string stringImportPath(string path);
+    string version_(string ident);
+    string debugVersion(string ident);
+
+    string lib(string name);
+    string staticLib();
+
+    static CompilerFlags fromCompiler(const(Compiler) dc)
+    {
+        if (dc.name == "DMD")
+        {
+            return new DmdCompilerFlags;
+        }
+        if (dc.name == "LDC")
+        {
+            return new LdcCompilerFlags;
+        }
+        throw new Exception("Unknown Dub compiler: " ~ dc.name);
+    }
+}
+
+class DmdCompilerFlags : CompilerFlags
+{
+    string[] buildType(BuildType bt)
+    {
+        final switch (bt)
+        {
+        case BuildType.debug_:
+            return ["-debug", "-g"];
+        case BuildType.release:
+            return ["-release"];
+        }
+    }
+
+    string compile()
+    {
+        return "-c";
+    }
+
+    string makedeps(string filename)
+    {
+        return "-makedeps=" ~ filename;
+    }
+
+    string output(string filename)
+    {
+        return "-of=" ~ filename;
+    }
+
+    string importPath(string path)
+    {
+        return "-I" ~ path;
+    }
+
+    string stringImportPath(string path)
+    {
+        return "-J" ~ path;
+    }
+
+    string version_(string ident)
+    {
+        return "-version=" ~ ident;
+    }
+
+    string debugVersion(string ident)
+    {
+        return "-debug=" ~ ident;
+    }
+
+    string lib(string name)
+    {
+        return "-L-l" ~ name;
+    }
+
+    string staticLib()
+    {
+        return "-lib";
+    }
+}
+
+class LdcCompilerFlags : CompilerFlags
+{
+    string[] buildType(BuildType bt)
+    {
+        final switch (bt)
+        {
+        case BuildType.debug_:
+            return ["-d-debug", "-g"];
+        case BuildType.release:
+            return ["-release"];
+        }
+    }
+
+    string compile()
+    {
+        return "-c";
+    }
+
+    string makedeps(string filename)
+    {
+        return "-makedeps=" ~ filename;
+    }
+
+    string output(string filename)
+    {
+        return "-of" ~ filename;
+    }
+
+    string importPath(string path)
+    {
+        return "-I" ~ path;
+    }
+
+    string stringImportPath(string path)
+    {
+        return "-J" ~ path;
+    }
+
+    string version_(string ident)
+    {
+        return "-version=" ~ ident;
+    }
+
+    string debugVersion(string ident)
+    {
+        return "-debug=" ~ ident;
+    }
+
+    string lib(string name)
+    {
+        return "-L-l" ~ name;
+    }
+
+    string staticLib()
+    {
+        return "-lib";
+    }
+}
+
+string libraryFileName(string libname)
+{
+    return "lib" ~ libname ~ ".a";
+}
+
+struct TargetSource
+{
+    string source;
+    string object;
+
+    static TargetSource from(string source, BuildDirs dirs)
+    {
+        if (!isAbsolute(source))
+            source = absolutePath(source, dirs.root);
+
+        return TargetSource(
+            relativePath(source, dirs.build),
+            relativePath(source, dirs.root) ~ ".o",
+        );
+    }
+}
+
+struct DubTarget
+{
+    BuildSettings bs;
+
+    TargetType type;
+    string name;
+
+    TargetSource[] sources;
+    string[] importPaths;
+    string[] stringImportPaths;
+    string[] versions;
+    string[] debugVersions;
+    string[] dflags;
+
+    string[] libs;
+    string[] lflags;
+
+    void writeNinja(string filename, BuildDirs dirs, BuildConfig config)
+    {
+        auto nb = toNinja(dirs, config);
+        nb.writeToFile(filename);
+    }
+
+    NinjaBuild toNinja(BuildDirs dirs, BuildConfig config)
+    {
+        auto dc = config.profile.compilerFor(Lang.d);
+        auto dcf = CompilerFlags.fromCompiler(dc);
+
+        NinjaRule dcRule;
+        dcRule.name = "compile_D";
+        dcRule.command = [
+            ninjaQuote(dc.path), "$ARGS", dcf.makedeps("$DEPFILE"), dcf.compile(),
+            dcf.output("$out"), "$in"
+        ];
+        dcRule.depfile = "$DEPFILE_UNQUOTED";
+        dcRule.deps = "gcc";
+        dcRule.description = "Compiling D object $in";
+
+        NinjaRule ldRule;
+        ldRule.name = "link_D";
+        ldRule.command = [
+            ninjaQuote(dc.path), "$ARGS", dcf.output("$out"), "$in", "$LINK_ARGS"
+        ];
+        ldRule.description = "Linking $in";
+
+        string[] compileArgs;
+        compileArgs = dcf.buildType(config.profile.buildType);
+        compileArgs ~= importPaths.map!(f => dcf.importPath(f)).array;
+        compileArgs ~= stringImportPaths.map!(f => dcf.stringImportPath(f)).array;
+        compileArgs ~= versions.map!(f => dcf.version_(f)).array;
+        compileArgs ~= debugVersions.map!(f => dcf.debugVersion(f)).array;
+        compileArgs ~= dflags;
+
+
+        NinjaTarget[] targets;
+
+        NinjaTarget ldTarget;
+        ldTarget.target = name;
+        ldTarget.rule = ldRule.name;
+        ldTarget.variables["ARGS"] = ninjaQuote(
+            dcf.buildType(config.profile.buildType)
+                .chain(libs.map!(f => dcf.lib(f)))
+                .array
+            );
+         ldTarget.variables["LINK_ARGS"] = ninjaQuote(
+            only(dcf.staticLib())
+                .chain(lflags)
+                .array
+            );
+
+        foreach (src; sources)
+        {
+            const depfile = src.object ~ ".d";
+
+            NinjaTarget target;
+            target.target = ninjaEscape(src.object);
+            target.rule = dcRule.name;
+            target.inputs = [ninjaEscape(src.source)];
+
+            target.variables["ARGS"] = ninjaQuote(compileArgs);
+            target.variables["DEPFILE"] = ninjaQuote(depfile);
+            target.variables["DEPFILE_UNQUOTED"] = depfile;
+            targets ~= target;
+
+            ldTarget.inputs ~= src.object;
+        }
+
+        targets ~= ldTarget;
+
+        return NinjaBuild("1.8.2", [dcRule, ldRule], targets);
+    }
+}
+
+string ninjaQuote(string arg)
+{
+    if (arg.canFind(" "))
+        return `"` ~ arg ~ `"`;
+    return arg;
+}
+
+string ninjaQuote(const(string)[] args)
+{
+    return args.map!(a => ninjaEscape(a)).array.join(" ");
+}
+
+string ninjaEscape(string arg)
+{
+    return arg
+        .replace(" ", "$ ")
+        .replace(":", "$:");
+}
+
+string ninjaEscape(const(string)[] args)
+{
+    return args.map!(a => ninjaEscape(a)).array.join(" ");
+}
+
+struct NinjaRule
+{
+    string name;
+    string[] command;
+    string deps;
+    string depfile;
+    string description;
+
+    void write(File file) const
+    {
+        file.writeln();
+        file.writefln!"rule %s"(name);
+        file.writefln!"  command = %s"(command.join(" "));
+        if (depfile)
+            file.writefln!"  depfile = %s"(depfile);
+        if (deps)
+            file.writefln!"  deps = %s"(deps);
+        file.writefln!"  description = %s"(description);
+    }
+}
+
+struct NinjaTarget
+{
+    string target;
+    string rule;
+    string[] inputs;
+    string[] implicitDeps;
+    string[] orderOnlyDeps;
+    string[string] variables;
+
+    void write(File file) const
+    {
+        file.writeln();
+        file.writef!"build %s: %s %s"(ninjaEscape(target), rule, ninjaEscape(inputs));
+        if (implicitDeps)
+            file.writef!" | %s"(ninjaEscape(implicitDeps));
+        if (orderOnlyDeps)
+            file.writef!" || %s"(ninjaEscape(orderOnlyDeps));
+        file.writeln();
+        string[] vars = variables.keys;
+        sort(vars);
+        foreach (v; vars)
+        {
+            file.writefln!"  %s = %s"(v, variables[v]);
+        }
+    }
+}
+
+struct NinjaBuild
+{
+    string requiredVersion;
+    NinjaRule[] rules;
+    NinjaTarget[] targets;
+
+    void writeToFile(string filename)
+    {
+        import std.stdio : File;
+
+        auto file = File(filename, "w");
+
+        file.writefln!"ninja_required_version = %s"(requiredVersion);
+        rules.each!(r => r.write(file));
+        targets.each!(r => r.write(file));
+    }
+}

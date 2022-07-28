@@ -2,6 +2,7 @@ module dopamine.recipe.dir;
 
 import dopamine.build_id;
 import dopamine.recipe;
+import dopamine.recipe.dub;
 import dopamine.util;
 
 import std.datetime;
@@ -278,6 +279,20 @@ string checkDopRecipeFile(string dir)
     const dopFile = buildPath(dir, "dopamine.lua");
     if (exists(dopFile) && isFile(dopFile))
         return dopFile;
+    return null;
+}
+
+string checkDubRecipeFile(string dir)
+{
+    string[3] recipeFileNames = ["dub.json", "dub.sdl", "package.json"];
+
+    foreach (fn; recipeFileNames)
+    {
+        const dubFile = buildPath(dir, fn);
+        if (exists(dubFile) && isFile(dubFile))
+            return dubFile;
+    }
+
     return null;
 }
 

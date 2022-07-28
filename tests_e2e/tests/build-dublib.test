@@ -1,0 +1,10 @@
+SKIP_NOPROG=meson
+
+PRE_CMD=$DOP profile --discover
+PRE_CMD=$DOP source
+CMD=$DOP build
+RECIPE=dublib
+
+EXPECT_MATCH=Recipe: OK - dublib \[dub\]
+EXPECT_DIR=.dop/$DOP_BID-build
+EXPECT_LIB=.dop/$DOP_BID-build/dublib
