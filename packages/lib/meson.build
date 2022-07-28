@@ -32,7 +32,7 @@ dop_src = files([
 lua_d_versions = ['LUA_53', 'BindBC_Static']
 
 dop_inc = include_directories('src')
-dop_deps = [ lua_dep, dop_common_dep, jwt_dep, squiz_dep, vibed_data_dep ]
+dop_deps = [ lua_dep, dop_common_dep, jwt_dep, squiz_dep, vibed_data_dep, dub_dep ]
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_conf, dop_src,
