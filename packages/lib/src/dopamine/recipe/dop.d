@@ -431,9 +431,10 @@ DepSpec[] readDependencies(lua_State* L) @trusted
             break;
         case LUA_TTABLE:
             {
-                const aa = luaReadStringDict(L, -1);
-                dep.spec = VersionSpec(enforce(aa["version"],
+                const ver = luaGetTable!string(L, -1, "version", null);
+                dep.spec = VersionSpec(enforce(ver,
                         format("'version' not specified for '%s' dependency", dep.name)));
+                dep.dub = luaGetTable!bool(L, -1, "dub", false);
                 break;
             }
         default:

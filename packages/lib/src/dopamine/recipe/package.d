@@ -15,6 +15,7 @@ struct DepSpec
 {
     string name;
     VersionSpec spec;
+    bool dub;
 }
 
 /// Directories passed to the `build` recipe function
