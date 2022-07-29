@@ -88,11 +88,10 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
 
     const config = BuildConfig(profile.subset(recipe.langs));
     const buildId = BuildId(recipe, config);
-    const bPaths = rdir.buildPaths(buildId);
+    const absRdir = rdir.asAbsolute(cwd);
+    const bPaths = absRdir.buildPaths(buildId);
 
-    const root = absolutePath(rdir.root, cwd);
-    const src = absolutePath(srcDir, rdir.root);
-    const bdirs = BuildDirs(root, src, bPaths.install);
+    const bdirs = BuildDirs(absRdir.root, absRdir.path(srcDir), bPaths.build, bPaths.install);
 
     mkdirRecurse(bPaths.build);
 
@@ -121,7 +120,7 @@ int publishMain(string[] args)
         return 0;
     }
 
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe(".").asAbsolute();
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
     enforce(recipe.isPackage, new ErrorLogException(
@@ -130,9 +129,7 @@ int publishMain(string[] args)
 
     auto profile = enforceProfileReady(rdir, profileName);
 
-    const absRdir = buildNormalizedPath(absolutePath(rdir.root));
-
-    const cvs = getCvs(absRdir);
+    const cvs = getCvs(rdir.root);
     if (!skipCvsClean)
     {
         enforce(
@@ -143,7 +140,7 @@ int publishMain(string[] args)
         ),
         );
         enforce(
-            isRepoClean(cvs, absRdir),
+            isRepoClean(cvs, rdir.root),
             new ErrorLogException(
                 "%s repo isn't clean. By default, %s is only possible with clean repo.\n" ~
                 "Run with %s to skip this check.", info(cvs), info("publish"), info(
@@ -174,7 +171,7 @@ int publishMain(string[] args)
 
     rdir.getAllRecipeFiles()
         .tee!(f => logInfo("    Including %s", info(f)))
-        .map!(f => fileEntry(f, absRdir))
+        .map!(f => fileEntry(f, rdir.root))
         .boxTarXz()
         .tee(&dig)
         .writeBinaryFile(archivePath);

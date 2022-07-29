@@ -90,7 +90,7 @@ in (!stageDest || isAbsolute(stageDest))
             mkdirRecurse(bPaths.build);
 
             auto depInfos = collectNodeDepInfos(depNode);
-            const bd = BuildDirs(rdir.root, srcDir, stageDest ? stageDest : bPaths.install);
+            const bd = BuildDirs(rdir.root, srcDir, bPaths.build, stageDest ? stageDest : bPaths.install);
             auto state = bPaths.stateFile.read();
 
             chdir(bPaths.build);

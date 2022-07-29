@@ -52,8 +52,8 @@ in (rdir.isAbsolute)
     const cwd = getcwd();
 
     const root = absolutePath(rdir.root, cwd);
-    const src = absolutePath(srcDir, rdir.root);
-    const bdirs = BuildDirs(root, src, stageDest ? stageDest : bPaths.install);
+    const src = rdir.path(srcDir);
+    const bdirs = BuildDirs(root, src, bPaths.build, stageDest ? stageDest : bPaths.install);
 
     mkdirRecurse(bPaths.build);
 

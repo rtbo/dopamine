@@ -23,12 +23,14 @@ struct BuildDirs
 {
     string root;
     string src;
+    string build;
     string install;
 
     invariant
     {
         assert(root.isAbsolute);
         assert(src.isAbsolute);
+        assert(build.isAbsolute);
         assert(install.isAbsolute);
     }
 }

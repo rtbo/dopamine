@@ -453,6 +453,7 @@ void pushBuildDirs(lua_State* L, BuildDirs dirs) @trusted
     const ind = lua_gettop(L);
     luaSetTable(L, ind, "root", dirs.root);
     luaSetTable(L, ind, "src", dirs.src);
+    luaSetTable(L, ind, "build", dirs.build);
     luaSetTable(L, ind, "install", dirs.install);
 }
 
