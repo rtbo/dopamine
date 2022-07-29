@@ -84,7 +84,7 @@ struct RecipeDir
 
     RecipeDir asAbsolute(lazy string base = getcwd())
     {
-        return RecipeDir(recipe, absolutePath(_root, base));
+        return RecipeDir(recipe, buildNormalizedPath(absolutePath(_root, base)));
     }
 
     string path(Args...)(Args args) const
@@ -219,6 +219,7 @@ struct RecipeDir
     }
 
     string checkSourceReady(out string reason)
+    out(dir; !dir || !std.path.isAbsolute(dir))
     {
         if (!recipe)
         {
@@ -251,7 +252,7 @@ struct RecipeDir
     BuildPaths buildPaths(BuildId buildId) const
     {
         const hash = buildId.uniqueId[0 .. 10];
-        return BuildPaths(_root, dopPath(), hash);
+        return BuildPaths(_root, hash);
     }
 
     bool checkBuildReady(BuildId buildId, out string reason)
@@ -295,19 +296,27 @@ string checkDopRecipeFile(string dir)
 struct BuildPaths
 {
     private string _root;
-    private string _dop;
     private string _hash;
 
-    private this(string root, string dop, string hash)
+    private this(string root, string hash)
     {
         _root = root;
-        _dop = dop;
         _hash = hash;
     }
 
     bool opCast(T : bool)() const
     {
         return _root.length;
+    }
+
+    @property bool isAbsolute() const
+    {
+        return std.path.isAbsolute(_root);
+    }
+
+    BuildPaths asAbsolute(lazy string base = getcwd()) const
+    {
+        return BuildPaths(buildNormalizedPath(_root.absolutePath(base)), _hash);
     }
 
     @property string root() const
@@ -317,7 +326,7 @@ struct BuildPaths
 
     @property string dop() const
     {
-        return _dop;
+        return buildPath(_root, ".dop");
     }
 
     @property string hash() const
@@ -327,22 +336,22 @@ struct BuildPaths
 
     @property string build() const
     {
-        return buildPath(_dop, _hash ~ "-build");
+        return buildPath(_root, ".dop", _hash ~ "-build");
     }
 
     @property string install() const
     {
-        return buildPath(_dop, _hash);
+        return buildPath(_root, ".dop", _hash);
     }
 
     @property string lock() const
     {
-        return buildPath(_dop, _hash ~ ".lock");
+        return buildPath(_root, ".dop", _hash ~ ".lock");
     }
 
     @property string state() const
     {
-        return buildPath(_dop, _hash ~ "-state.json");
+        return buildPath(_root, ".dop", _hash ~ "-state.json");
     }
 
     @property BuildStateFile stateFile() const
