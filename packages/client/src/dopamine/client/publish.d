@@ -123,7 +123,7 @@ int publishMain(string[] args)
     auto rdir = enforceRecipe(".").asAbsolute();
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
-    enforce(recipe.isPackage, new ErrorLogException(
+    enforce(!recipe.isLight, new ErrorLogException(
             "Light recipes can't be published"
     ));
 

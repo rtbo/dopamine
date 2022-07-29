@@ -97,7 +97,7 @@ int buildMain(string[] args)
 
     auto recipe = rdir.recipe;
 
-    enforce(recipe.isPackage, new ErrorLogException(
+    enforce(!recipe.isLight, new ErrorLogException(
             "Light recipes can't be built by dopamine"
     ));
 

@@ -56,13 +56,10 @@ struct DepInfo
 
 enum RecipeType
 {
-    /// Package recipe is a full package
-    /// that has source code and build process.
-    pack,
-    /// Light recipe is a recipe that only defines dependencies.
-    /// It is meant for dopamine to stage all necessary dependencies
-    /// an application needs, without the need to publish a build recipe.
-    light,
+    /// A genuine dopamine recipe
+    dop,
+    /// A recipe for Dub
+    dub,
 }
 
 interface Recipe
@@ -71,16 +68,20 @@ interface Recipe
     @property RecipeType type() const @safe;
 
     /// Helper for the recipe type
-    final @property bool isPackage() const @safe
+    final @property bool isDop() const @safe
     {
-        return type == RecipeType.pack;
+        return type == RecipeType.dop;
     }
 
     /// ditto
-    final @property bool isLight() const @safe
+    final @property bool isDub() const @safe
     {
-        return type == RecipeType.light;
+        return type == RecipeType.dub;
     }
+
+    /// Whether this is a light recipe,
+    /// that is a recipe that only specifies dependencies to be staged
+    @property bool isLight() const @safe;
 
     /// The package name
     @property string name() const @safe;
@@ -122,14 +123,14 @@ interface Recipe
     /// The current directory (as returned by `getcwd`) must be the
     /// recipe root directory
     string source() @system
-    in (isPackage, "Light recipes have no defined source");
+    in (!isLight, "Light recipes have no defined source");
 
     /// Build and install the package to the given directory and
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
     void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
-    in (isPackage, "Light recipes do not build");
+    in (!isLight, "Light recipes do not build");
 
     /// Whether this recipe can stage an installation to another
     /// directory without rebuilding from source.
@@ -139,7 +140,7 @@ interface Recipe
     /// The current directory (as returned by `getcwd`) must be the
     /// recipe root directory.
     void stage(string src, string dest) @system
-    in (isPackage, "Light recipes do not stage")
+    in (!isLight, "Light recipes do not stage")
     in (canStage, "Recipe can't stage");
 }
 
@@ -174,7 +175,12 @@ version (unittest)  : final class MockRecipe : Recipe
     /// The type of recipe
     @property RecipeType type() const @safe
     {
-        return RecipeType.pack;
+        return RecipeType.dop;
+    }
+
+    @property bool isLight() const @safe
+    {
+        return false;
     }
 
     /// The package name
@@ -245,7 +251,6 @@ version (unittest)  : final class MockRecipe : Recipe
     /// The current directory (as returned by `getcwd`) must be the
     /// recipe root directory
     string source() @system
-    in (isPackage, "Light recipes have no defined source")
     {
         return ".";
     }
@@ -255,7 +260,6 @@ version (unittest)  : final class MockRecipe : Recipe
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
     void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
-    in (isPackage, "Light recipes do not build")
     {
     }
 
@@ -270,8 +274,6 @@ version (unittest)  : final class MockRecipe : Recipe
     /// The current directory (as returned by `getcwd`) must be the
     /// recipe root directory.
     void stage(string src, string dest) @system
-    in (isPackage, "Light recipes do not stage")
-    in (canStage, "Recipe can't stage")
     {
         import dopamine.util;
 

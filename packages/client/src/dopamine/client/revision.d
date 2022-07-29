@@ -11,7 +11,7 @@ int revisionMain(string[] args)
 {
     auto rdir = enforceRecipe(".");
 
-    enforce(rdir.recipe.isPackage, new ErrorLogException(
+    enforce(!rdir.recipe.isLight, new ErrorLogException(
             "Light recipes do not have revision"
     ));
 

@@ -60,7 +60,7 @@ final class DopRecipe : Recipe
     string _inTreeSrc;
     bool _stageFalse;
 
-    RecipeType _type;
+    bool _isLight;
     string _revision;
     string[] _allFiles;
 
@@ -81,10 +81,9 @@ final class DopRecipe : Recipe
             {
             case LUA_TFUNCTION:
                 _funcs ~= "build";
-                _type = RecipeType.pack;
                 break;
             case LUA_TNIL:
-                _type = RecipeType.light;
+                _isLight = true;
                 break;
             default:
                 throw new Exception("Invalid 'build' field: expected a function");
@@ -113,7 +112,7 @@ final class DopRecipe : Recipe
                 break;
             case LUA_TNIL:
                 enforce(
-                    _type == RecipeType.pack,
+                    !_isLight,
                     "Light recipe without dependency"
                 );
                 break;
@@ -122,7 +121,7 @@ final class DopRecipe : Recipe
             }
         }
 
-        if (_type == RecipeType.pack)
+        if (!_isLight)
         {
             _name = enforce(
                 luaGetGlobal!string(L, "name", null),
@@ -239,7 +238,12 @@ final class DopRecipe : Recipe
 
     @property RecipeType type() const @safe
     {
-        return _type;
+        return RecipeType.dop;
+    }
+
+    @property bool isLight() const @safe
+    {
+        return _isLight;
     }
 
     @property string name() const @safe
@@ -329,7 +333,6 @@ final class DopRecipe : Recipe
     }
 
     string source() @system
-    in (isPackage, "Light recipes do not have source")
     {
         if (_inTreeSrc)
             return _inTreeSrc;
@@ -346,7 +349,6 @@ final class DopRecipe : Recipe
     }
 
     void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
-    in (isPackage, "Light recipes do not build")
     {
         lua_getglobal(L, "build");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
