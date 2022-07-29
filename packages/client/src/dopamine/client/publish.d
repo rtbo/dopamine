@@ -56,12 +56,6 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
 
-    const cwd = getcwd();
-    scope (exit)
-        chdir(cwd);
-
-    chdir(rdir.root);
-
     recipe.revision = revision;
 
     DepInfo[string] depInfos;
@@ -88,14 +82,11 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
 
     const config = BuildConfig(profile.subset(recipe.langs));
     const buildId = BuildId(recipe, config);
-    const absRdir = rdir.asAbsolute(cwd);
-    const bPaths = absRdir.buildPaths(buildId);
+    const bPaths = rdir.buildPaths(buildId);
 
-    const bdirs = BuildDirs(absRdir.root, absRdir.path(srcDir), bPaths.build, bPaths.install);
+    const bdirs = BuildDirs(rdir.root, rdir.path(srcDir), bPaths.build, bPaths.install);
 
     mkdirRecurse(bPaths.build);
-
-    chdir(bPaths.build);
 
     logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
     recipe.build(bdirs, config, depInfos);
@@ -120,7 +111,7 @@ int publishMain(string[] args)
         return 0;
     }
 
-    auto rdir = enforceRecipe(".").asAbsolute();
+    auto rdir = enforceRecipe();
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
 

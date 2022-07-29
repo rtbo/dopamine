@@ -49,10 +49,6 @@ in (!stageDest || isAbsolute(stageDest))
         .map!(dn => dn.pack.name.length + dn.ver.toString().length + 1)
         .maxElement();
 
-    const cwd = getcwd();
-    scope(exit)
-        chdir(cwd);
-
     foreach (depNode; dag.traverseBottomUpResolved())
     {
         if (depNode.location == DepLocation.system)
@@ -66,8 +62,6 @@ in (!stageDest || isAbsolute(stageDest))
 
         const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
         const packNameHead = format("%*s", maxLen, packHumanName);
-
-        chdir(rdir.root);
 
         mkdirRecurse(rdir.dopPath());
 
@@ -93,7 +87,6 @@ in (!stageDest || isAbsolute(stageDest))
             const bd = BuildDirs(rdir.root, srcDir, bPaths.build, stageDest ? stageDest : bPaths.install);
             auto state = bPaths.stateFile.read();
 
-            chdir(bPaths.build);
             rdir.recipe.build(bd, conf, depInfos);
 
             state.buildTime = Clock.currTime;

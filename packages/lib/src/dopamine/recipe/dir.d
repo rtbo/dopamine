@@ -51,18 +51,26 @@ struct RecipeDir
     string _root;
 
     package(dopamine) this(Recipe recipe, string root)
+    in (isAbsolute(root))
     {
         _recipe = recipe;
         _root = root;
     }
 
     static RecipeDir fromDir(string root)
+    in (isAbsolute(root))
     {
         Recipe recipe;
 
+        root = buildNormalizedPath(root);
+
         const dopFile = checkDopRecipeFile(root);
         if (dopFile)
-            recipe = parseDopRecipe(dopFile, null);
+            recipe = parseDopRecipe(dopFile, root, null);
+
+        const dubFile = checkDubRecipeFile(root);
+        if (dubFile)
+            recipe = parseDubRecipe(dubFile, root);
 
         return RecipeDir(recipe, root);
     }
@@ -75,16 +83,6 @@ struct RecipeDir
     @property string root() const
     {
         return _root;
-    }
-
-    @property bool isAbsolute() const
-    {
-        return std.path.isAbsolute(_root);
-    }
-
-    RecipeDir asAbsolute(lazy string base = getcwd())
-    {
-        return RecipeDir(recipe, buildNormalizedPath(absolutePath(_root, base)));
     }
 
     string path(Args...)(Args args) const
@@ -154,28 +152,21 @@ struct RecipeDir
     }
 
     /// Get all the files included in the recipe, included the recipe file itself.
-    /// The caller must ensure that current directory is set to the recipe root directory.
-    /// Returns: A range to the recipe files, sorted and relative to the recipe directory.
+    /// Returns: A range to the recipe files, sorted and relative to the recipe root directory.
     const(string)[] getAllRecipeFiles() @system
     in (recipe !is null, "Not a recipe directory")
     in (recipe.isDop, "Function only meaningful for Dopamine recipes")
-    in (
-        buildNormalizedPath(getcwd()) == buildNormalizedPath(_root.absolutePath()),
-        "getAllRecipeFiles must be called from the recipe root dir"
-    )
     {
         import std.algorithm : map, sort, uniq;
         import std.array : array;
         import std.range : only, chain;
 
-        const cwd = buildNormalizedPath(getcwd());
-
         auto files = only(recipeFile)
             .chain(recipe.include())
             .map!((f) {
-                // normalize paths relative to root
-                const a = buildNormalizedPath(absolutePath(f, cwd));
-                return relativePath(a, cwd);
+                // normalize all paths relative to root
+                const a = buildNormalizedPath(absolutePath(f, _root));
+                return relativePath(a, _root);
             })
             .array;
 
@@ -187,15 +178,10 @@ struct RecipeDir
 
     /// Compute the revision of the recipe. That is the SHA-1 checksum of all the files
     /// included in the recipe, truncated to 8 bytes and encoded in lowercase hexadecimal.
-    /// The caller must ensure that current directory is set to the recipe root directory.
     /// `calcRecipeRevision` effectively assign recipe.revision and returns it.
     string calcRecipeRevision() @system
     in (recipe !is null, "Not a recipe directory")
     in (recipe.isDop, "Function only meaningful for Dopamine recipes")
-    in (
-        buildNormalizedPath(getcwd()) == buildNormalizedPath(_root.absolutePath()),
-        "calcRecipeRevision must be called from the recipe root dir"
-    )
     out (rev; rev.length && recipe.revision == rev)
     {
         import std.digest.sha;
@@ -206,7 +192,7 @@ struct RecipeDir
 
         foreach (fn; getAllRecipeFiles())
         {
-            foreach (chunk; readBinaryFile(fn, buf[]))
+            foreach (chunk; readBinaryFile(path(fn), buf[]))
                 dig.put(chunk);
         }
 
@@ -301,6 +287,7 @@ struct BuildPaths
     private string _hash;
 
     private this(string root, string hash)
+    in (isAbsolute(root))
     {
         _root = root;
         _hash = hash;
@@ -309,16 +296,6 @@ struct BuildPaths
     bool opCast(T : bool)() const
     {
         return _root.length;
-    }
-
-    @property bool isAbsolute() const
-    {
-        return std.path.isAbsolute(_root);
-    }
-
-    BuildPaths asAbsolute(lazy string base = getcwd()) const
-    {
-        return BuildPaths(buildNormalizedPath(_root.absolutePath(base)), _hash);
     }
 
     @property string root() const

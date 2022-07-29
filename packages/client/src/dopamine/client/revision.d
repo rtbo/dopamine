@@ -9,7 +9,7 @@ import std.exception;
 
 int revisionMain(string[] args)
 {
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
 
     enforce(!rdir.recipe.isDub, new ErrorLogException(
             "Dub packages do not have revision"

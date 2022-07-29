@@ -330,7 +330,7 @@ struct DepDAG
     /// Returns: a [DepDAG] ready for the next phase
     static DepDAG prepare(RecipeDir rdir, Profile profile, DepService service,
         const Heuristics heuristics = Heuristics.init, Flag!"preFilter" preFilter = Yes.preFilter) @system
-        in(rdir.recipe, "RecipeDir must have a recipe loaded")
+    in (rdir.recipe, "RecipeDir must have a recipe loaded")
     {
         import std.algorithm : canFind, filter, sort, uniq;
         import std.array : array;
@@ -1452,6 +1452,15 @@ struct TestPackVersion
     }
 }
 
+version (Windows)
+{
+    enum testPackDir = "C:\\DopTest";
+}
+else
+{
+    enum testPackDir = "/doptest";
+}
+
 struct TestPackage
 {
     string name;
@@ -1464,7 +1473,7 @@ struct TestPackage
         {
             if (n.ver == ver)
             {
-                return RecipeDir(new MockRecipe(name, Semver(ver), "1",  n.deps, langs), ".");
+                return RecipeDir(new MockRecipe(name, Semver(ver), "1",  n.deps, langs), testPackDir);
             }
         }
         assert(false, "wrong version");
@@ -1670,6 +1679,6 @@ final class MockDepService : DepService
         TestPackage p = packs[packname];
         TestPackVersion pv = p.nodes.find!(pv => pv.aver == aver).front;
         const revision = rev ? rev : "1";
-        return RecipeDir(new MockRecipe(packname, aver.ver, revision, pv.deps, p.langs), ".");
+        return RecipeDir(new MockRecipe(packname, aver.ver, revision, pv.deps, p.langs), testPackDir);
     }
 }

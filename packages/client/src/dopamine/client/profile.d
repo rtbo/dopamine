@@ -78,7 +78,7 @@ int profileMain(string[] args)
 
     // Recipe is needed only in a few situations,
     // so we load it only if available.
-    auto dir = RecipeDir.fromDir(".");
+    auto dir = RecipeDir.fromDir(getcwd());
     Recipe recipe = dir.recipe;
     if (!recipe)
         logVerbose("no recipe available");

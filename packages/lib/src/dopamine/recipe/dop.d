@@ -12,13 +12,14 @@ import dopamine.semver;
 import dopamine.c.lua;
 
 import std.exception;
+import std.file;
 import std.path;
 import std.string;
 
 /// Parse a dopamine recipe file.
 /// A revision can be specified directly if it is known
 /// e.g. loading from a cache directory.
-DopRecipe parseDopRecipe(string filename, string revision)
+DopRecipe parseDopRecipe(string filename, string root, string revision)
 {
     auto L = luaL_newstate();
     luaL_openlibs(L);
@@ -36,7 +37,7 @@ DopRecipe parseDopRecipe(string filename, string revision)
         "Recipes should not return anything"
     );
 
-    return new DopRecipe(L, revision);
+    return new DopRecipe(L, root, revision);
 }
 
 /// The Dopamine Lua based recipe type.
@@ -60,15 +61,18 @@ final class DopRecipe : Recipe
     string _inTreeSrc;
     bool _stageFalse;
 
+    string _rootDir;
     bool _isLight;
     string _revision;
     string[] _allFiles;
 
     lua_State* L;
 
-    private this(lua_State* L, string revision)
+    private this(lua_State* L, string rootDir, string revision)
+    in (isAbsolute(rootDir))
     {
         this.L = L;
+        _rootDir = buildNormalizedPath(rootDir);
 
         // start with the build function because it determines whether
         // it is a light recipe or package recipe
@@ -290,6 +294,11 @@ final class DopRecipe : Recipe
 
         luaPushProfile(L, profile);
 
+        const cwd = getcwd();
+        chdir(_rootDir);
+        scope(exit)
+            chdir(cwd);
+
         if (lua_pcall(L, nargs, /* nresults = */ 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot get dependencies: " ~ luaPop!string(L));
@@ -317,6 +326,11 @@ final class DopRecipe : Recipe
             "function expected for 'include'"
         );
 
+        const cwd = getcwd();
+        chdir(_rootDir);
+        scope(exit)
+            chdir(cwd);
+
         if (lua_pcall(L, 0, 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot get files included with recipe: " ~ luaPop!string(L));
@@ -340,6 +354,11 @@ final class DopRecipe : Recipe
         lua_getglobal(L, "source");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a source function");
 
+        const cwd = getcwd();
+        chdir(_rootDir);
+        scope(exit)
+            chdir(cwd);
+
         if (lua_pcall(L, /* nargs = */ 0, /* nresults = */ 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot get source: " ~ luaPop!string(L));
@@ -350,12 +369,19 @@ final class DopRecipe : Recipe
 
     void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
     {
+        assert(buildNormalizedPath(dirs.root) == buildNormalizedPath(_rootDir));
+
         lua_getglobal(L, "build");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
         pushBuildDirs(L, dirs);
         pushConfig(L, config);
         pushDepInfos(L, depInfos);
+
+        const cwd = getcwd();
+        chdir(dirs.build);
+        scope(exit)
+            chdir(cwd);
 
         if (lua_pcall(L, /* nargs = */ 3, /* nresults = */ 0, 0) != LUA_OK)
         {
@@ -369,15 +395,23 @@ final class DopRecipe : Recipe
     }
 
     void stage(string src, string dest) @system
+    in (isAbsolute(src) && isAbsolute(dest))
     {
         import dopamine.util : installRecurse;
-        import std.file : chdir, getcwd;
+        import std.string : startsWith;
+
+        assert(buildNormalizedPath(src).startsWith(_rootDir));
 
         lua_getglobal(L, "stage");
         if (lua_type(L, -1) == LUA_TFUNCTION)
         {
             luaPush(L, src);
             luaPush(L, dest);
+
+            const cwd = getcwd();
+            chdir(src);
+            scope(exit)
+                chdir(cwd);
 
             if (lua_pcall(L, 2, 0, 0) != LUA_OK)
             {

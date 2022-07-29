@@ -55,7 +55,7 @@ in (cvs != Cvs.none)
     return res.output.strip().length == 0;
 }
 
-RecipeDir enforceRecipe(string root)
+RecipeDir enforceRecipe(string root = getcwd())
 {
     auto rdir = enforce(
         RecipeDir.fromDir(root), new ErrorLogException(

@@ -42,7 +42,6 @@ string buildPackage(
     const(BuildConfig) config,
     DepInfo[string] depInfos,
     string stageDest = null)
-in (rdir.isAbsolute)
 {
     const srcDir = enforceSourceReady(rdir);
 
@@ -57,12 +56,7 @@ in (rdir.isAbsolute)
 
     mkdirRecurse(bPaths.build);
 
-    {
-        chdir(bPaths.build);
-        scope (success)
-            chdir(cwd);
-        rdir.recipe.build(bdirs, config, depInfos);
-    }
+    rdir.recipe.build(bdirs, config, depInfos);
 
     BuildState state = bPaths.stateFile.read();
     state.buildTime = Clock.currTime;
@@ -92,7 +86,7 @@ int buildMain(string[] args)
         return 0;
     }
 
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
     auto lock = acquireRecipeLockFile(rdir);
 
     auto recipe = rdir.recipe;
@@ -146,7 +140,7 @@ int buildMain(string[] args)
 
     destroy(lock);
 
-    const dir = buildPackage(rdir.asAbsolute(), config, depInfos);
+    const dir = buildPackage(rdir, config, depInfos);
 
     logInfo("%s: %s - %s", info("Build"), success("OK"), dir);
 

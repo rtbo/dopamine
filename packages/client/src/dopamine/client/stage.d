@@ -47,11 +47,6 @@ in(isAbsolute(absDest))
 
     enforceBuildReady(rdir, buildId);
 
-    const cwd = getcwd();
-    chdir(rdir.root);
-    scope(exit)
-        chdir(cwd);
-
     rdir.recipe.stage(bPaths.install, absDest);
 }
 
@@ -76,7 +71,7 @@ int stageMain(string[] args)
     const dest = args[1];
     const absDest = absolutePath(dest);
 
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
     auto lock = acquireRecipeLockFile(rdir);
 
     auto recipe = rdir.recipe;
