@@ -65,6 +65,8 @@ RecipeDir enforceRecipe(string root = getcwd())
     );
     if (rdir.recipe.isLight)
         logInfo("%s: %s", info("Recipe"), success("OK"));
+    else if (rdir.recipe.isDub)
+        logInfo("%s: %s - %s %s", info("Recipe"), success("OK"), rdir.recipe.name, color(Color.cyan, "[dub]"));
     else
         logInfo("%s: %s - %s/%s", info("Recipe"), success("OK"), rdir.recipe.name, rdir.recipe.ver);
 
