@@ -11,3 +11,4 @@ EXPECT_LIB=.dop/$DOP_BID-build/dublib
 EXPECT_DIR=.dop/$DOP_BID
 EXPECT_LIB=.dop/$DOP_BID/lib/dublib
 EXPECT_FILE=.dop/$DOP_BID/include/d/dublib/source/dublib.d
+EXPECT_FILE=.dop/$DOP_BID/lib/pkgconfig/dublib.pc

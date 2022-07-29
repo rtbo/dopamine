@@ -123,10 +123,29 @@ class DubRecipe : Recipe
         nb.writeToFile(buildPath(dirs.build, "build.ninja"));
         runCommand(["ninja"], dirs.build, LogLevel.verbose, env);
 
-        // we drive the installation directly
+        auto dc = config.profile.compilerFor(Lang.d);
+        auto dcf = CompilerFlags.fromCompiler(dc);
+
         const builtTarget = libraryFileName(name);
+
+        // generate a pkg-config file
+        PkgConfig pkg;
+        pkg.prefix = dirs.install;
+        pkg.name = name;
+        pkg.ver = ver.toString();
+        pkg.includeDir = buildPath("$prefix", "include", "d", name);
+        pkg.libDir = buildPath("$prefix", "lib");
+        pkg.cflags = dcf.compileArgs(dubBs, config.profile.buildType).join("");
+        pkg.libs = dcf.linkArgs(dubBs).join("");
+        pkg.writeToFile(buildPath(dirs.build, name ~ ".pc"));
+
+        // we drive the installation directly
         const sources = dubBs.sourceFiles.map!(s => SourcePath.from(s, dirs)).array;
 
+        installFile(
+            buildPath(dirs.build, name ~ ".pc"),
+            buildPath(dirs.install, "lib", "pkgconfig", name ~ ".pc")
+        );
         installFile(
             buildPath(dirs.build, builtTarget),
             buildPath(dirs.install, "lib", builtTarget)
@@ -174,14 +193,7 @@ class DubRecipe : Recipe
         ];
         ldRule.description = "Linking $in";
 
-        string[] compileArgs;
-        compileArgs = dcf.buildType(config.profile.buildType);
-        compileArgs ~= bs.importPaths.map!(f => dcf.importPath(f)).array;
-        compileArgs ~= bs.stringImportPaths.map!(f => dcf.stringImportPath(f)).array;
-        compileArgs ~= bs.versions.map!(f => dcf.version_(f)).array;
-        compileArgs ~= bs.debugVersions.map!(f => dcf.debugVersion(f)).array;
-        compileArgs ~= bs.dflags;
-
+        auto compileArgs = dcf.compileArgs(bs, config.profile.buildType);
         NinjaTarget[] targets;
 
         auto sources = bs.sourceFiles.map!(s => SourcePath.from(s, dirs)).array;
@@ -214,9 +226,7 @@ class DubRecipe : Recipe
                 .array
         );
         ldTarget.variables["LINK_ARGS"] = ninjaQuote(
-            only(dcf.staticLib())
-                .chain(bs.lflags)
-                .array
+            dcf.linkArgs(bs)
         );
         targets ~= ldTarget;
 
@@ -300,6 +310,24 @@ interface CompilerFlags
             return new LdcCompilerFlags;
         }
         throw new Exception("Unknown Dub compiler: " ~ dc.name);
+    }
+
+    final const(string)[] compileArgs(const ref BuildSettings bs, BuildType bt)
+    {
+        string[] res = this.buildType(bt);
+        res ~= bs.importPaths.map!(f => this.importPath(f)).array;
+        res ~= bs.stringImportPaths.map!(f => this.stringImportPath(f)).array;
+        res ~= bs.versions.map!(f => this.version_(f)).array;
+        res ~= bs.debugVersions.map!(f => this.debugVersion(f)).array;
+        res ~= bs.dflags;
+        return res;
+    }
+
+    final const(string)[] linkArgs(const ref BuildSettings bs)
+    {
+        return only(this.staticLib())
+            .chain(bs.lflags)
+            .array;
     }
 }
 
