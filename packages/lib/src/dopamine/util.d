@@ -631,6 +631,66 @@ in (exists(src), src ~ " does not exist")
     }
 }
 
+struct PkgConfig
+{
+    string prefix;
+    string execPrefix;
+    string includeDir;
+    string libDir;
+    string name;
+    string ver;
+    string description;
+    string url;
+    string requires;
+    string requiresPriv;
+    string conflicts;
+    string cflags;
+    string libs;
+    string libsPriv;
+
+    string[string] customVars;
+
+    void writeToFile(string filename)
+    {
+        import std.exception : enforce;
+        import std.stdio : File;
+
+        auto f = File(filename, "w");
+
+        f.writefln!"prefix=%s"(enforce(prefix, "PkgConfig needs a prefix"));
+        if(execPrefix)
+            f.writefln!"exec_prefix=%s"(execPrefix);
+        if(includeDir)
+            f.writefln!"includedir=%s"(includeDir);
+        if(libDir)
+            f.writefln!"libdir=%s"(libDir);
+
+        foreach (k, v; customVars) {
+            f.writefln!"%s=%s"(k, v);
+        }
+
+        f.writeln();
+        f.writefln!"Name: %s"(enforce(name, "PkgConfig needs a prefix"));
+        f.writefln!"Version: %s"(enforce(ver, "PkgConfig needs a version"));
+        if (description)
+            f.writefln!"Description: %s"(description);
+        if (url)
+            f.writefln!"URL: %s"(url);
+        if (requires)
+            f.writefln!"Requires: %s"(requires);
+        if (requiresPriv)
+            f.writefln!"Requires.private: %s"(requiresPriv);
+        if (conflicts)
+            f.writefln!"Conflicts: %s"(conflicts);
+        if (cflags)
+            f.writefln!"Cflags: %s"(cflags);
+        if (libs)
+            f.writefln!"Libs: %s"(libs);
+        if (libsPriv)
+            f.writefln!"Libs.private: %s"(libsPriv);
+    }
+}
+
 void runCommand(in string[] cmd, string workDir = null,
     LogLevel logLevel = LogLevel.verbose, string[string] env = null) @trusted
 {
