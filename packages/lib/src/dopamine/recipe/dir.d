@@ -158,6 +158,7 @@ struct RecipeDir
     /// Returns: A range to the recipe files, sorted and relative to the recipe directory.
     const(string)[] getAllRecipeFiles() @system
     in (recipe !is null, "Not a recipe directory")
+    in (recipe.isDop, "Function only meaningful for Dopamine recipes")
     in (
         buildNormalizedPath(getcwd()) == buildNormalizedPath(_root.absolutePath()),
         "getAllRecipeFiles must be called from the recipe root dir"
@@ -190,6 +191,7 @@ struct RecipeDir
     /// `calcRecipeRevision` effectively assign recipe.revision and returns it.
     string calcRecipeRevision() @system
     in (recipe !is null, "Not a recipe directory")
+    in (recipe.isDop, "Function only meaningful for Dopamine recipes")
     in (
         buildNormalizedPath(getcwd()) == buildNormalizedPath(_root.absolutePath()),
         "calcRecipeRevision must be called from the recipe root dir"

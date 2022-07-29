@@ -105,7 +105,8 @@ int buildMain(string[] args)
 
     const profile = enforceProfileReady(rdir, profileName);
 
-    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
+    if (rdir.recipe.isDop)
+        logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)

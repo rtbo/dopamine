@@ -123,6 +123,10 @@ int publishMain(string[] args)
     auto rdir = enforceRecipe(".").asAbsolute();
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
+
+    enforce(!recipe.isDub, new ErrorLogException(
+        "Dub packages can't be published to Dopamine registry"
+    ));
     enforce(!recipe.isLight, new ErrorLogException(
             "Light recipes can't be published"
     ));

@@ -85,7 +85,8 @@ int stageMain(string[] args)
 
     auto profile = enforceProfileReady(rdir, profileName);
 
-    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
+    if (rdir.recipe.isDop)
+        logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     DepInfo[string] depInfos;
 
