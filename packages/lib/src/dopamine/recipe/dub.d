@@ -115,24 +115,27 @@ class DubRecipe : Recipe
                 name, dubBs.targetType
         ));
 
-        DubTarget target;
-        target.type = dubBs.targetType;
-        target.name = libraryFileName(name);
-        target.sources = dubBs.sourceFiles.map!(s => TargetSource.from(s, dirs)).array;
-        target.importPaths = dubBs.importPaths;
-        target.stringImportPaths = dubBs.stringImportPaths;
-        target.versions = dubBs.versions;
-        target.debugVersions = dubBs.debugVersions;
-        target.dflags = dubBs.dflags;
-        target.libs = dubBs.libs;
-        target.lflags = dubBs.lflags;
-
         string[string] env;
         config.profile.collectEnvironment(env);
 
-        target.writeNinja(buildPath(dirs.build, "build.ninja"), dirs, config);
+        // we create a ninja file to drive the compilation
+        auto nb = createNinja(dubBs, dirs, config);
+        nb.writeToFile(buildPath(dirs.build, "build.ninja"));
         runCommand(["ninja"], dirs.build, LogLevel.verbose, env);
-        //runCommand(["ninja", "install"], BuildDirs.build, LogLevel.verbose, env);
+
+        // we drive the installation directly
+        const builtTarget = libraryFileName(name);
+        const sources = dubBs.sourceFiles.map!(s => SourcePath.from(s, dirs)).array;
+
+        installFile(
+            buildPath(dirs.build, builtTarget),
+            buildPath(dirs.install, "lib", builtTarget)
+        );
+        foreach (src; sources)
+            installFile(
+                buildPath(dirs.root, src.fromRoot),
+                buildPath(dirs.install, "include", "d", name, src.fromRoot)
+            );
     }
 
     @property bool canStage() const @safe
@@ -145,6 +148,80 @@ class DubRecipe : Recipe
         import dopamine.util;
 
         return installRecurse(src, dest);
+    }
+
+    private NinjaBuild createNinja(const ref BuildSettings bs, BuildDirs dirs, BuildConfig config)
+    {
+        auto dc = config.profile.compilerFor(Lang.d);
+        auto dcf = CompilerFlags.fromCompiler(dc);
+
+        const targetName = libraryFileName(name);
+
+        NinjaRule dcRule;
+        dcRule.name = "compile_D";
+        dcRule.command = [
+            ninjaQuote(dc.path), "$ARGS", dcf.makedeps("$DEPFILE"), dcf.compile(),
+            dcf.output("$out"), "$in"
+        ];
+        dcRule.depfile = "$DEPFILE_UNQUOTED";
+        dcRule.deps = "gcc";
+        dcRule.description = "Compiling D object $in";
+
+        NinjaRule ldRule;
+        ldRule.name = "link_D";
+        ldRule.command = [
+            ninjaQuote(dc.path), "$ARGS", dcf.output("$out"), "$in", "$LINK_ARGS"
+        ];
+        ldRule.description = "Linking $in";
+
+        string[] compileArgs;
+        compileArgs = dcf.buildType(config.profile.buildType);
+        compileArgs ~= bs.importPaths.map!(f => dcf.importPath(f)).array;
+        compileArgs ~= bs.stringImportPaths.map!(f => dcf.stringImportPath(f)).array;
+        compileArgs ~= bs.versions.map!(f => dcf.version_(f)).array;
+        compileArgs ~= bs.debugVersions.map!(f => dcf.debugVersion(f)).array;
+        compileArgs ~= bs.dflags;
+
+        NinjaTarget[] targets;
+
+        auto sources = bs.sourceFiles.map!(s => SourcePath.from(s, dirs)).array;
+        string[] objects;
+
+        foreach (src; sources)
+        {
+            const depfile = src.fromRoot ~ ".o.d";
+
+            NinjaTarget target;
+            target.target = ninjaEscape(src.fromRoot ~ ".o");
+            target.rule = dcRule.name;
+            target.inputs = [ninjaEscape(src.fromBuild)];
+
+            target.variables["ARGS"] = ninjaQuote(compileArgs);
+            target.variables["DEPFILE"] = ninjaQuote(depfile);
+            target.variables["DEPFILE_UNQUOTED"] = depfile;
+            targets ~= target;
+
+            objects ~= src.fromRoot ~ ".o";
+        }
+
+        NinjaTarget ldTarget;
+        ldTarget.target = ninjaEscape(targetName);
+        ldTarget.rule = ldRule.name;
+        ldTarget.inputs = objects;
+        ldTarget.variables["ARGS"] = ninjaQuote(
+            dcf.buildType(config.profile.buildType)
+                .chain(bs.libs.map!(f => dcf.lib(f)))
+                .array
+        );
+        ldTarget.variables["LINK_ARGS"] = ninjaQuote(
+            only(dcf.staticLib())
+                .chain(bs.lflags)
+                .array
+        );
+        targets ~= ldTarget;
+
+        return NinjaBuild("1.8.2", [dcRule, ldRule], targets);
+
     }
 }
 
@@ -178,6 +255,23 @@ BuildPlatform toDubPlatform(const(Profile) profile)
     res.compilerVersion = dc.ver;
 
     return res;
+}
+
+struct SourcePath
+{
+    string fromRoot;
+    string fromBuild;
+
+    static SourcePath from(string source, BuildDirs dirs)
+    {
+        if (!isAbsolute(source))
+            source = absolutePath(source, dirs.root);
+
+        return SourcePath(
+            relativePath(source, dirs.root),
+            relativePath(source, dirs.build),
+        );
+    }
 }
 
 interface CompilerFlags
@@ -332,116 +426,6 @@ string libraryFileName(string libname)
     return "lib" ~ libname ~ ".a";
 }
 
-struct TargetSource
-{
-    string source;
-    string object;
-
-    static TargetSource from(string source, BuildDirs dirs)
-    {
-        if (!isAbsolute(source))
-            source = absolutePath(source, dirs.root);
-
-        return TargetSource(
-            relativePath(source, dirs.build),
-            relativePath(source, dirs.root) ~ ".o",
-        );
-    }
-}
-
-struct DubTarget
-{
-    BuildSettings bs;
-
-    TargetType type;
-    string name;
-
-    TargetSource[] sources;
-    string[] importPaths;
-    string[] stringImportPaths;
-    string[] versions;
-    string[] debugVersions;
-    string[] dflags;
-
-    string[] libs;
-    string[] lflags;
-
-    void writeNinja(string filename, BuildDirs dirs, BuildConfig config)
-    {
-        auto nb = toNinja(dirs, config);
-        nb.writeToFile(filename);
-    }
-
-    NinjaBuild toNinja(BuildDirs dirs, BuildConfig config)
-    {
-        auto dc = config.profile.compilerFor(Lang.d);
-        auto dcf = CompilerFlags.fromCompiler(dc);
-
-        NinjaRule dcRule;
-        dcRule.name = "compile_D";
-        dcRule.command = [
-            ninjaQuote(dc.path), "$ARGS", dcf.makedeps("$DEPFILE"), dcf.compile(),
-            dcf.output("$out"), "$in"
-        ];
-        dcRule.depfile = "$DEPFILE_UNQUOTED";
-        dcRule.deps = "gcc";
-        dcRule.description = "Compiling D object $in";
-
-        NinjaRule ldRule;
-        ldRule.name = "link_D";
-        ldRule.command = [
-            ninjaQuote(dc.path), "$ARGS", dcf.output("$out"), "$in", "$LINK_ARGS"
-        ];
-        ldRule.description = "Linking $in";
-
-        string[] compileArgs;
-        compileArgs = dcf.buildType(config.profile.buildType);
-        compileArgs ~= importPaths.map!(f => dcf.importPath(f)).array;
-        compileArgs ~= stringImportPaths.map!(f => dcf.stringImportPath(f)).array;
-        compileArgs ~= versions.map!(f => dcf.version_(f)).array;
-        compileArgs ~= debugVersions.map!(f => dcf.debugVersion(f)).array;
-        compileArgs ~= dflags;
-
-
-        NinjaTarget[] targets;
-
-        NinjaTarget ldTarget;
-        ldTarget.target = name;
-        ldTarget.rule = ldRule.name;
-        ldTarget.variables["ARGS"] = ninjaQuote(
-            dcf.buildType(config.profile.buildType)
-                .chain(libs.map!(f => dcf.lib(f)))
-                .array
-            );
-         ldTarget.variables["LINK_ARGS"] = ninjaQuote(
-            only(dcf.staticLib())
-                .chain(lflags)
-                .array
-            );
-
-        foreach (src; sources)
-        {
-            const depfile = src.object ~ ".d";
-
-            NinjaTarget target;
-            target.target = ninjaEscape(src.object);
-            target.rule = dcRule.name;
-            target.inputs = [ninjaEscape(src.source)];
-
-            target.variables["ARGS"] = ninjaQuote(compileArgs);
-            target.variables["DEPFILE"] = ninjaQuote(depfile);
-            target.variables["DEPFILE_UNQUOTED"] = depfile;
-            targets ~= target;
-
-            ldTarget.inputs ~= src.object;
-        }
-
-        targets ~= ldTarget;
-
-        return NinjaBuild("1.8.2", [dcRule, ldRule], targets);
-    }
-}
-
 string ninjaQuote(string arg)
 {
     if (arg.canFind(" "))
@@ -473,6 +457,7 @@ struct NinjaRule
     string deps;
     string depfile;
     string description;
+    string pool;
 
     void write(File file) const
     {
@@ -484,6 +469,8 @@ struct NinjaRule
         if (deps)
             file.writefln!"  deps = %s"(deps);
         file.writefln!"  description = %s"(description);
+        if (pool)
+            file.writefln!"  pool = %s"(pool);
     }
 }
 
