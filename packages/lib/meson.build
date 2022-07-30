@@ -10,6 +10,7 @@ dop_src = files([
     'src/dopamine/cache.d',
     'src/dopamine/dep/build.d',
     'src/dopamine/dep/dag.d',
+    'src/dopamine/dep/dub.d',
     'src/dopamine/dep/lock.d',
     'src/dopamine/dep/service.d',
     'src/dopamine/dep/spec.d',
