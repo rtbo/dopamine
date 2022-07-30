@@ -237,6 +237,18 @@ class DubRecipe : Recipe
 
 private:
 
+static this()
+{
+	import dub.compilers.compiler : registerCompiler;
+	import dub.compilers.dmd : DMDCompiler;
+	import dub.compilers.gdc : GDCCompiler;
+	import dub.compilers.ldc : LDCCompiler;
+
+	registerCompiler(new DMDCompiler);
+	registerCompiler(new GDCCompiler);
+	registerCompiler(new LDCCompiler);
+}
+
 BuildPlatform toDubPlatform(const(Profile) profile)
 {
     BuildPlatform res;

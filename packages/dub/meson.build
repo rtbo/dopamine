@@ -1,10 +1,10 @@
 
 dub_src = files([
-    'src/dub/commandline.d',
+    #'src/dub/commandline.d',
     'src/dub/dependency.d',
     'src/dub/dependencyresolver.d',
     'src/dub/description.d',
-    'src/dub/dub.d',
+    #'src/dub/dub.d',
     'src/dub/init.d',
     'src/dub/packagemanager.d',
     'src/dub/packagesupplier.d',
