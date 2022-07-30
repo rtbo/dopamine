@@ -277,7 +277,7 @@ final class DependencyService : DepService
 
         const dir = _cache.packageDir(packname)
                 .versionDir(ver)
-                .revisionDir(revision);
+                .dopRevisionDir(revision);
 
         if (!dir)
             return RecipeDir.init;
@@ -307,7 +307,7 @@ final class DependencyService : DepService
         if (!vDir)
             return RecipeDir.init;
 
-        foreach (revDir; vDir.revisionDirs())
+        foreach (revDir; vDir.dopRevisionDirs())
         {
             const recFile = checkDopRecipeFile(revDir.dir);
             if (recFile)

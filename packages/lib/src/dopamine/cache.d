@@ -22,7 +22,7 @@ class PackageCache
     private string _dir;
 
     /// Construct a cache in the specified directory.
-    /// [dir] wouldt typically be "~/.dop/cache" on Linux and "%LOCALAPPDATA%\dop\cache" on Windows.
+    /// [dir] would typically be "~/.dop/cache" on Linux and "%LOCALAPPDATA%\dop\cache" on Windows.
     this(string dir)
     {
         _dir = dir;
@@ -57,7 +57,7 @@ class PackageCache
 
         if (revision)
         {
-            const revDir = packageDir(pack.name).versionDir(ver).revisionDir(revision);
+            const revDir = packageDir(pack.name).versionDir(ver).dopRevisionDir(revision);
             if (revDir && checkDopRecipeFile(revDir.dir))
             {
                 return revDir;
@@ -129,7 +129,7 @@ class PackageCache
 
         auto revDir = packageDir(pack.name)
             .versionDir(recipeRes.ver)
-            .revisionDir(recipeRes.revision);
+            .dopRevisionDir(recipeRes.revision);
 
         mkdirRecurse(revDir.versionDir.dir);
 

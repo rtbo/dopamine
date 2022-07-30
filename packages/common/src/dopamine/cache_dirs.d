@@ -71,13 +71,18 @@ struct CacheVersionDir
         return baseName(dirName(_dir));
     }
 
-    CacheRevisionDir revisionDir(string rev) const
+    @property string dubLockFile() const
+    {
+        return _dir ~ ".lock";
+    }
+
+    CacheRevisionDir dopRevisionDir(string rev) const
     {
         const revDir = buildPath(_dir, rev);
         return CacheRevisionDir(revDir);
     }
 
-    auto revisionDirs() const @trusted
+    auto dopRevisionDirs() const @trusted
     {
         import std.algorithm : filter, map;
 
