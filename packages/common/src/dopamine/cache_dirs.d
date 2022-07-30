@@ -174,6 +174,11 @@ private mixin template CacheDir()
     {
         return this.exists;
     }
+
+    string path(Args...)(Args args)
+    {
+        return buildPath(dir, args);
+    }
 }
 
 package(dopamine) auto dirInputRange(string parent) @trusted
