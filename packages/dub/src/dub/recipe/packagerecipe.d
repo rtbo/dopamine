@@ -171,6 +171,16 @@ struct ConfigurationInfo {
 	}
 }
 
+
+/// DOPAMINE CHANGE: buildSettingsVar copied from dub.project
+/// to allow to remove from compilation:
+///  - dub.project
+///  - dub.generators
+///  - dub.packagemanager
+package(dub) immutable buildSettingsVars = [
+	"ARCH", "PLATFORM", "PLATFORM_POSIX", "BUILD_TYPE"
+];
+
 /// This keeps general information about how to build a package.
 /// It contains functions to create a specific BuildSetting, targeted at
 /// a certain BuildPlatform.
@@ -236,7 +246,8 @@ struct BuildSettingsTemplate {
 		{
 			auto files = appender!(string[]);
 
-			import dub.project : buildSettingsVars;
+			// DOPAMINE CHANGE: buildSettingsVars copied in this module
+			// import dub.project : buildSettingsVars;
 			import std.typecons : Nullable;
 
 			static Nullable!(string[string]) envVarCache;
