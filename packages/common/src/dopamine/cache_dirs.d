@@ -139,7 +139,7 @@ struct CacheRevisionDir
 
     @property string lockFile() const
     {
-        return setExtension(_dir, ".lock");
+        return _dir ~ ".lock";
     }
 }
 
