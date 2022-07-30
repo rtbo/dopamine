@@ -171,6 +171,15 @@ class DubRecipe : Recipe
 
     private NinjaBuild createNinja(const ref BuildSettings bs, BuildDirs dirs, BuildConfig config)
     {
+        version (Windows)
+        {
+            enum objExt = ".obj";
+        }
+        else
+        {
+            enum objExt = ".o";
+        }
+
         auto dc = config.profile.compilerFor(Lang.d);
         auto dcf = CompilerFlags.fromCompiler(dc);
 
@@ -201,10 +210,11 @@ class DubRecipe : Recipe
 
         foreach (src; sources)
         {
-            const depfile = src.fromRoot ~ ".o.d";
+            const objFile = src.fromRoot ~ objExt;
+            const depfile = objFile ~ ".d";
 
             NinjaTarget target;
-            target.target = ninjaEscape(src.fromRoot ~ ".o");
+            target.target = ninjaEscape(objFile);
             target.rule = dcRule.name;
             target.inputs = [ninjaEscape(src.fromBuild)];
 
@@ -213,7 +223,7 @@ class DubRecipe : Recipe
             target.variables["DEPFILE_UNQUOTED"] = depfile;
             targets ~= target;
 
-            objects ~= src.fromRoot ~ ".o";
+            objects ~= objFile;
         }
 
         NinjaTarget ldTarget;
