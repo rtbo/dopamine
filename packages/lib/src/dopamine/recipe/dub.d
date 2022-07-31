@@ -141,7 +141,7 @@ class DubRecipe : Recipe
             .chain(bs.versions.map!(v => dcf.version_(v)))
             .array
             .join(" ");
-        pkg.libs = buildPath(dirs.install, "lib", builtTarget);
+        pkg.libs = "${libdir}/" ~ builtTarget;
         pkg.writeToFile(pcPath);
 
         // we drive the installation directly
