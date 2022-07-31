@@ -2,6 +2,7 @@ module dopamine.recipe.dir;
 
 import dopamine.build_id;
 import dopamine.recipe;
+import dopamine.recipe.dub;
 import dopamine.util;
 
 import std.datetime;
@@ -51,18 +52,26 @@ struct RecipeDir
     string _root;
 
     package(dopamine) this(Recipe recipe, string root)
+    in (isAbsolute(root))
     {
         _recipe = recipe;
         _root = root;
     }
 
     static RecipeDir fromDir(string root)
+    in (isAbsolute(root))
     {
         Recipe recipe;
 
+        root = buildNormalizedPath(root);
+
         const dopFile = checkDopRecipeFile(root);
         if (dopFile)
-            recipe = parseDopRecipe(dopFile, null);
+            recipe = parseDopRecipe(dopFile, root, null);
+
+        const dubFile = checkDubRecipeFile(root);
+        if (dubFile)
+            recipe = parseDubRecipe(dubFile, root);
 
         return RecipeDir(recipe, root);
     }
@@ -75,16 +84,6 @@ struct RecipeDir
     @property string root() const
     {
         return _root;
-    }
-
-    @property bool isAbsolute() const
-    {
-        return std.path.isAbsolute(_root);
-    }
-
-    RecipeDir asAbsolute(lazy string base = getcwd())
-    {
-        return RecipeDir(recipe, absolutePath(_root, base));
     }
 
     string path(Args...)(Args args) const
@@ -154,27 +153,21 @@ struct RecipeDir
     }
 
     /// Get all the files included in the recipe, included the recipe file itself.
-    /// The caller must ensure that current directory is set to the recipe root directory.
-    /// Returns: A range to the recipe files, sorted and relative to the recipe directory.
+    /// Returns: A range to the recipe files, sorted and relative to the recipe root directory.
     const(string)[] getAllRecipeFiles() @system
     in (recipe !is null, "Not a recipe directory")
-    in (
-        buildNormalizedPath(getcwd()) == buildNormalizedPath(_root.absolutePath()),
-        "getAllRecipeFiles must be called from the recipe root dir"
-    )
+    in (recipe.isDop, "Function only meaningful for Dopamine recipes")
     {
         import std.algorithm : map, sort, uniq;
         import std.array : array;
         import std.range : only, chain;
 
-        const cwd = buildNormalizedPath(getcwd());
-
         auto files = only(recipeFile)
             .chain(recipe.include())
             .map!((f) {
-                // normalize paths relative to root
-                const a = buildNormalizedPath(absolutePath(f, cwd));
-                return relativePath(a, cwd);
+                // normalize all paths relative to root
+                const a = buildNormalizedPath(absolutePath(f, _root));
+                return relativePath(a, _root);
             })
             .array;
 
@@ -186,14 +179,10 @@ struct RecipeDir
 
     /// Compute the revision of the recipe. That is the SHA-1 checksum of all the files
     /// included in the recipe, truncated to 8 bytes and encoded in lowercase hexadecimal.
-    /// The caller must ensure that current directory is set to the recipe root directory.
     /// `calcRecipeRevision` effectively assign recipe.revision and returns it.
     string calcRecipeRevision() @system
     in (recipe !is null, "Not a recipe directory")
-    in (
-        buildNormalizedPath(getcwd()) == buildNormalizedPath(_root.absolutePath()),
-        "calcRecipeRevision must be called from the recipe root dir"
-    )
+    in (recipe.isDop, "Function only meaningful for Dopamine recipes")
     out (rev; rev.length && recipe.revision == rev)
     {
         import std.digest.sha;
@@ -204,7 +193,7 @@ struct RecipeDir
 
         foreach (fn; getAllRecipeFiles())
         {
-            foreach (chunk; readBinaryFile(fn, buf[]))
+            foreach (chunk; readBinaryFile(path(fn), buf[]))
                 dig.put(chunk);
         }
 
@@ -219,6 +208,7 @@ struct RecipeDir
     }
 
     string checkSourceReady(out string reason)
+    out(dir; !dir || !std.path.isAbsolute(dir))
     {
         if (!recipe)
         {
@@ -251,7 +241,7 @@ struct RecipeDir
     BuildPaths buildPaths(BuildId buildId) const
     {
         const hash = buildId.uniqueId[0 .. 10];
-        return BuildPaths(_root, dopPath(), hash);
+        return BuildPaths(_root, hash);
     }
 
     bool checkBuildReady(BuildId buildId, out string reason)
@@ -284,7 +274,7 @@ struct RecipeDir
     }
 }
 
-string checkDopRecipeFile(string dir)
+string checkDopRecipeFile(string dir) @safe
 {
     const dopFile = buildPath(dir, "dopamine.lua");
     if (exists(dopFile) && isFile(dopFile))
@@ -292,16 +282,29 @@ string checkDopRecipeFile(string dir)
     return null;
 }
 
+string checkDubRecipeFile(string dir) @safe
+{
+    string[3] recipeFileNames = ["dub.json", "dub.sdl", "package.json"];
+
+    foreach (fn; recipeFileNames)
+    {
+        const dubFile = buildPath(dir, fn);
+        if (exists(dubFile) && isFile(dubFile))
+            return dubFile;
+    }
+
+    return null;
+}
+
 struct BuildPaths
 {
     private string _root;
-    private string _dop;
     private string _hash;
 
-    private this(string root, string dop, string hash)
+    private this(string root, string hash)
+    in (isAbsolute(root))
     {
         _root = root;
-        _dop = dop;
         _hash = hash;
     }
 
@@ -317,7 +320,7 @@ struct BuildPaths
 
     @property string dop() const
     {
-        return _dop;
+        return buildPath(_root, ".dop");
     }
 
     @property string hash() const
@@ -327,22 +330,22 @@ struct BuildPaths
 
     @property string build() const
     {
-        return buildPath(_dop, _hash ~ "-build");
+        return buildPath(_root, ".dop", _hash ~ "-build");
     }
 
     @property string install() const
     {
-        return buildPath(_dop, _hash);
+        return buildPath(_root, ".dop", _hash);
     }
 
     @property string lock() const
     {
-        return buildPath(_dop, _hash ~ ".lock");
+        return buildPath(_root, ".dop", _hash ~ ".lock");
     }
 
     @property string state() const
     {
-        return buildPath(_dop, _hash ~ "-state.json");
+        return buildPath(_root, ".dop", _hash ~ "-state.json");
     }
 
     @property BuildStateFile stateFile() const

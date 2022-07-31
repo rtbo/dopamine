@@ -1,7 +1,6 @@
 module dopamine.cache;
 
 import dopamine.api.v1;
-import dopamine.cache_dirs;
 import dopamine.log;
 import dopamine.recipe;
 import dopamine.registry;
@@ -16,13 +15,15 @@ import std.file;
 import std.path;
 import std.range;
 
+public import dopamine.cache_dirs;
+
 /// A local package cache
 class PackageCache
 {
     private string _dir;
 
     /// Construct a cache in the specified directory.
-    /// [dir] wouldt typically be "~/.dop/cache" on Linux and "%LOCALAPPDATA%\dop\cache" on Windows.
+    /// [dir] would typically be "~/.dop/cache" on Linux and "%LOCALAPPDATA%\dop\cache" on Windows.
     this(string dir)
     {
         _dir = dir;
@@ -39,7 +40,7 @@ class PackageCache
     }
 
     /// Get a CachePackageDir for the package [packname]
-    CachePackageDir packageDir(string packname) const
+    CachePackageDir packageDir(string packname) const @safe
     {
         return CachePackageDir(buildPath(_dir, packname));
     }
@@ -57,7 +58,7 @@ class PackageCache
 
         if (revision)
         {
-            const revDir = packageDir(pack.name).versionDir(ver).revisionDir(revision);
+            const revDir = packageDir(pack.name).versionDir(ver).dopRevisionDir(revision);
             if (revDir && checkDopRecipeFile(revDir.dir))
             {
                 return revDir;
@@ -129,7 +130,7 @@ class PackageCache
 
         auto revDir = packageDir(pack.name)
             .versionDir(recipeRes.ver)
-            .revisionDir(recipeRes.revision);
+            .dopRevisionDir(recipeRes.revision);
 
         mkdirRecurse(revDir.versionDir.dir);
 

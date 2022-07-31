@@ -328,9 +328,9 @@ struct DepDAG
     ///               Default is [Yes.preFilter].
     ///
     /// Returns: a [DepDAG] ready for the next phase
-    static DepDAG prepare(RecipeDir rdir, Profile profile, DepService service,
+    static DepDAG prepare(RecipeDir rdir, Profile profile, DepServices services,
         const Heuristics heuristics = Heuristics.init, Flag!"preFilter" preFilter = Yes.preFilter) @system
-        in(rdir.recipe, "RecipeDir must have a recipe loaded")
+    in (rdir.recipe, "RecipeDir must have a recipe loaded")
     {
         import std.algorithm : canFind, filter, sort, uniq;
         import std.array : array;
@@ -339,6 +339,7 @@ struct DepDAG
 
         DagPack prepareDagPack(DepSpec dep)
         {
+            auto service = dep.dub ? services.dub : services.dop;
             auto allAvs = service.packAvailVersions(dep.name);
             auto avs = preFilter ?
                 allAvs
@@ -356,7 +357,7 @@ struct DepDAG
             }
             else
             {
-                pack = new DagPack(dep.name);
+                pack = new DagPack(dep);
                 packs[dep.name] = pack;
             }
 
@@ -364,7 +365,7 @@ struct DepDAG
             return pack;
         }
 
-        auto root = new DagPack(rdir.recipe.name);
+        auto root = DagPack.makeRoot(rdir.recipe);
         const aver = AvailVersion(rdir.recipe.ver, DepLocation.cache);
         root.allVersions = [aver];
 
@@ -388,6 +389,8 @@ struct DepDAG
 
             foreach (dep; deps)
             {
+                auto service = dep.dub ? services.dub : services.dop;
+
                 auto dp = prepareDagPack(dep);
                 DagEdge.create(node, dp, dep.spec);
 
@@ -861,10 +864,10 @@ struct DepDAG
 }
 
 /// Dependency DAG package : represent a package and gathers DAG nodes, each of which is a version of this package
-class DagPack
+final class DagPack
 {
-    /// Name of the package
-    string name;
+    /// The dependency specification that will resolve this package
+    DepSpec spec;
 
     /// The available versions of the package that are compatible with the current state of the DAG.
     AvailVersion[] allVersions;
@@ -879,9 +882,24 @@ class DagPack
     /// Edges towards packages that depends on this
     DagEdge[] upEdges;
 
-    package this(string name) @safe
+    package this(DepSpec spec) @safe
     {
-        this.name = name;
+        this.spec = spec;
+    }
+
+    package static DagPack makeRoot(const(Recipe) recipe)
+    {
+        return new DagPack(DepSpec(recipe.name, VersionSpec("*"), recipe.isDub));
+    }
+
+    @property string name() const @safe
+    {
+        return spec.name;
+    }
+
+    @property bool dub() const @safe
+    {
+        return spec.dub;
     }
 
     /// Get node that match with [ver]
@@ -929,7 +947,7 @@ class DagPack
 
 /// Dependency DAG node: represent a package with a specific version
 /// and a set of sub-dependencies.
-class DagNode
+final class DagNode
 {
     this(DagPack pack, AvailVersion aver) @safe
     {
@@ -946,6 +964,11 @@ class DagNode
     @property string name() const @safe
     {
         return pack.name;
+    }
+
+    @property bool dub() const @safe
+    {
+        return pack.dub;
     }
 
     /// The package version
@@ -1005,7 +1028,7 @@ class DagNode
 
 /// Dependency DAG edge : represent a dependency and its associated version requirement
 /// [up] has a dependency towards [down] with [spec]
-class DagEdge
+final class DagEdge
 {
     DagNode up;
     DagPack down;
@@ -1067,15 +1090,15 @@ unittest
     import std.array : array;
     import std.typecons : No, Yes;
 
-    auto service = MockDepService.withBase();
+    auto services = buildMockDepServices(testPackBase());
     auto profile = mockProfileLinux();
 
     // preferSystem (default): b is a leave
-    auto leaves = DepDAG.prepare(packE.recipe("1.0.0"), profile, service).collectLeaves();
+    auto leaves = DepDAG.prepare(packE.recipe("1.0.0"), profile, services).collectLeaves();
     assert(leaves.length == 2);
     assert(leaves.map!(l => l.name).canFind("a", "b"));
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, Heuristics.preferCache);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, Heuristics.preferCache);
 
     // preferCache: only a is a leave
     leaves = dag.collectLeaves();
@@ -1120,12 +1143,12 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto services = buildMockDepServices(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferSystem;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1144,12 +1167,12 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto services = buildMockDepServices(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferCache;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1168,12 +1191,12 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto services = buildMockDepServices(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferLocal;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1192,12 +1215,12 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto services = buildMockDepServices(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.pickHighest;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1217,15 +1240,15 @@ unittest
     import std.array : array;
     import std.typecons : No, Yes;
 
-    auto service = MockDepService.withBase();
+    auto services = buildMockDepServices(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferSystem;
 
-    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics, Yes.preFilter);
+    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics, Yes.preFilter);
     dag1.resolve();
 
-    auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), profile, service, heuristics, No.preFilter);
+    auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics, No.preFilter);
     dag2.resolve();
 
     static struct NodeData
@@ -1274,10 +1297,10 @@ unittest
     auto pack = TestPackage("a", [
             TestPackVersion("1.0.1", [], DepLocation.cache)
         ], [Lang.c]);
-    auto service = new MockDepService([]);
+    auto services = buildMockDepServices([]);
     auto profile = mockProfileLinux();
 
-    auto dag = DepDAG.prepare(pack.recipe("1.0.1"), profile, service);
+    auto dag = DepDAG.prepare(pack.recipe("1.0.1"), profile, services);
     dag.resolve();
 
     auto arr = dag.traverseTopDownResolved().array;
@@ -1295,11 +1318,11 @@ unittest
 {
     import std.exception : assertThrown;
 
-    auto service = MockDepService.withNotResolvableBase();
+    auto services = buildMockDepServices(testPackUnresolvable());
     auto profile = mockProfileLinux();
 
     auto recipe = packNotResolvable.recipe("1.0.0");
-    auto dag = DepDAG.prepare(recipe, profile, service);
+    auto dag = DepDAG.prepare(recipe, profile, services);
 
     assertThrown!UnresolvedDepException(dag.resolve());
 }
@@ -1309,11 +1332,11 @@ unittest
 {
     import std.file : write;
 
-    auto service = MockDepService.withBase();
+    auto services = buildMockDepServices(testPackBase());
     auto profile = mockProfileLinux();
 
     auto recipe = packE.recipe("1.0.0");
-    auto dag = DepDAG.prepare(recipe, profile, service);
+    auto dag = DepDAG.prepare(recipe, profile, services);
     dag.resolve();
 
     auto json = dag.toJson();
@@ -1440,6 +1463,8 @@ struct DepthFirstRange(alias getMore)
 // dfmt off
 version (unittest):
 
+import dopamine.dep.source;
+
 struct TestPackVersion
 {
     string ver;
@@ -1452,11 +1477,21 @@ struct TestPackVersion
     }
 }
 
+version (Windows)
+{
+    enum testPackDir = "C:\\DopTest";
+}
+else
+{
+    enum testPackDir = "/doptest";
+}
+
 struct TestPackage
 {
     string name;
     TestPackVersion[] nodes;
     Lang[] langs;
+    RecipeType type;
 
     RecipeDir recipe(string ver)
     {
@@ -1464,14 +1499,14 @@ struct TestPackage
         {
             if (n.ver == ver)
             {
-                return RecipeDir(new MockRecipe(name, Semver(ver), "1",  n.deps, langs), ".");
+                return RecipeDir(new MockRecipe(name, Semver(ver), type, "1",  n.deps, langs), testPackDir);
             }
         }
         assert(false, "wrong version");
     }
 }
 
-TestPackage[] buildTestPackBase()
+TestPackage[] testPackBase()
 {
     auto a = TestPackage(
         "a",
@@ -1565,7 +1600,7 @@ TestPackage packE = TestPackage(
     [Lang.d]
 );
 
-TestPackage[] buildNotResolvable()
+TestPackage[] testPackUnresolvable()
 {
     auto a = TestPackage(
         "a",
@@ -1631,45 +1666,82 @@ TestPackage packNotResolvable = TestPackage(
     [Lang.c],
 );
 
-/// A mock Dependency Service
-final class MockDepService : DepService
+/// A mock Dependency Source
+final class MockDepSource : DepSource
 {
     TestPackage[string] packs;
+    DepLocation loc;
 
-    this(TestPackage[] packs)
+    this (TestPackage[string] packs, DepLocation loc)
     {
-        foreach (p; packs)
+        this.packs = packs;
+        this.loc = loc;
+    }
+
+    Semver[] depAvailVersions(string name) @safe
+    {
+        auto pack = name in packs;
+        if (!pack)
+            return [];
+
+        Semver[] res;
+        foreach (n; pack.nodes)
         {
-            this.packs[p.name] = p;
+            if (n.loc == loc)
+            {
+                res ~= Semver(n.ver);
+            }
         }
+        return res;
     }
 
-    static DepService withBase()
+    bool hasPackage(string name, Semver ver, string rev) @safe
     {
-        return new MockDepService(buildTestPackBase());
+        import std.algorithm : canFind;
+
+        return depAvailVersions(name).canFind(ver);
     }
 
-    static DepService withNotResolvableBase()
-    {
-        return new MockDepService(buildNotResolvable());
-    }
-
-    override AvailVersion[] packAvailVersions(string packname) @trusted
-    {
-        import std.algorithm : map;
-        import std.array : array;
-
-        return packs[packname].nodes.map!(pv => pv.aver).array;
-    }
-
-    override RecipeDir packRecipe(string packname, const(AvailVersion) aver, string rev)
+    /// get the recipe of a package
+    RecipeDir depRecipe(string name, Semver ver, string rev = null) @system
     {
         import std.algorithm : find;
-        import std.range : front;
+        import std.range : empty, front;
 
-        TestPackage p = packs[packname];
-        TestPackVersion pv = p.nodes.find!(pv => pv.aver == aver).front;
+        auto pack = name in packs;
+        if (!pack)
+            return RecipeDir.init;
+
+        auto pvR = pack.nodes.find!(pv => pv.aver == AvailVersion(ver, loc));
+        if (pvR.empty)
+            return RecipeDir.init;
+
+        auto pv = pvR.front;
+
         const revision = rev ? rev : "1";
-        return RecipeDir(new MockRecipe(packname, aver.ver, revision, pv.deps, p.langs), ".");
+        return RecipeDir(new MockRecipe(name, ver, pack.type, revision, pv.deps, pack.langs), testPackDir);
     }
+}
+
+DepService buildMockDepService(TestPackage[] packs)
+{
+    import std.algorithm : map;
+    import std.array : assocArray;
+    import std.typecons : tuple;
+
+    TestPackage[string] aa = packs.map!(p => tuple(p.name, p)).assocArray;
+
+    return new DepService(
+        new MockDepSource(aa, DepLocation.system),
+        new MockDepSource(aa, DepLocation.cache),
+        new MockDepSource(aa, DepLocation.network),
+    );
+}
+
+DepServices buildMockDepServices(TestPackage[] packs)
+{
+    return DepServices(
+        buildMockDepService(packs),
+        buildMockDepService(packs),
+    );
 }

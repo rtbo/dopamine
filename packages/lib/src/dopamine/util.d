@@ -164,6 +164,7 @@ struct JsonStateFile(T)
         else
         {
             import std.datetime.systime : Clock;
+
             const now = Clock.currTime;
 
             setTimes(filename, now, now);
@@ -628,6 +629,67 @@ in (exists(src), src ~ " does not exist")
         assert(readLink(buildPath(dest, "link3.txt")) == "subdir/file4.txt");
         assert(readLink(buildPath(dest, "subdir", "link4.txt")) == "file4.txt");
         assert(readLink(buildPath(dest, "subdir", "link5.txt")) == "link4.txt");
+    }
+}
+
+struct PkgConfig
+{
+    struct Var
+    {
+        string name;
+        string value;
+    }
+
+    Var[] vars;
+
+    string name;
+    string ver;
+    string description;
+    string url;
+    string requires;
+    string requiresPriv;
+    string conflicts;
+    string cflags;
+    string libs;
+    string libsPriv;
+
+    void addVar(string name, string value)
+    {
+        vars ~= Var(name, value);
+    }
+
+    void writeToFile(string filename)
+    {
+        import std.exception : enforce;
+        import std.stdio : File;
+
+        auto f = File(filename, "w");
+
+        foreach (v; vars)
+        {
+            f.writefln!"%s=%s"(v.name, v.value);
+        }
+
+        f.writeln();
+
+        f.writefln!"Name: %s"(enforce(name, "PkgConfig needs a prefix"));
+        f.writefln!"Version: %s"(enforce(ver, "PkgConfig needs a version"));
+        if (description)
+            f.writefln!"Description: %s"(description);
+        if (url)
+            f.writefln!"URL: %s"(url);
+        if (requires)
+            f.writefln!"Requires: %s"(requires);
+        if (requiresPriv)
+            f.writefln!"Requires.private: %s"(requiresPriv);
+        if (conflicts)
+            f.writefln!"Conflicts: %s"(conflicts);
+        if (cflags)
+            f.writefln!"Cflags: %s"(cflags);
+        if (libs)
+            f.writefln!"Libs: %s"(libs);
+        if (libsPriv)
+            f.writefln!"Libs.private: %s"(libsPriv);
     }
 }
 

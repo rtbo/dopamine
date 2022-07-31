@@ -10,9 +10,11 @@ dop_src = files([
     'src/dopamine/cache.d',
     'src/dopamine/dep/build.d',
     'src/dopamine/dep/dag.d',
+    'src/dopamine/dep/dub.d',
     'src/dopamine/dep/lock.d',
     'src/dopamine/dep/service.d',
     'src/dopamine/dep/spec.d',
+    'src/dopamine/dep/source.d',
     'src/dopamine/ini.d',
     'src/dopamine/log.d',
     'src/dopamine/login.d',
@@ -24,6 +26,7 @@ dop_src = files([
     'src/dopamine/profile.d',
     'src/dopamine/recipe/dir.d',
     'src/dopamine/recipe/dop.d',
+    'src/dopamine/recipe/dub.d',
     'src/dopamine/recipe/package.d',
     'src/dopamine/registry.d',
     'src/dopamine/util.d',
@@ -32,7 +35,7 @@ dop_src = files([
 lua_d_versions = ['LUA_53', 'BindBC_Static']
 
 dop_inc = include_directories('src')
-dop_deps = [ lua_dep, dop_common_dep, jwt_dep, squiz_dep, vibed_data_dep ]
+dop_deps = [ lua_dep, dop_common_dep, jwt_dep, squiz_dep, vibed_data_dep, dub_dep ]
 dop_imp = include_directories('src/dopamine/lua')
 
 dop_lib = library('dopamine', dop_conf, dop_src,

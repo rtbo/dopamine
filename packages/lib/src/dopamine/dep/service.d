@@ -1,76 +1,26 @@
 module dopamine.dep.service;
 
+import dopamine.dep.dub;
+import dopamine.dep.source;
 import dopamine.api.v1;
 import dopamine.cache;
 import dopamine.log;
+import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.registry;
 import dopamine.semver;
 
-import std.typecons;
+import std.exception;
 import std.string;
-
-class DependencyException : Exception
-{
-    import std.exception : basicExceptionCtors;
-
-    mixin basicExceptionCtors;
-}
-
-class NoSuchPackageException : DependencyException
-{
-    string packname;
-
-    this(string packname, string file = __FILE__, size_t line = __LINE__) @safe
-    {
-        import std.format : format;
-
-        this.packname = packname;
-        super(format("No such package: %s", packname), file, line);
-    }
-}
-
-class NoSuchVersionException : DependencyException
-{
-    string packname;
-    const(Semver) ver;
-
-    this(string packname, const(Semver) ver,
-        string file = __FILE__, size_t line = __LINE__) @safe
-    {
-        import std.format : format;
-
-        this.packname = packname;
-        this.ver = ver;
-        super(format("No such package version: %s-%s", packname, ver), file, line);
-    }
-}
-
-class NoSuchRevisionException : DependencyException
-{
-    string packname;
-    const(Semver) ver;
-    string revision;
-
-    this(string packname, const(Semver) ver, string revision,
-        string file = __FILE__, size_t line = __LINE__) @safe
-    {
-        import std.format : format;
-
-        this.packname = packname;
-        this.ver = ver;
-        this.revision = revision;
-        super(format("No such package version: %s-%s/%s", packname, ver, revision), file, line);
-    }
-}
+import std.typecons;
 
 /// enum that describe the location of a dependency
-enum DepLocation
+enum DepLocation : uint
 {
-    system,
-    cache,
-    network,
+    system = 0,
+    cache = 1,
+    network = 2,
 }
 
 /// An available version of a package
@@ -107,8 +57,29 @@ struct AvailVersion
 /// the local cache of recipes and the remote registry.
 /// The service also caches new recipe locally and keep them in memory
 /// for fast access.
-interface DepService
+///
+/// This is a final class, but abstraction is provided by the DepSource
+/// interfaces. Dependency resolution (such as in dopamine.dep.dag) will
+/// typically use one DepService for regular dependencies and one
+/// for dub dependencies.
+final class DepService
 {
+    private DepSource[3] _sources;
+
+    /// in memory cache
+    private RecipeDir[string] _recipeMem;
+
+    /// Build a DepService that will operate over the 3 provided
+    /// sources, one for each of the `DepLocation` fields.
+    /// Each can be null, but at least one must be non-null.
+    this(DepSource system, DepSource cache, DepSource network)
+    {
+        assert(system || cache || network);
+        _sources[DepLocation.system] = system;
+        _sources[DepLocation.cache] = cache;
+        _sources[DepLocation.network] = network;
+    }
+
     /// Get the available versions of a package.
     /// If a version is available in several locations, multiple
     /// entries are returned.
@@ -118,110 +89,41 @@ interface DepService
     ///
     /// Returns: the list of versions available of the package
     ///
-    /// Throws: ServerDownException, NoSuchPackageException
-    AvailVersion[] packAvailVersions(string packname) @safe;
-
-    /// Get the recipe of a package in the specified version (and optional revision)
-    RecipeDir packRecipe(string packname, const(AvailVersion) aver, string rev = null) @system
-    in (aver.location != DepLocation.system, "System dependencies have no recipe!")
-    out(rdir; !rdir.recipe || rdir.recipe.revision.length);
-}
-
-/// Actual implementation of [DepService]
-final class DependencyService : DepService
-{
-    private PackageResource[string] _packMem;
-    private RecipeDir[string] _recipeMem;
-
-    private PackageCache _cache;
-    private Registry _registry;
-    private Flag!"system" _system;
-
-    private alias RecipeAndId = Tuple!(Recipe, string);
-
-    this(PackageCache cache, Registry registry, Flag!"system" system)
-    in (cache)
-    {
-        _cache = cache;
-        _registry = registry;
-        _system = system;
-    }
-
-    AvailVersion[] packAvailVersions(string packname) @trusted
-    {
-        import std.algorithm : sort;
-
-        AvailVersion[] vers = packAvailVersionsCache(packname);
-
-        if (_system)
-            vers ~= packAvailVersionsSystem(packname);
-
-        if (_registry)
-            vers ~= packAvailVersionsRegistry(packname);
-
-        sort(vers);
-        return vers;
-    }
-
-    private AvailVersion[] packAvailVersionsSystem(string packname) @safe
-    {
-        import std.process : execute, ProcessException;
-
-        try
-        {
-            const cmd = ["pkg-config", "--modversion", packname];
-            const result = execute(cmd);
-            if (result.status != 0)
-            {
-                return [];
-            }
-            return [AvailVersion(Semver(result.output.strip()), DepLocation.system)];
-        }
-        catch (ProcessException ex)
-        {
-            logWarningH(
-                "Could not execute %s. Skipping discovery of system dependencies.",
-                info("pkg-config")
-            );
-            _system = No.system;
-        }
-        return [];
-    }
-
-    private AvailVersion[] packAvailVersionsCache(string packname) @trusted
+    /// Throws: NoSystemDependencies, ServerDownException, NoSuchPackageException
+    AvailVersion[] packAvailVersions(string name) @safe
     {
         import std.algorithm : map, sort;
-        import std.array : array;
+        import std.array;
 
-        auto pdir = _cache.packageDir(packname);
-        if (!pdir)
-            return [];
+        AvailVersion[] vers;
 
-        auto vers = pdir.versionDirs()
-            .map!(vd => AvailVersion(Semver(vd.ver), DepLocation.cache))
-            .array;
-        vers.sort!((a, b) => a > b);
+        foreach (i, s; _sources)
+        {
+            const loc = cast(DepLocation) i;
+            if (s)
+            {
+                vers ~= s.depAvailVersions(name).map!(v => AvailVersion(v, loc)).array;
+            }
+        }
+
+        enforce(vers.length, new NoSuchPackageException(name));
+
+        (() @trusted => sort(vers))();
+
         return vers;
     }
 
-    private AvailVersion[] packAvailVersionsRegistry(string packname) @trusted
-    in (_registry)
-    {
-        import std.algorithm : map;
-        import std.array : array;
-        import std.exception : enforce;
-
-        auto pack = packagePayload(packname);
-        return pack.versions.map!(v => AvailVersion(Semver(v), DepLocation.network)).array;
-    }
-
-    RecipeDir packRecipe(string packname, const(AvailVersion) aver, string revision = null) @system
-    in (_registry || aver.location != DepLocation.network, "Network access is disabled")
-    in (aver.location != DepLocation.system, "System dependencies do not have recipe")
+    /// Get the recipe of a package in the specified version (and optional revision)
+    /// Throws: ServerDownException, NoSuchPackageException, NoSuchVersionException, NoSuchRevisionException
+    ///         or any exception thrown during recipe parsing
+    RecipeDir packRecipe(string name, const(AvailVersion) aver, string revision = null) @system
+    in (aver.location != DepLocation.system, "System dependencies have no recipe!")
+    in (_sources[aver.location], "No source for requested location")
+    out (rdir; rdir.recipe.isDub || rdir.recipe.revision.length)
     {
         if (revision)
         {
-            auto rdir = packRecipeMem(packname, aver.ver, revision);
+            auto rdir = packRecipeMem(name, aver.ver, revision);
             if (rdir.recipe)
             {
                 return rdir;
@@ -230,25 +132,17 @@ final class DependencyService : DepService
 
         RecipeDir rdir;
 
-        final switch (aver.location)
-        {
-        case DepLocation.cache:
-            rdir = packRecipeCache(packname, aver.ver, revision);
-            break;
-        case DepLocation.network:
-            rdir = packRecipeRegistry(packname, aver.ver, revision);
-            break;
-        case DepLocation.system:
-            assert(false);
-        }
+        bool inCache = _sources[DepLocation.cache].hasPackage(name, aver.ver, revision);
 
-        if (rdir.recipe)
-        {
-            memRecipe(rdir);
-            return rdir;
-        }
+        if (aver.location == DepLocation.network && inCache)
+            rdir = _sources[DepLocation.cache].depRecipe(name, aver.ver, revision);
+        else if (!inCache && _sources[DepLocation.network])
+            rdir = _sources[DepLocation.network].depRecipe(name, aver.ver, revision);
+        else
+            rdir = _sources[aver.location].depRecipe(name, aver.ver, revision);
 
-        throw verOrRevException(packname, aver.ver, revision);
+        memRecipe(rdir);
+        return rdir;
     }
 
     private void memRecipe(RecipeDir rdir)
@@ -258,93 +152,15 @@ final class DependencyService : DepService
         _recipeMem[id] = rdir;
     }
 
-    private RecipeDir packRecipeMem(string packname, const ref Semver ver, string revision)
-    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
+    private RecipeDir packRecipeMem(string name, const ref Semver ver, string revision)
+    out (rdir; !rdir.recipe || rdir.recipe.revision.length)
     {
-        const id = depId(packname, ver, revision);
+        const id = depId(name, ver, revision);
 
         if (auto p = id in _recipeMem)
             return *p;
 
         return RecipeDir.init;
-    }
-
-    private RecipeDir packRecipeCache(string packname, const ref Semver ver, string revision)
-    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
-    {
-        if (!revision)
-            return findRecipeCache(packname, ver);
-
-        const dir = _cache.packageDir(packname)
-                .versionDir(ver)
-                .revisionDir(revision);
-
-        if (!dir)
-            return RecipeDir.init;
-
-        auto rdir = RecipeDir.fromDir(dir.dir);
-        if (!rdir.recipe)
-        {
-            logWarningH("Cached package revision %s has no recipe!", info(rdir.root));
-            return RecipeDir.init;
-        }
-
-        rdir.recipe.revision = revision;
-
-        return rdir;
-    }
-
-    private RecipeDir findRecipeCache(string packname, const ref Semver ver)
-    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
-    {
-        import std.file : dirEntries, exists, SpanMode;
-        import std.path : baseName;
-        import std.stdio : File, LockType;
-
-        const vDir = _cache.packageDir(packname)
-            .versionDir(ver);
-
-        if (!vDir)
-            return RecipeDir.init;
-
-        foreach (revDir; vDir.revisionDirs())
-        {
-            const recFile = checkDopRecipeFile(revDir.dir);
-            if (recFile)
-            {
-                const revLock = revDir.lockFile;
-                if (!exists(revLock))
-                {
-                    logWarning(
-                        "%s %s-%s/%s was cached without lock file",
-                        warning("Warning:"), packname, ver, baseName(revDir.dir)
-                    );
-                    auto f = File(revLock, "w");
-                    f.close();
-                }
-
-                auto lock = File(revLock, "r");
-                lock.lock(LockType.read);
-
-                auto recipe = parseDopRecipe(recFile, revDir.revision);
-                return RecipeDir(recipe, revDir.dir);
-            }
-        }
-
-        return RecipeDir.init;
-    }
-
-    private RecipeDir packRecipeRegistry(string packname, const ref Semver ver, string revision = null)
-    in (_registry)
-    out(rdir; !rdir.recipe || rdir.recipe.revision.length)
-    {
-        auto pack = packagePayload(packname);
-        auto revDir = _cache.cacheRecipe(_registry, pack, ver.toString(), revision);
-
-        auto rdir = RecipeDir.fromDir(revDir.dir);
-        assert(rdir.recipe);
-        rdir.recipe.revision = revDir.revision;
-        return rdir;
     }
 
     private string depId(string packname, Semver ver, string revision) @safe
@@ -353,28 +169,78 @@ final class DependencyService : DepService
 
         import std.format : format;
 
-        return format("%s-%s/%s", packname, ver, revision);
+        return format("%s/%s/%s", packname, ver, revision);
     }
 
-    private DependencyException verOrRevException(string packname, const ref Semver ver, string revision)
+    private noreturn verOrRevException(string packname, const ref Semver ver, string revision)
     {
-        return revision ?
+        throw revision ?
             new NoSuchRevisionException(packname, ver, revision) : new NoSuchVersionException(packname, ver);
     }
+}
 
-    private PackageResource packagePayload(string packname) @trusted
-    in (_registry)
+DepService buildDepService(Flag!"system" enableSystem,
+    PackageCache dopCache,
+    Registry registry)
+in (dopCache, "Cache is mandatory")
+{
+    DepSource system;
+    DepSource cache;
+    DepSource network;
+
+    if (enableSystem)
+        system = new SystemDepSource();
+
+    cache = new DopCacheDepSource(dopCache);
+
+    if (registry)
     {
-        import std.exception : enforce;
-
-        if (auto p = packname in _packMem)
-            return *p;
-
-        auto req = GetPackage(packname);
-        auto resp = _registry.sendRequest(req);
-        enforce(resp.code != 404, new NoSuchPackageException(packname));
-        auto pack = resp.payload;
-        _packMem[packname] = pack;
-        return pack;
+        network = new DopRegistryDepSource(registry, dopCache);
     }
+
+    return new DepService(system, cache, network);
+}
+
+DepService buildDepService(Flag!"system" enableSystem,
+    string cacheDir = homeCacheDir(),
+    string registryUrl = dopamine.registry.registryUrl())
+in (cacheDir, "Cache directory is mandatory")
+{
+    auto cache = new PackageCache(cacheDir);
+    Registry registry;
+    if (registryUrl)
+        registry = new Registry(registryUrl);
+    return buildDepService(enableSystem, cache, registry);
+}
+
+DepService buildDubDepService(DubPackageCache dubCache, DubRegistry registry)
+in (dubCache, "Cache is mandatory")
+{
+    DepSource cache;
+    DepSource network;
+
+    cache = new DubCacheDepSource(dubCache);
+
+    if (registry)
+    {
+        network = new DubRegistryDepSource(registry, dubCache);
+    }
+
+    return new DepService(null, cache, network);
+}
+
+DepService buildDubDepService(string cacheDir = homeDubCacheDir(), string registryUrl = dubRegistryUrl)
+in (cacheDir, "Cache directory is mandatory")
+{
+    auto cache = new DubPackageCache(cacheDir);
+    DubRegistry registry;
+    if (registryUrl)
+        registry = new DubRegistry(registryUrl);
+    return buildDubDepService(cache, registry);
+}
+
+struct DepServices
+{
+    DepService dop;
+    DepService dub;
 }

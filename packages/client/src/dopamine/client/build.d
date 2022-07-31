@@ -42,7 +42,6 @@ string buildPackage(
     const(BuildConfig) config,
     DepInfo[string] depInfos,
     string stageDest = null)
-in (rdir.isAbsolute)
 {
     const srcDir = enforceSourceReady(rdir);
 
@@ -52,17 +51,12 @@ in (rdir.isAbsolute)
     const cwd = getcwd();
 
     const root = absolutePath(rdir.root, cwd);
-    const src = absolutePath(srcDir, rdir.root);
-    const bdirs = BuildDirs(root, src, stageDest ? stageDest : bPaths.install);
+    const src = rdir.path(srcDir);
+    const bdirs = BuildDirs(root, src, bPaths.build, stageDest ? stageDest : bPaths.install);
 
     mkdirRecurse(bPaths.build);
 
-    {
-        chdir(bPaths.build);
-        scope (success)
-            chdir(cwd);
-        rdir.recipe.build(bdirs, config, depInfos);
-    }
+    rdir.recipe.build(bdirs, config, depInfos);
 
     BuildState state = bPaths.stateFile.read();
     state.buildTime = Clock.currTime;
@@ -92,12 +86,12 @@ int buildMain(string[] args)
         return 0;
     }
 
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
     auto lock = acquireRecipeLockFile(rdir);
 
     auto recipe = rdir.recipe;
 
-    enforce(recipe.isPackage, new ErrorLogException(
+    enforce(!recipe.isLight, new ErrorLogException(
             "Light recipes can't be built by dopamine"
     ));
 
@@ -105,18 +99,18 @@ int buildMain(string[] args)
 
     const profile = enforceProfileReady(rdir, profileName);
 
-    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
+    if (rdir.recipe.isDop)
+        logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto cache = new PackageCache(homeCacheDir);
-        auto registry = noNetwork ? null : new Registry();
-        const system = Yes.system;
-
-        auto service = new DependencyService(cache, registry, system);
-        depInfos = buildDependencies(dag, recipe, profile, service);
+        auto services = DepServices(
+            buildDepService(Yes.system, homeCacheDir(), registryUrl()),
+            buildDubDepService(),
+        );
+        depInfos = buildDependencies(dag, recipe, profile, services);
     }
 
     const config = BuildConfig(profile.subset(recipe.langs));
@@ -145,7 +139,7 @@ int buildMain(string[] args)
 
     destroy(lock);
 
-    const dir = buildPackage(rdir.asAbsolute(), config, depInfos);
+    const dir = buildPackage(rdir, config, depInfos);
 
     logInfo("%s: %s - %s", info("Build"), success("OK"), dir);
 

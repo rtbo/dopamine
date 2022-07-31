@@ -55,7 +55,7 @@ in (cvs != Cvs.none)
     return res.output.strip().length == 0;
 }
 
-RecipeDir enforceRecipe(string root)
+RecipeDir enforceRecipe(string root = getcwd())
 {
     auto rdir = enforce(
         RecipeDir.fromDir(root), new ErrorLogException(
@@ -65,6 +65,8 @@ RecipeDir enforceRecipe(string root)
     );
     if (rdir.recipe.isLight)
         logInfo("%s: %s", info("Recipe"), success("OK"));
+    else if (rdir.recipe.isDub)
+        logInfo("%s: %s - %s %s", info("Recipe"), success("OK"), rdir.recipe.name, color(Color.cyan, "[dub]"));
     else
         logInfo("%s: %s - %s/%s", info("Recipe"), success("OK"), rdir.recipe.name, rdir.recipe.ver);
 

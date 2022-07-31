@@ -9,9 +9,12 @@ import std.exception;
 
 int revisionMain(string[] args)
 {
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
 
-    enforce(rdir.recipe.isPackage, new ErrorLogException(
+    enforce(!rdir.recipe.isDub, new ErrorLogException(
+            "Dub packages do not have revision"
+    ));
+    enforce(!rdir.recipe.isLight, new ErrorLogException(
             "Light recipes do not have revision"
     ));
 

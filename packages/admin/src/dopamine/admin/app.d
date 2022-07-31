@@ -224,7 +224,7 @@ void populateRegistry(PgConn db, string regDir)
         bool foundRecipe;
         verLoop: foreach (vdir; pkg.versionDirs)
         {
-            foreach (rdir; vdir.revisionDirs)
+            foreach (rdir; vdir.dopRevisionDirs)
             {
                 if (exists(rdir.recipeFile))
                 {
@@ -250,7 +250,7 @@ void populateRegistry(PgConn db, string regDir)
         writefln("Created package %s", pkg.name);
 
         foreach (vdir; pkg.versionDirs)
-            foreach (rdir; vdir.revisionDirs)
+            foreach (rdir; vdir.dopRevisionDirs)
             {
                 if (!exists(rdir.recipeFile))
                     continue;

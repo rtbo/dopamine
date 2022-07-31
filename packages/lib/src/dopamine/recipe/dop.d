@@ -12,13 +12,14 @@ import dopamine.semver;
 import dopamine.c.lua;
 
 import std.exception;
+import std.file;
 import std.path;
 import std.string;
 
 /// Parse a dopamine recipe file.
 /// A revision can be specified directly if it is known
 /// e.g. loading from a cache directory.
-DopRecipe parseDopRecipe(string filename, string revision)
+DopRecipe parseDopRecipe(string filename, string root, string revision)
 {
     auto L = luaL_newstate();
     luaL_openlibs(L);
@@ -36,7 +37,7 @@ DopRecipe parseDopRecipe(string filename, string revision)
         "Recipes should not return anything"
     );
 
-    return new DopRecipe(L, revision);
+    return new DopRecipe(L, root, revision);
 }
 
 /// The Dopamine Lua based recipe type.
@@ -60,15 +61,18 @@ final class DopRecipe : Recipe
     string _inTreeSrc;
     bool _stageFalse;
 
-    RecipeType _type;
+    string _rootDir;
+    bool _isLight;
     string _revision;
     string[] _allFiles;
 
     lua_State* L;
 
-    private this(lua_State* L, string revision)
+    private this(lua_State* L, string rootDir, string revision)
+    in (isAbsolute(rootDir))
     {
         this.L = L;
+        _rootDir = buildNormalizedPath(rootDir);
 
         // start with the build function because it determines whether
         // it is a light recipe or package recipe
@@ -81,10 +85,9 @@ final class DopRecipe : Recipe
             {
             case LUA_TFUNCTION:
                 _funcs ~= "build";
-                _type = RecipeType.pack;
                 break;
             case LUA_TNIL:
-                _type = RecipeType.light;
+                _isLight = true;
                 break;
             default:
                 throw new Exception("Invalid 'build' field: expected a function");
@@ -113,7 +116,7 @@ final class DopRecipe : Recipe
                 break;
             case LUA_TNIL:
                 enforce(
-                    _type == RecipeType.pack,
+                    !_isLight,
                     "Light recipe without dependency"
                 );
                 break;
@@ -122,7 +125,7 @@ final class DopRecipe : Recipe
             }
         }
 
-        if (_type == RecipeType.pack)
+        if (!_isLight)
         {
             _name = enforce(
                 luaGetGlobal!string(L, "name", null),
@@ -239,7 +242,12 @@ final class DopRecipe : Recipe
 
     @property RecipeType type() const @safe
     {
-        return _type;
+        return RecipeType.dop;
+    }
+
+    @property bool isLight() const @safe
+    {
+        return _isLight;
     }
 
     @property string name() const @safe
@@ -286,6 +294,11 @@ final class DopRecipe : Recipe
 
         luaPushProfile(L, profile);
 
+        const cwd = getcwd();
+        chdir(_rootDir);
+        scope(exit)
+            chdir(cwd);
+
         if (lua_pcall(L, nargs, /* nresults = */ 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot get dependencies: " ~ luaPop!string(L));
@@ -313,6 +326,11 @@ final class DopRecipe : Recipe
             "function expected for 'include'"
         );
 
+        const cwd = getcwd();
+        chdir(_rootDir);
+        scope(exit)
+            chdir(cwd);
+
         if (lua_pcall(L, 0, 1, 0) != LUA_OK)
         {
             throw new Exception("Cannot get files included with recipe: " ~ luaPop!string(L));
@@ -329,13 +347,17 @@ final class DopRecipe : Recipe
     }
 
     string source() @system
-    in (isPackage, "Light recipes do not have source")
     {
         if (_inTreeSrc)
             return _inTreeSrc;
 
         lua_getglobal(L, "source");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a source function");
+
+        const cwd = getcwd();
+        chdir(_rootDir);
+        scope(exit)
+            chdir(cwd);
 
         if (lua_pcall(L, /* nargs = */ 0, /* nresults = */ 1, 0) != LUA_OK)
         {
@@ -346,14 +368,20 @@ final class DopRecipe : Recipe
     }
 
     void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
-    in (isPackage, "Light recipes do not build")
     {
+        assert(buildNormalizedPath(dirs.root) == buildNormalizedPath(_rootDir));
+
         lua_getglobal(L, "build");
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
         pushBuildDirs(L, dirs);
         pushConfig(L, config);
         pushDepInfos(L, depInfos);
+
+        const cwd = getcwd();
+        chdir(dirs.build);
+        scope(exit)
+            chdir(cwd);
 
         if (lua_pcall(L, /* nargs = */ 3, /* nresults = */ 0, 0) != LUA_OK)
         {
@@ -367,15 +395,23 @@ final class DopRecipe : Recipe
     }
 
     void stage(string src, string dest) @system
+    in (isAbsolute(src) && isAbsolute(dest))
     {
         import dopamine.util : installRecurse;
-        import std.file : chdir, getcwd;
+        import std.string : startsWith;
+
+        assert(buildNormalizedPath(src).startsWith(_rootDir));
 
         lua_getglobal(L, "stage");
         if (lua_type(L, -1) == LUA_TFUNCTION)
         {
             luaPush(L, src);
             luaPush(L, dest);
+
+            const cwd = getcwd();
+            chdir(src);
+            scope(exit)
+                chdir(cwd);
 
             if (lua_pcall(L, 2, 0, 0) != LUA_OK)
             {
@@ -431,9 +467,10 @@ DepSpec[] readDependencies(lua_State* L) @trusted
             break;
         case LUA_TTABLE:
             {
-                const aa = luaReadStringDict(L, -1);
-                dep.spec = VersionSpec(enforce(aa["version"],
+                const ver = luaGetTable!string(L, -1, "version", null);
+                dep.spec = VersionSpec(enforce(ver,
                         format("'version' not specified for '%s' dependency", dep.name)));
+                dep.dub = luaGetTable!bool(L, -1, "dub", false);
                 break;
             }
         default:
@@ -452,6 +489,7 @@ void pushBuildDirs(lua_State* L, BuildDirs dirs) @trusted
     const ind = lua_gettop(L);
     luaSetTable(L, ind, "root", dirs.root);
     luaSetTable(L, ind, "src", dirs.src);
+    luaSetTable(L, ind, "build", dirs.build);
     luaSetTable(L, ind, "install", dirs.install);
 }
 

@@ -47,11 +47,6 @@ in(isAbsolute(absDest))
 
     enforceBuildReady(rdir, buildId);
 
-    const cwd = getcwd();
-    chdir(rdir.root);
-    scope(exit)
-        chdir(cwd);
-
     rdir.recipe.stage(bPaths.install, absDest);
 }
 
@@ -76,7 +71,7 @@ int stageMain(string[] args)
     const dest = args[1];
     const absDest = absolutePath(dest);
 
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
     auto lock = acquireRecipeLockFile(rdir);
 
     auto recipe = rdir.recipe;
@@ -85,23 +80,24 @@ int stageMain(string[] args)
 
     auto profile = enforceProfileReady(rdir, profileName);
 
-    logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
+    if (rdir.recipe.isDop)
+        logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
     DepInfo[string] depInfos;
 
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto cache = new PackageCache(homeCacheDir);
-        // FIXME: system should be serialized with DAG.
-        const system = Yes.system;
+        auto services = DepServices(
+            buildDepService(Yes.system, homeCacheDir(), null),
+            buildDubDepService(homeDubCacheDir(), null),
+        );
 
-        auto service = new DependencyService(cache, null, system);
-
-        depInfos = collectDepInfos(dag, recipe, profile, service, absDest);
+        depInfos = collectDepInfos(dag, recipe, profile, services, absDest);
 
         foreach (dn; dag.traverseTopDownResolved())
         {
+            auto service = dn.dub ? services.dub : services.dop;
             auto drdir = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
             auto dprof = profile.subset(drdir.recipe.langs);
             stagePackage(drdir, dprof, absDest, depInfos);

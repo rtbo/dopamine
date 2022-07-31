@@ -3,6 +3,7 @@ subdir('common')
 subdir('jwt')
 
 if get_option('enable_client')
+    subdir('dub')
     subdir('lib')
     subdir('client')
 endif

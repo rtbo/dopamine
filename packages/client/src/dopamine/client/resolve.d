@@ -67,7 +67,7 @@ int resolveMain(string[] args)
         return 0;
     }
 
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
     auto recipe = rdir.recipe;
 
     if (!recipe.hasDependencies)
@@ -92,11 +92,13 @@ int resolveMain(string[] args)
         );
     }
 
+    const system = noSystem ? No.system : Yes.system;
     auto cache = new PackageCache(homeCacheDir);
     auto registry = noNetwork ? null : new Registry();
-    const system = noSystem ? No.system : Yes.system;
-
-    auto service = new DependencyService(cache, registry, system);
+    auto services = DepServices(
+        buildDepService(system, cache, registry),
+        buildDubDepService(),
+    );
 
     Heuristics heuristics;
     heuristics.mode = heuristicsMode(preferSystem, preferCache, preferLocal, pickHighest);
@@ -105,7 +107,7 @@ int resolveMain(string[] args)
 
     try
     {
-        auto dag = DepDAG.prepare(rdir, profile, service, heuristics);
+        auto dag = DepDAG.prepare(rdir, profile, services, heuristics);
         dag.resolve();
 
         auto json = dag.toJson();

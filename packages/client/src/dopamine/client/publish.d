@@ -56,30 +56,22 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
 
-    const cwd = getcwd();
-    scope (exit)
-        chdir(cwd);
-
-    chdir(rdir.root);
-
     recipe.revision = revision;
 
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
-        auto cache = new PackageCache(cacheDir);
-        auto registry = new Registry();
-        auto service = new DependencyService(cache, registry, No.system);
+        auto services = DepServices(buildDepService(No.system), buildDubDepService());
         Heuristics heuristics;
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;
 
-        auto dag = DepDAG.prepare(rdir, profile, service, heuristics);
+        auto dag = DepDAG.prepare(rdir, profile, services, heuristics);
         dag.resolve();
         auto json = dag.toJson();
         write(rdir.depsLockFile, json.toPrettyString());
 
-        depInfos = buildDependencies(dag, recipe, profile, service);
+        depInfos = buildDependencies(dag, recipe, profile, services);
     }
 
     if (!recipe.inTreeSrc)
@@ -90,13 +82,9 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
     const buildId = BuildId(recipe, config);
     const bPaths = rdir.buildPaths(buildId);
 
-    const root = absolutePath(rdir.root, cwd);
-    const src = absolutePath(srcDir, rdir.root);
-    const bdirs = BuildDirs(root, src, bPaths.install);
+    const bdirs = BuildDirs(rdir.root, rdir.path(srcDir), bPaths.build, bPaths.install);
 
     mkdirRecurse(bPaths.build);
-
-    chdir(bPaths.build);
 
     logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
     recipe.build(bdirs, config, depInfos);
@@ -121,18 +109,20 @@ int publishMain(string[] args)
         return 0;
     }
 
-    auto rdir = enforceRecipe(".");
+    auto rdir = enforceRecipe();
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
-    enforce(recipe.isPackage, new ErrorLogException(
+
+    enforce(!recipe.isDub, new ErrorLogException(
+        "Dub packages can't be published to Dopamine registry"
+    ));
+    enforce(!recipe.isLight, new ErrorLogException(
             "Light recipes can't be published"
     ));
 
     auto profile = enforceProfileReady(rdir, profileName);
 
-    const absRdir = buildNormalizedPath(absolutePath(rdir.root));
-
-    const cvs = getCvs(absRdir);
+    const cvs = getCvs(rdir.root);
     if (!skipCvsClean)
     {
         enforce(
@@ -143,7 +133,7 @@ int publishMain(string[] args)
         ),
         );
         enforce(
-            isRepoClean(cvs, absRdir),
+            isRepoClean(cvs, rdir.root),
             new ErrorLogException(
                 "%s repo isn't clean. By default, %s is only possible with clean repo.\n" ~
                 "Run with %s to skip this check.", info(cvs), info("publish"), info(
@@ -174,7 +164,7 @@ int publishMain(string[] args)
 
     rdir.getAllRecipeFiles()
         .tee!(f => logInfo("    Including %s", info(f)))
-        .map!(f => fileEntry(f, absRdir))
+        .map!(f => fileEntry(f, rdir.root))
         .boxTarXz()
         .tee(&dig)
         .writeBinaryFile(archivePath);

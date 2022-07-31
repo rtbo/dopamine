@@ -6,6 +6,7 @@ package:
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.dep.spec;
+import dopamine.recipe : DepSpec;
 import dopamine.semver;
 
 import std.conv;
@@ -48,6 +49,8 @@ private JSONValue jsonToDagV1(ref DepDAG dag,
         JSONValue[string] packDict;
 
         packDict["name"] = pack.name;
+        packDict["spec"] = pack.spec.spec.toString();
+        packDict["dub"] = pack.dub;
 
         JSONValue[] vers;
 
@@ -115,6 +118,23 @@ DepDAG jsonToDag(JSONValue json)
     return jsonToDagV1(json);
 }
 
+private T safeJsonGet(T)(JSONValue val, T def=T.init)
+{
+    static if (is(T == string))
+    {
+        if (val.type != JSONType.string)
+            return def;
+        return val.str;
+    }
+    else static if (is(T == bool))
+    {
+        if (val.type != JSONType.true_ && val.type != JSONType.false_)
+            return def;
+        return val.boolean;
+    }
+    else static assert(false, "unimplemented type: " ~ T.stringof);
+}
+
 /// Deserialize a dependency DAG from JSON
 private DepDAG jsonToDagV1(JSONValue json)
 {
@@ -142,7 +162,11 @@ private DepDAG jsonToDagV1(JSONValue json)
 
     foreach (jpack; json["packages"].array)
     {
-        DagPack p = new DagPack(jpack["name"].str);
+        const name = jpack["name"].str;
+        const spec = safeJsonGet!string(jpack["spec"]);
+        const dub = safeJsonGet!bool(jpack["dub"]);
+
+        DagPack p = new DagPack(DepSpec(name, VersionSpec(spec), dub));
 
         AvailVersion[] allVers;
         DagNode[] nodes;

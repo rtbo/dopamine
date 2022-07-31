@@ -12,15 +12,16 @@ import std.file;
 import std.path;
 
 DepInfo[string] collectDepInfos(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepService service, string stageDest=null)
+    const(Profile) profile, DepServices services, string stageDest=null)
 in (dag.resolved)
 in (!stageDest || isAbsolute(stageDest))
 {
-    const langs = collectLangs(dag, service);
+    const langs = collectLangs(dag, services);
     enforceHasLangs(profile, langs, recipe);
 
     foreach (depNode; dag.traverseTopDownResolved())
     {
+        auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.langs);
         const conf = BuildConfig(prof);
@@ -34,7 +35,7 @@ in (!stageDest || isAbsolute(stageDest))
 }
 
 DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepService service, string stageDest=null)
+    const(Profile) profile, DepServices services, string stageDest=null)
 in (dag.resolved)
 in (!stageDest || isAbsolute(stageDest))
 {
@@ -42,22 +43,19 @@ in (!stageDest || isAbsolute(stageDest))
     import std.datetime : Clock;
     import std.format : format;
 
-    const langs = collectLangs(dag, service);
+    const langs = collectLangs(dag, services);
     enforceHasLangs(profile, langs, recipe);
 
     const maxLen = dag.traverseTopDownResolved()
         .map!(dn => dn.pack.name.length + dn.ver.toString().length + 1)
         .maxElement();
 
-    const cwd = getcwd();
-    scope(exit)
-        chdir(cwd);
-
     foreach (depNode; dag.traverseBottomUpResolved())
     {
         if (depNode.location == DepLocation.system)
             continue;
 
+        auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.langs);
         const conf = BuildConfig(prof);
@@ -66,8 +64,6 @@ in (!stageDest || isAbsolute(stageDest))
 
         const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
         const packNameHead = format("%*s", maxLen, packHumanName);
-
-        chdir(rdir.root);
 
         mkdirRecurse(rdir.dopPath());
 
@@ -90,10 +86,9 @@ in (!stageDest || isAbsolute(stageDest))
             mkdirRecurse(bPaths.build);
 
             auto depInfos = collectNodeDepInfos(depNode);
-            const bd = BuildDirs(rdir.root, srcDir, stageDest ? stageDest : bPaths.install);
+            const bd = BuildDirs(rdir.root, srcDir, bPaths.build, stageDest ? stageDest : bPaths.install);
             auto state = bPaths.stateFile.read();
 
-            chdir(bPaths.build);
             rdir.recipe.build(bd, conf, depInfos);
 
             state.buildTime = Clock.currTime;
@@ -136,7 +131,7 @@ in (node.isResolved)
     return res;
 }
 
-private Lang[] collectLangs(DepDAG dag, DepService service)
+private Lang[] collectLangs(DepDAG dag, DepServices services)
 {
     import std.algorithm : canFind, sort;
 
@@ -147,6 +142,7 @@ private Lang[] collectLangs(DepDAG dag, DepService service)
         if (depNode.location == DepLocation.system)
             continue;
 
+        auto service = depNode.dub ? services.dub : services.dop;
         auto drdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         foreach (l; drdir.recipe.langs)
         {
