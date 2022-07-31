@@ -22,14 +22,14 @@ struct CachePackageDir
         return dirName(_dir);
     }
 
-    CacheVersionDir versionDir(string ver)
+    CacheVersionDir versionDir(string ver) const
     in (Semver.isValid(ver))
     {
         const verDir = buildPath(_dir, ver);
         return CacheVersionDir(verDir);
     }
 
-    CacheVersionDir versionDir(Semver ver)
+    CacheVersionDir versionDir(Semver ver) const
     {
         return versionDir(ver.toString());
     }
@@ -180,7 +180,7 @@ private mixin template CacheDir()
         return this.exists;
     }
 
-    string path(Args...)(Args args)
+    string path(Args...)(Args args) const
     {
         return buildPath(dir, args);
     }
