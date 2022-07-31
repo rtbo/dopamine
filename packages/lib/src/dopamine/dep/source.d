@@ -77,7 +77,7 @@ class NoSuchRevisionException : DependencyException
 
         this.ver = ver;
         this.revision = revision;
-        super(name, format("No such package version: %s-%s/%s", name, ver, revision), null, file, line);
+        super(name, format("No such package version: %s/%s/%s", name, ver, revision), null, file, line);
     }
 }
 
@@ -89,6 +89,9 @@ interface DepSource
     /// Returns: the versions available, or [] if none was found
     /// Throws: NoSystemDependencies
     Semver[] depAvailVersions(string name) @safe;
+
+    /// Check if package is present in specified version/revision
+    bool hasPackage(string name, Semver ver, string revision = null) @safe;
 
     /// Get the recipe of a package
     /// Returns: The RecipeDir with parsed recipe
@@ -116,6 +119,24 @@ final class SystemDepSource : DepSource
         catch (ProcessException ex)
         {
             throw new NoSystemDependencies(name, "Could not execute pkg-config", ex);
+        }
+    }
+
+    bool hasPackage(string name, Semver ver, string revision) @safe
+    {
+        import std.process : execute, ProcessException;
+
+        assert(!revision, "System dependencies do not have revision");
+
+        try
+        {
+            const cmd = ["pkg-config", "--modversion", name];
+            const result = execute(cmd);
+            return result.status == 0 && result.output.strip() == ver;
+        }
+        catch (ProcessException ex)
+        {
+            return false;
         }
     }
 
@@ -148,9 +169,24 @@ final class DopCacheDepSource : DepSource
         return vers;
     }
 
+    bool hasPackage(string name, Semver ver, string revision) @safe
+    {
+        const vDir = _cache.packageDir(name).versionDir(ver);
+        if (!vDir.exists)
+            return false;
+
+        if (!revision)
+            revision = findRecipeRevision(name, ver);
+
+        const revDir = vDir.dopRevisionDir(revision);
+        return checkDopRecipeFile(revDir.dir).length > 0;
+    }
+
     /// get the recipe of a package
     RecipeDir depRecipe(string name, Semver ver, string revision = null)
     {
+        import std.stdio : File, LockType;
+
         const pDir = _cache.packageDir(name);
         enforce(pDir.exists, new NoSuchPackageException(name));
 
@@ -158,28 +194,34 @@ final class DopCacheDepSource : DepSource
         enforce(vDir.exists, new NoSuchVersionException(name, ver));
 
         if (!revision)
-            return findRecipeRevision(name, ver);
+            revision = findRecipeRevision(name, ver);
+
+        enforce(revision, new NoSuchVersionException(name, ver));
 
         const revDir = vDir.dopRevisionDir(revision);
-        enforce(revDir.exists, new NoSuchRevisionException(name, ver, revision));
+        const recFile = checkDopRecipeFile(revDir.dir);
+        enforce(recFile, new NoSuchRevisionException(name, ver, revision));
 
-        auto rdir = RecipeDir.fromDir(revDir.dir);
-        if (!rdir.recipe)
+        const revLock = revDir.lockFile;
+        if (!exists(revLock))
         {
-            logWarningH("Cached package revision %s has no recipe!", info(rdir.root));
-            return RecipeDir.init;
+            logWarningH(
+                "%s/%s/%s was cached without lock file",
+                name, ver, revision
+            );
+            auto f = File(revLock, "w");
+            f.close();
         }
 
-        rdir.recipe.revision = revision;
+        auto lock = File(revLock, "r");
+        lock.lock(LockType.read);
 
-        return rdir;
+        auto recipe = parseDopRecipe(recFile, revDir.dir, revDir.revision);
+        return RecipeDir(recipe, revDir.dir);
     }
 
-    private RecipeDir findRecipeRevision(string name, Semver ver)
-    out (rdir; !rdir.recipe || rdir.recipe.revision.length)
+    private string findRecipeRevision(string name, Semver ver) @trusted
     {
-        import std.stdio : File, LockType;
-
         const vDir = _cache.packageDir(name).versionDir(ver);
         assert(vDir.exists);
 
@@ -187,27 +229,10 @@ final class DopCacheDepSource : DepSource
         {
             const recFile = checkDopRecipeFile(revDir.dir);
             if (recFile)
-            {
-                const revLock = revDir.lockFile;
-                if (!exists(revLock))
-                {
-                    logWarning(
-                        "%s %s/%s/%s was cached without lock file",
-                        warning("Warning:"), name, ver, baseName(revDir.dir)
-                    );
-                    auto f = File(revLock, "w");
-                    f.close();
-                }
-
-                auto lock = File(revLock, "r");
-                lock.lock(LockType.read);
-
-                auto recipe = parseDopRecipe(recFile, revDir.dir, revDir.revision);
-                return RecipeDir(recipe, revDir.dir);
-            }
+                return revDir.revision;
         }
 
-        throw new NoSuchVersionException(name, ver);
+        return null;
     }
 }
 
@@ -227,6 +252,21 @@ final class DopRegistryDepSource : DepSource
     {
         auto pack = packagePayload(name);
         return pack.versions.map!(v => Semver(v)).array;
+    }
+
+    bool hasPackage(string name, Semver ver, string revision) @safe
+    {
+        if (revision)
+        {
+            auto req = GetRecipeRevision(name, ver.toString(), revision);
+            auto resp = _registry.sendRequest(req);
+            return resp.code < 400;
+        }
+        else {
+            auto req = GetLatestRecipeRevision(name, ver.toString());
+            auto resp = _registry.sendRequest(req);
+            return resp.code < 400;
+        }
     }
 
     RecipeDir depRecipe(string name, Semver ver, string revision = null) @system
@@ -281,6 +321,14 @@ final class DubCacheDepSource : DepSource
         return vers;
     }
 
+    bool hasPackage(string name, Semver ver, string revision) @safe
+    {
+        assert(!revision, "Dub recipes have no revision");
+
+        const vDir = _cache.packageDir(name).versionDir(ver);
+        return checkDubRecipeFile(vDir.dir).length > 0;
+    }
+
     /// get the recipe of a package
     RecipeDir depRecipe(string name, Semver ver, string revision = null)
     {
@@ -316,6 +364,13 @@ final class DubRegistryDepSource : DepSource
         return _registry.availPkgVersions(name);
     }
 
+    bool hasPackage(string name, Semver ver, string revision) @safe
+    {
+        assert(!revision, "Dub recipes have no revision");
+
+        return depAvailVersions(name).canFind(ver);
+    }
+
     RecipeDir depRecipe(string name, Semver ver, string revision = null) @system
     {
         assert(!revision, "Dub recipes have no revision");
@@ -323,6 +378,9 @@ final class DubRegistryDepSource : DepSource
         try
         {
             const zipFile = _registry.downloadPkgZipToFile(name, ver);
+            scope (exit)
+                remove(zipFile);
+
             auto dir = _cache.cachePackageZip(name, ver, zipFile);
 
             string filename = checkDubRecipeFile(dir.dir);

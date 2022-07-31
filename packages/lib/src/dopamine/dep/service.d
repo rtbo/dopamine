@@ -1,5 +1,6 @@
 module dopamine.dep.service;
 
+import dopamine.dep.dub;
 import dopamine.dep.source;
 import dopamine.api.v1;
 import dopamine.cache;
@@ -118,7 +119,7 @@ final class DepService
     RecipeDir packRecipe(string name, const(AvailVersion) aver, string revision = null) @system
     in (aver.location != DepLocation.system, "System dependencies have no recipe!")
     in (_sources[aver.location], "No source for requested location")
-    out (rdir; !rdir.recipe || rdir.recipe.revision.length)
+    out (rdir; rdir.recipe.isDub || rdir.recipe.revision.length)
     {
         if (revision)
         {
@@ -129,7 +130,16 @@ final class DepService
             }
         }
 
-        RecipeDir rdir = _sources[aver.location].depRecipe(name, aver.ver, revision);
+        RecipeDir rdir;
+
+        bool inCache = _sources[DepLocation.cache].hasPackage(name, aver.ver, revision);
+
+        if (aver.location == DepLocation.network && inCache)
+            rdir = _sources[DepLocation.cache].depRecipe(name, aver.ver, revision);
+        else if (!inCache && _sources[DepLocation.network])
+            rdir = _sources[DepLocation.network].depRecipe(name, aver.ver, revision);
+        else
+            rdir = _sources[aver.location].depRecipe(name, aver.ver, revision);
 
         memRecipe(rdir);
         return rdir;
@@ -201,4 +211,36 @@ in (cacheDir, "Cache directory is mandatory")
     if (registryUrl)
         registry = new Registry(registryUrl);
     return buildDepService(enableSystem, cache, registry);
+}
+
+DepService buildDubDepService(DubPackageCache dubCache, DubRegistry registry)
+in (dubCache, "Cache is mandatory")
+{
+    DepSource cache;
+    DepSource network;
+
+    cache = new DubCacheDepSource(dubCache);
+
+    if (registry)
+    {
+        network = new DubRegistryDepSource(registry, dubCache);
+    }
+
+    return new DepService(null, cache, network);
+}
+
+DepService buildDubDepService(string cacheDir = homeDubCacheDir(), string registryUrl = dubRegistryUrl)
+in (cacheDir, "Cache directory is mandatory")
+{
+    auto cache = new DubPackageCache(cacheDir);
+    DubRegistry registry;
+    if (registryUrl)
+        registry = new DubRegistry(registryUrl);
+    return buildDubDepService(cache, registry);
+}
+
+struct DepServices
+{
+    DepService dop;
+    DepService dub;
 }

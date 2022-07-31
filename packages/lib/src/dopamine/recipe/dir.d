@@ -274,7 +274,7 @@ struct RecipeDir
     }
 }
 
-string checkDopRecipeFile(string dir)
+string checkDopRecipeFile(string dir) @safe
 {
     const dopFile = buildPath(dir, "dopamine.lua");
     if (exists(dopFile) && isFile(dopFile))
@@ -282,7 +282,7 @@ string checkDopRecipeFile(string dir)
     return null;
 }
 
-string checkDubRecipeFile(string dir)
+string checkDubRecipeFile(string dir) @safe
 {
     string[3] recipeFileNames = ["dub.json", "dub.sdl", "package.json"];
 

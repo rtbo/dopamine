@@ -88,12 +88,16 @@ int stageMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto service = buildDepService(Yes.system, homeCacheDir(), null);
+        auto services = DepServices(
+            buildDepService(Yes.system, homeCacheDir(), null),
+            buildDubDepService(homeDubCacheDir(), null),
+        );
 
-        depInfos = collectDepInfos(dag, recipe, profile, service, absDest);
+        depInfos = collectDepInfos(dag, recipe, profile, services, absDest);
 
         foreach (dn; dag.traverseTopDownResolved())
         {
+            auto service = dn.dub ? services.dub : services.dop;
             auto drdir = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
             auto dprof = profile.subset(drdir.recipe.langs);
             stagePackage(drdir, dprof, absDest, depInfos);

@@ -148,14 +148,16 @@ version (unittest)  : final class MockRecipe : Recipe
 {
     private string _name;
     private Semver _ver;
+    private RecipeType _type;
     private string _rev;
     private DepSpec[] _deps;
     private Lang[] _langs;
 
-    this(string name, Semver ver, string rev, DepSpec[] deps, Lang[] langs)
+    this(string name, Semver ver, RecipeType type, string rev, DepSpec[] deps, Lang[] langs)
     {
         _name = name;
         _ver = ver;
+        _type = type;
         _rev = rev;
         _deps = deps;
         _langs = langs;

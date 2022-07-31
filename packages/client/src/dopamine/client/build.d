@@ -106,8 +106,11 @@ int buildMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto service = buildDepService(Yes.system, homeCacheDir(), registryUrl());
-        depInfos = buildDependencies(dag, recipe, profile, service);
+        auto services = DepServices(
+            buildDepService(Yes.system, homeCacheDir(), registryUrl()),
+            buildDubDepService(),
+        );
+        depInfos = buildDependencies(dag, recipe, profile, services);
     }
 
     const config = BuildConfig(profile.subset(recipe.langs));

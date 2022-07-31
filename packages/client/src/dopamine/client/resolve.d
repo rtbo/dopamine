@@ -95,7 +95,10 @@ int resolveMain(string[] args)
     const system = noSystem ? No.system : Yes.system;
     auto cache = new PackageCache(homeCacheDir);
     auto registry = noNetwork ? null : new Registry();
-    auto service = buildDepService(system, cache, registry);
+    auto services = DepServices(
+        buildDepService(system, cache, registry),
+        buildDubDepService(),
+    );
 
     Heuristics heuristics;
     heuristics.mode = heuristicsMode(preferSystem, preferCache, preferLocal, pickHighest);
@@ -104,7 +107,7 @@ int resolveMain(string[] args)
 
     try
     {
-        auto dag = DepDAG.prepare(rdir, profile, service, heuristics);
+        auto dag = DepDAG.prepare(rdir, profile, services, heuristics);
         dag.resolve();
 
         auto json = dag.toJson();

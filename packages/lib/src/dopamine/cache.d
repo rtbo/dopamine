@@ -40,7 +40,7 @@ class PackageCache
     }
 
     /// Get a CachePackageDir for the package [packname]
-    CachePackageDir packageDir(string packname) const
+    CachePackageDir packageDir(string packname) const @safe
     {
         return CachePackageDir(buildPath(_dir, packname));
     }

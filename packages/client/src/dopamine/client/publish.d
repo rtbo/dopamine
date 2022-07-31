@@ -61,17 +61,17 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
-        auto service = buildDepService(No.system);
+        auto services = DepServices(buildDepService(No.system), buildDubDepService());
         Heuristics heuristics;
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;
 
-        auto dag = DepDAG.prepare(rdir, profile, service, heuristics);
+        auto dag = DepDAG.prepare(rdir, profile, services, heuristics);
         dag.resolve();
         auto json = dag.toJson();
         write(rdir.depsLockFile, json.toPrettyString());
 
-        depInfos = buildDependencies(dag, recipe, profile, service);
+        depInfos = buildDependencies(dag, recipe, profile, services);
     }
 
     if (!recipe.inTreeSrc)
