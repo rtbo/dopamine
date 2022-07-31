@@ -103,22 +103,13 @@ extern (C):
 
 int luaDopModule(lua_State* L) nothrow
 {
-    import dopamine.paths : homeLuaScript;
+    import dopamine.paths : findDopLuaScript;
     import std.file : exists, mkdirRecurse, write;
     import std.path : dirName;
 
     return L.catchAll!({
-        // we write the content to a file rather than executing the string
         // in otder to have better error reporting
-        const libFile = homeLuaScript();
-
-        if (!exists(libFile))
-        {
-            logVerbose("creating %s", info(libFile));
-            mkdirRecurse(dirName(libFile));
-            const content = import("dop.lua");
-            write(libFile, content);
-        }
+        const libFile = findDopLuaScript();
 
         logVerbose("loading %s", info(libFile));
 
