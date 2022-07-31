@@ -46,37 +46,37 @@ struct CacheVersionDir
 {
     mixin CacheDir!();
 
-    @property string ver() const
+    @property string ver() const @safe
     {
         return baseName(_dir);
     }
 
-    @property Semver semver() const
+    @property Semver semver() const @safe
     {
         return Semver(ver);
     }
 
-    @property string cacheDir() const
+    @property string cacheDir() const @safe
     {
         return packageDir.cacheDir;
     }
 
-    @property CachePackageDir packageDir() const
+    @property CachePackageDir packageDir() const @safe
     {
         return CachePackageDir(dirName(_dir));
     }
 
-    @property string packageName() const
+    @property string packageName() const @safe
     {
         return baseName(dirName(_dir));
     }
 
-    @property string dubLockFile() const
+    @property string dubLockFile() const @safe
     {
         return _dir ~ ".lock";
     }
 
-    CacheRevisionDir dopRevisionDir(string rev) const
+    CacheRevisionDir dopRevisionDir(string rev) const @safe
     {
         const revDir = buildPath(_dir, rev);
         return CacheRevisionDir(revDir);
@@ -96,53 +96,53 @@ struct CacheRevisionDir
 {
     private string _dir;
 
-    this(string dir)
+    this(string dir) @safe
     {
         enforce(!stdExists(dir) || isDir(dir));
         _dir = dir;
     }
 
-    @property string dir() const
+    @property string dir() const @safe
     {
         return _dir;
     }
 
-    @property string revision() const
+    @property string revision() const @safe
     {
         return baseName(_dir);
     }
 
-    @property string cacheDir() const
+    @property string cacheDir() const @safe
     {
         return versionDir.cacheDir;
     }
 
-    @property CachePackageDir packageDir() const
+    @property CachePackageDir packageDir() const @safe
     {
         return versionDir.packageDir;
     }
 
-    @property CacheVersionDir versionDir() const
+    @property CacheVersionDir versionDir() const @safe
     {
         return CacheVersionDir(dirName(_dir));
     }
 
-    @property bool exists() const
+    @property bool exists() const @safe
     {
         return stdExists(recipeFile);
     }
 
-    bool opCast(T : bool)() const
+    bool opCast(T : bool)() const @safe
     {
         return this.exists;
     }
 
-    @property string recipeFile() const
+    @property string recipeFile() const @safe
     {
         return buildPath(_dir, "dopamine.lua");
     }
 
-    @property string lockFile() const
+    @property string lockFile() const @safe
     {
         return _dir ~ ".lock";
     }
