@@ -10,8 +10,9 @@ import dopamine.recipe;
 import dopamine.registry;
 import dopamine.semver;
 
-import std.typecons;
+import std.exception;
 import std.string;
+import std.typecons;
 
 /// enum that describe the location of a dependency
 enum DepLocation : uint
@@ -87,7 +88,7 @@ final class DepService
     ///
     /// Returns: the list of versions available of the package
     ///
-    /// Throws: ServerDownException, NoSuchPackageException
+    /// Throws: NoSystemDependencies, ServerDownException, NoSuchPackageException
     AvailVersion[] packAvailVersions(string name) @safe
     {
         import std.algorithm : map, sort;
@@ -104,14 +105,19 @@ final class DepService
             }
         }
 
+        enforce(vers.length, new NoSuchPackageException(name));
+
         (() @trusted => sort(vers))();
 
         return vers;
     }
 
     /// Get the recipe of a package in the specified version (and optional revision)
+    /// Throws: ServerDownException, NoSuchPackageException, NoSuchVersionException, NoSuchRevisionException
+    ///         or any exception thrown during recipe parsing
     RecipeDir packRecipe(string name, const(AvailVersion) aver, string revision = null) @system
     in (aver.location != DepLocation.system, "System dependencies have no recipe!")
+    in (_sources[aver.location], "No source for requested location")
     out (rdir; !rdir.recipe || rdir.recipe.revision.length)
     {
         if (revision)
@@ -123,17 +129,10 @@ final class DepService
             }
         }
 
-        assert(_sources[aver.location]);
-
         RecipeDir rdir = _sources[aver.location].depRecipe(name, aver.ver, revision);
 
-        if (rdir.recipe)
-        {
-            memRecipe(rdir);
-            return rdir;
-        }
-
-        verOrRevException(name, aver.ver, revision);
+        memRecipe(rdir);
+        return rdir;
     }
 
     private void memRecipe(RecipeDir rdir)
