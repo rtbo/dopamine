@@ -135,9 +135,9 @@ class DubRecipe : Recipe
         pkg.name = name;
         pkg.description = _dubPack.rawRecipe.description;
         pkg.ver = ver.toString();
-        pkg.includeDir = buildPath("${prefix}", "include", "d", name);
-        pkg.libDir = buildPath("${prefix}", "lib");
-        pkg.cflags = bs.importPaths.map!(p => dcf.importPath(buildPath("${includedir}", p)))
+        pkg.includeDir = "${prefix}/include/d/" ~ name;
+        pkg.libDir = "${prefix}/" ~ "lib";
+        pkg.cflags = bs.importPaths.map!(p => dcf.importPath("${includedir}/" ~ p))
             .chain(bs.versions.map!(v => dcf.version_(v)))
             .array
             .join(" ");
