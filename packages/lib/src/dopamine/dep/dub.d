@@ -19,6 +19,16 @@ import std.path;
 
 @safe:
 
+class DubRegistryNotFoundException : Exception
+{
+    mixin basicExceptionCtors!();
+}
+
+class DubRegistryErrorException : Exception
+{
+    mixin basicExceptionCtors!();
+}
+
 /// Access to the Dub registry
 class DubRegistry
 {
@@ -32,30 +42,58 @@ class DubRegistry
     Semver[] availPkgVersions(string name) const @trusted
     {
         const url = format!"%s/api/packages/%s/info?minimize=true"(_host, name);
-        auto json = parseJSON(std.net.curl.get(url));
-        auto vers = "versions" in json;
-        if (!vers)
-            return [];
-        Semver[] res;
-        foreach (jver; vers.array)
+
+        try
         {
-            const ver = jver["version"].str;
-            if (Semver.isValid(ver))
-                res ~= Semver(ver);
+            auto json = parseJSON(std.net.curl.get(url));
+            auto vers = "versions" in json;
+            if (!vers)
+                return [];
+            Semver[] res;
+            foreach (jver; vers.array)
+            {
+                const ver = jver["version"].str;
+                if (Semver.isValid(ver))
+                    res ~= Semver(ver);
+            }
+            sort(res);
+            return res;
         }
-        sort(res);
-        return res;
+        catch (HTTPStatusException ex)
+        {
+            if (ex.status == 404)
+                throw new DubRegistryNotFoundException(format!"%s returned 404"(url));
+            throw new DubRegistryErrorException(format!"%s returned %s"(url, ex.status));
+        }
     }
 
     // FIXME: returns a range on bytes. Need the "multi" API of libcurl, not available with D.
-    string downloadPkgToFile(string name, Semver ver, string filename = null) const
+    string downloadPkgToFile(string name, Semver ver, string filename = null) const @trusted
     {
-        if (!filename)
-            filename = tempPath(null, format!"%s-%s"(name, ver), ".zip");
+        import std.stdio : File;
 
         const url = format!"%s/packages/%s/%s.zip"(_host, name, ver);
 
-        (() @trusted => download(url, filename))();
+        if (!filename)
+            filename = tempPath(null, format!"%s-%s"(name, ver), ".zip");
+
+        auto f = File(filename, "wb");
+        auto http = HTTP();
+        http.url = url;
+        http.onReceive = (ubyte[] data) { f.rawWrite(data); return data.length; };
+        HTTP.StatusLine statusLine;
+        http.onReceiveStatusLine((HTTP.StatusLine line) { statusLine = line; });
+
+        http.perform();
+
+        enforce(
+            statusLine.code != 404,
+            new DubRegistryNotFoundException(format!"%s returned 404"(url))
+        );
+        enforce(
+            statusLine.code < 400,
+            new DubRegistryErrorException(format!"%s returned %s"(url, statusLine.code))
+        );
 
         return filename;
     }
@@ -67,6 +105,12 @@ class DubRegistry
         assert(vers.canFind(Semver("0.1.0")));
         assert(vers.canFind(Semver("0.2.0")));
         assert(vers.canFind(Semver("0.2.1")));
+    }
+
+    unittest
+    {
+        auto reg = new DubRegistry();
+        assertThrown!DubRegistryNotFoundException(reg.availPkgVersions("not-a-package"));
     }
 }
 
@@ -132,15 +176,13 @@ class DubPackageCache
 }
 
 @("DubPackageCache")
-@trusted
+@system
 unittest
 {
     import std.array;
     import std.stdio;
 
     auto dir = tempPath(null, "dub-cache");
-
-    writeln(dir);
 
     mkdirRecurse(dir);
     scope (success)
@@ -158,4 +200,12 @@ unittest
     assert(verDir.dir == buildPath(dir, "squiz-box", "0.2.1"));
     assert(isFile(verDir.path("meson.build")));
     assert(isFile(verDir.path("dub.json")));
+}
+
+@("DubRegistry 404")
+@system
+unittest
+{
+    auto reg = new DubRegistry();
+    assertThrown!DubRegistryNotFoundException(reg.downloadPkgToFile("not-a-package", Semver("1.0.0")));
 }
