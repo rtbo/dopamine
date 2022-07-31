@@ -133,8 +133,8 @@ class DubRecipe : Recipe
         pkg.prefix = dirs.install;
         pkg.name = name;
         pkg.ver = ver.toString();
-        pkg.includeDir = buildPath("$prefix", "include", "d", name);
-        pkg.libDir = buildPath("$prefix", "lib");
+        pkg.includeDir = buildPath("${prefix}", "include", "d", name);
+        pkg.libDir = buildPath("${prefix}", "lib");
         pkg.cflags = dcf.compileArgs(dubBs, config.profile.buildType).join("");
         pkg.libs = dcf.linkArgs(dubBs).join("");
         pkg.writeToFile(buildPath(dirs.build, name ~ ".pc"));
