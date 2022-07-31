@@ -29,6 +29,7 @@ e2e_tests = [
     'build-zlib-posix',
     'build-zlib-win',
     'build-dublib',
+    'build-dub-dep',
 
     'stage-lib2',
 
