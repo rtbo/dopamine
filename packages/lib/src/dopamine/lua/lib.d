@@ -166,6 +166,7 @@ int luaDopNativeModule(lua_State* L) nothrow
     ];
     const funcs = [
         "trim": &luaTrim,
+        "split": &luaSplit,
         "path": &luaPath,
         "dir_name": &luaDirName,
         "base_name": &luaBaseName,
@@ -226,6 +227,30 @@ int luaTrim(lua_State* L) nothrow
         s = s[0 .. $ - 1];
 
     lua_pushlstring(L, s.ptr, s.length);
+
+    return 1;
+}
+
+int luaSplit(lua_State* L) nothrow
+{
+    import std.algorithm : splitter;
+
+    lua_newtable(L);
+    const tabInd = lua_gettop(L);
+
+    if (lua_type(L, 1) == LUA_TNIL)
+        return 1;
+
+    const subject = checkString(L, 1);
+    const sep = checkString(L, 2);
+
+    int index = 1;
+
+    foreach (part; subject.splitter(sep))
+    {
+        luaPush(L, part);
+        lua_rawseti(L, tabInd, index++);
+    }
 
     return 1;
 }
@@ -379,10 +404,7 @@ int luaChangeDir(lua_State* L) nothrow
     import std.file : chdir;
 
     const dir = checkString(L, 1);
-    L.catchAll!({
-        logVerbose("changing dir to %s", dir);
-        chdir(dir);
-    });
+    L.catchAll!({ logVerbose("changing dir to %s", dir); chdir(dir); });
     return 0;
 }
 
@@ -881,10 +903,7 @@ int luaExtractArchive(lua_State* L) nothrow
         auto algo = BoxAlgo.forFilename(archive);
         auto bytes = readBinaryFile(archive);
         auto entries = algo.unbox(bytes);
-        entries.each!((e) {
-            logVerbose("    %s", e.path);
-            e.extractTo(outdir);
-        });
+        entries.each!((e) { logVerbose("    %s", e.path); e.extractTo(outdir); });
 
         return 0;
     });
