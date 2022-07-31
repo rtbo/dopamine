@@ -1,7 +1,6 @@
 module dopamine.cache;
 
 import dopamine.api.v1;
-import dopamine.cache_dirs;
 import dopamine.log;
 import dopamine.recipe;
 import dopamine.registry;
@@ -15,6 +14,8 @@ import std.exception;
 import std.file;
 import std.path;
 import std.range;
+
+public import dopamine.cache_dirs;
 
 /// A local package cache
 class PackageCache
