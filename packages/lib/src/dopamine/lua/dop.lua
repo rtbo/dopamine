@@ -90,7 +90,7 @@ function dop.to_string(o)
       local s = '{ '
       for k,v in pairs(o) do
          if type(k) ~= 'number' then k = '"'..k..'"' end
-         s = s .. '['..k..'] = ' .. dop.to_string(v) .. ','
+         s = s .. '['..k..'] = ' .. dop.to_string(v) .. ',\n'
       end
       return s .. '} '
    else
@@ -228,6 +228,8 @@ function Meson:setup(params, env)
 
     self.build_dir = assert(params.build_dir,
                             'build_dir is a mandatory parameter')
+    self.src_dir = assert(params.src_dir,
+                          'src_dir is a mandatory parameter')
 
     if params.install_dir then
         self.options['--prefix'] = params.install_dir
@@ -241,6 +243,10 @@ function Meson:setup(params, env)
         end
     end
 
+    if params.pkg_config_path then
+        self.options['--pkg-config-path'] = params.pkg_config_path
+    end
+
     if params.options then
         for k, v in pairs(params.options) do
             self.options[k] = v
@@ -252,17 +258,16 @@ function Meson:setup(params, env)
         end
     end
 
-    local cmd = {'meson', 'setup', self.build_dir}
-    if params.src_dir then
-        table.insert(cmd, params.src_dir)
-    end
-
+    local cmd = {'meson', 'setup'}
     for k, v in pairs(self.options) do
         table.insert(cmd, k .. '=' .. v)
     end
     for k, v in pairs(self.defs) do
         table.insert(cmd, '-D' .. k .. '=' .. v)
     end
+
+    table.insert(cmd, self.build_dir)
+    table.insert(cmd, self.src_dir)
 
     local cmd_env = dop.profile_environment(self.profile)
     if env then
@@ -374,6 +379,16 @@ function PkgConfig:write(filename)
     write_field('libs.private')
 
     pc:close()
+end
+
+function dop.pkg_config_path(dep_infos)
+    local path = {}
+    for k, v in pairs(dep_infos) do
+        if v.install_dir then
+            table.insert(path, dop.path(v.install_dir, 'lib', 'pkgconfig'))
+        end
+    end
+    return table.concat(path, dop.path_sep)
 end
 
 return dop
