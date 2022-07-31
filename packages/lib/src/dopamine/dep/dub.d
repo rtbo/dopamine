@@ -29,12 +29,14 @@ class DubRegistryErrorException : Exception
     mixin basicExceptionCtors!();
 }
 
+const dubRegistryUrl = "https://code.dlang.org";
+
 /// Access to the Dub registry
 class DubRegistry
 {
     private string _host;
 
-    this(string host = "https://code.dlang.org")
+    this(string host = dubRegistryUrl)
     {
         _host = host;
     }
@@ -68,7 +70,7 @@ class DubRegistry
     }
 
     // FIXME: returns a range on bytes. Need the "multi" API of libcurl, not available with D.
-    string downloadPkgToFile(string name, Semver ver, string filename = null) const @trusted
+    string downloadPkgZipToFile(string name, Semver ver, string filename = null) const @trusted
     {
         import std.stdio : File;
 
@@ -120,14 +122,12 @@ class DubRegistry
 class DubPackageCache
 {
     private string _dir;
-    private DubRegistry _registry;
 
     /// Construct a cache in the specified directory.
     /// [dir] would typically be "~/.dop/dub-cache" on Linux and "%LOCALAPPDATA%\dop\dub-cache" on Windows.
-    this(string dir, DubRegistry registry)
+    this(string dir)
     {
         _dir = dir;
-        _registry = registry;
     }
 
     /// Get an InputRange of CachePackageDir of all packages in the cache.
@@ -146,7 +146,7 @@ class DubPackageCache
         return CachePackageDir(buildPath(_dir, name));
     }
 
-    CacheVersionDir downloadAndCachePackage(string name, Semver ver) const @trusted
+    CacheVersionDir cachePackageZip(string name, Semver ver, string zipFile) const @trusted
     {
         import std.stdio : File;
 
@@ -163,7 +163,6 @@ class DubPackageCache
         );
 
         mkdir(dir.dir);
-        string zipFile = _registry.downloadPkgToFile(name, ver);
 
         const removePrefix = format!"%s-%s/"(name, ver);
 
@@ -189,12 +188,15 @@ unittest
         rmdirRecurse(dir);
 
     auto reg = new DubRegistry();
-    auto cache = new DubPackageCache(dir, reg);
+    auto cache = new DubPackageCache(dir);
 
     auto packDir = cache.packageDir("squiz-box");
     assert(!packDir.exists);
 
-    auto verDir = cache.downloadAndCachePackage("squiz-box", Semver("0.2.1"));
+    const name = "squiz-box";
+    const ver = Semver("0.2.1");
+    const zip = reg.downloadPkgZipToFile(name, ver);
+    auto verDir = cache.cachePackageZip(name, ver, zip);
 
     assert(packDir.versionDirs().array.length == 1);
     assert(verDir.dir == buildPath(dir, "squiz-box", "0.2.1"));
@@ -207,5 +209,5 @@ unittest
 unittest
 {
     auto reg = new DubRegistry();
-    assertThrown!DubRegistryNotFoundException(reg.downloadPkgToFile("not-a-package", Semver("1.0.0")));
+    assertThrown!DubRegistryNotFoundException(reg.downloadPkgZipToFile("not-a-package", Semver("1.0.0")));
 }

@@ -322,7 +322,8 @@ final class DubRegistryDepSource : DepSource
 
         try
         {
-            auto dir = _cache.downloadAndCachePackage(name, ver);
+            const zipFile = _registry.downloadPkgZipToFile(name, ver);
+            auto dir = _cache.cachePackageZip(name, ver, zipFile);
 
             string filename = checkDubRecipeFile(dir.dir);
             assert(filename);
