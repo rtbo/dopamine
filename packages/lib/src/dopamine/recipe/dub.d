@@ -106,20 +106,20 @@ class DubRecipe : Recipe
     void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
     {
         const platform = config.profile.toDubPlatform();
-        auto dubBs = _dubPack.getBuildSettings(platform, _defaultConfig);
+        auto bs = _dubPack.getBuildSettings(platform, _defaultConfig);
 
         enforce(
-            dubBs.targetType == TargetType.staticLibrary || dubBs.targetType == TargetType.library,
+            bs.targetType == TargetType.staticLibrary || bs.targetType == TargetType.library,
             new ErrorLogException(
                 "Only Dub static libraries are supported. %s is a %s",
-                name, dubBs.targetType
+                name, bs.targetType
         ));
 
         string[string] env;
         config.profile.collectEnvironment(env);
 
         // we create a ninja file to drive the compilation
-        auto nb = createNinja(dubBs, dirs, config);
+        auto nb = createNinja(bs, dirs, config);
         nb.writeToFile(buildPath(dirs.build, "build.ninja"));
         runCommand(["ninja"], dirs.build, LogLevel.verbose, env);
 
@@ -129,31 +129,34 @@ class DubRecipe : Recipe
         const builtTarget = libraryFileName(name);
 
         // generate a pkg-config file
+        const pcPath = buildPath(dirs.build, name ~ ".pc");
         PkgConfig pkg;
         pkg.prefix = dirs.install;
         pkg.name = name;
+        pkg.description = _dubPack.rawRecipe.description;
         pkg.ver = ver.toString();
         pkg.includeDir = buildPath("${prefix}", "include", "d", name);
         pkg.libDir = buildPath("${prefix}", "lib");
-        pkg.cflags = dcf.compileArgs(dubBs, config.profile.buildType).join("");
-        pkg.libs = dcf.linkArgs(dubBs).join("");
-        pkg.writeToFile(buildPath(dirs.build, name ~ ".pc"));
+        pkg.cflags = bs.importPaths.map!(p => dcf.importPath(buildPath("${includedir}", p)))
+            .chain(bs.versions.map!(v => dcf.version_(v)))
+            .array
+            .join(" ");
+        pkg.libs = buildPath(dirs.install, "lib", builtTarget);
+        pkg.writeToFile(pcPath);
 
         // we drive the installation directly
-        const sources = dubBs.sourceFiles.map!(s => SourcePath.from(s, dirs)).array;
-
         installFile(
-            buildPath(dirs.build, name ~ ".pc"),
+            pcPath,
             buildPath(dirs.install, "lib", "pkgconfig", name ~ ".pc")
         );
         installFile(
             buildPath(dirs.build, builtTarget),
             buildPath(dirs.install, "lib", builtTarget)
         );
-        foreach (src; sources)
+        foreach (src; bs.sourceFiles)
             installFile(
-                buildPath(dirs.root, src.fromRoot),
-                buildPath(dirs.install, "include", "d", name, src.fromRoot)
+                buildPath(dirs.root, src),
+                buildPath(dirs.install, "include", "d", name, src)
             );
     }
 
@@ -202,21 +205,21 @@ class DubRecipe : Recipe
         ];
         ldRule.description = "Linking $in";
 
-        auto compileArgs = dcf.compileArgs(bs, config.profile.buildType);
+        const rootFromBuild = dirs.root.relativePath(dirs.build);
+        auto compileArgs = dcf.buildType(config.profile.buildType) ~ dcf.compileArgs(bs, rootFromBuild);
         NinjaTarget[] targets;
 
-        auto sources = bs.sourceFiles.map!(s => SourcePath.from(s, dirs)).array;
         string[] objects;
 
-        foreach (src; sources)
+        foreach (src; bs.sourceFiles)
         {
-            const objFile = src.fromRoot ~ objExt;
+            const objFile = src ~ objExt;
             const depfile = objFile ~ ".d";
 
             NinjaTarget target;
             target.target = ninjaEscape(objFile);
             target.rule = dcRule.name;
-            target.inputs = [ninjaEscape(src.fromBuild)];
+            target.inputs = [ninjaEscape(buildPath(rootFromBuild, src))];
 
             target.variables["ARGS"] = ninjaQuote(compileArgs);
             target.variables["DEPFILE"] = ninjaQuote(depfile);
@@ -249,14 +252,14 @@ private:
 
 static this()
 {
-	import dub.compilers.compiler : registerCompiler;
-	import dub.compilers.dmd : DMDCompiler;
-	import dub.compilers.gdc : GDCCompiler;
-	import dub.compilers.ldc : LDCCompiler;
+    import dub.compilers.compiler : registerCompiler;
+    import dub.compilers.dmd : DMDCompiler;
+    import dub.compilers.gdc : GDCCompiler;
+    import dub.compilers.ldc : LDCCompiler;
 
-	registerCompiler(new DMDCompiler);
-	registerCompiler(new GDCCompiler);
-	registerCompiler(new LDCCompiler);
+    registerCompiler(new DMDCompiler);
+    registerCompiler(new GDCCompiler);
+    registerCompiler(new LDCCompiler);
 }
 
 BuildPlatform toDubPlatform(const(Profile) profile)
@@ -289,23 +292,6 @@ BuildPlatform toDubPlatform(const(Profile) profile)
     return res;
 }
 
-struct SourcePath
-{
-    string fromRoot;
-    string fromBuild;
-
-    static SourcePath from(string source, BuildDirs dirs)
-    {
-        if (!isAbsolute(source))
-            source = absolutePath(source, dirs.root);
-
-        return SourcePath(
-            relativePath(source, dirs.root),
-            relativePath(source, dirs.build),
-        );
-    }
-}
-
 interface CompilerFlags
 {
     string[] buildType(BuildType bt);
@@ -319,6 +305,7 @@ interface CompilerFlags
     string debugVersion(string ident);
 
     string lib(string name);
+    string libSearchPath(string path);
     string staticLib();
 
     static CompilerFlags fromCompiler(const(Compiler) dc)
@@ -334,11 +321,11 @@ interface CompilerFlags
         throw new Exception("Unknown Dub compiler: " ~ dc.name);
     }
 
-    final const(string)[] compileArgs(const ref BuildSettings bs, BuildType bt)
+    final const(string)[] compileArgs(const ref BuildSettings bs, string prefix)
     {
-        string[] res = this.buildType(bt);
-        res ~= bs.importPaths.map!(f => this.importPath(f)).array;
-        res ~= bs.stringImportPaths.map!(f => this.stringImportPath(f)).array;
+        string[] res;
+        res ~= bs.importPaths.map!(f => this.importPath(buildPath(prefix, f))).array;
+        res ~= bs.stringImportPaths.map!(f => this.stringImportPath(buildPath(prefix, f))).array;
         res ~= bs.versions.map!(f => this.version_(f)).array;
         res ~= bs.debugVersions.map!(f => this.debugVersion(f)).array;
         res ~= bs.dflags;
@@ -401,6 +388,11 @@ class DmdCompilerFlags : CompilerFlags
         return "-debug=" ~ ident;
     }
 
+    string libSearchPath(string path)
+    {
+        return "-L-L" ~ path;
+    }
+
     string lib(string name)
     {
         return "-L-l" ~ name;
@@ -437,17 +429,17 @@ class LdcCompilerFlags : CompilerFlags
 
     string output(string filename)
     {
-        return "-of" ~ filename;
+        return "-of=" ~ filename;
     }
 
     string importPath(string path)
     {
-        return "-I" ~ path;
+        return "-I=" ~ path;
     }
 
     string stringImportPath(string path)
     {
-        return "-J" ~ path;
+        return "-J=" ~ path;
     }
 
     string version_(string ident)
@@ -460,9 +452,14 @@ class LdcCompilerFlags : CompilerFlags
         return "-debug=" ~ ident;
     }
 
+    string libSearchPath(string path)
+    {
+        return "-L=-L" ~ path;
+    }
+
     string lib(string name)
     {
-        return "-L-l" ~ name;
+        return "-L=-l" ~ name;
     }
 
     string staticLib()
