@@ -164,6 +164,7 @@ struct JsonStateFile(T)
         else
         {
             import std.datetime.systime : Clock;
+
             const now = Clock.currTime;
 
             setTimes(filename, now, now);
@@ -633,10 +634,14 @@ in (exists(src), src ~ " does not exist")
 
 struct PkgConfig
 {
-    string prefix;
-    string execPrefix;
-    string includeDir;
-    string libDir;
+    struct Var
+    {
+        string name;
+        string value;
+    }
+
+    Var[] vars;
+
     string name;
     string ver;
     string description;
@@ -648,7 +653,10 @@ struct PkgConfig
     string libs;
     string libsPriv;
 
-    string[string] customVars;
+    void addVar(string name, string value)
+    {
+        vars ~= Var(name, value);
+    }
 
     void writeToFile(string filename)
     {
@@ -657,19 +665,13 @@ struct PkgConfig
 
         auto f = File(filename, "w");
 
-        f.writefln!"prefix=%s"(enforce(prefix, "PkgConfig needs a prefix"));
-        if(execPrefix)
-            f.writefln!"exec_prefix=%s"(execPrefix);
-        if(includeDir)
-            f.writefln!"includedir=%s"(includeDir);
-        if(libDir)
-            f.writefln!"libdir=%s"(libDir);
-
-        foreach (k, v; customVars) {
-            f.writefln!"%s=%s"(k, v);
+        foreach (v; vars)
+        {
+            f.writefln!"%s=%s"(v.name, v.value);
         }
 
         f.writeln();
+
         f.writefln!"Name: %s"(enforce(name, "PkgConfig needs a prefix"));
         f.writefln!"Version: %s"(enforce(ver, "PkgConfig needs a version"));
         if (description)

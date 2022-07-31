@@ -131,12 +131,12 @@ class DubRecipe : Recipe
         // generate a pkg-config file
         const pcPath = buildPath(dirs.build, name ~ ".pc");
         PkgConfig pkg;
-        pkg.prefix = dirs.install;
+        pkg.addVar("prefix", dirs.install);
+        pkg.addVar("includedir", "${prefix}/include/d/" ~ name);
+        pkg.addVar("libdir", "${prefix}/lib");
         pkg.name = name;
         pkg.description = _dubPack.rawRecipe.description;
         pkg.ver = ver.toString();
-        pkg.includeDir = "${prefix}/include/d/" ~ name;
-        pkg.libDir = "${prefix}/" ~ "lib";
         pkg.cflags = bs.importPaths.map!(p => dcf.importPath("${includedir}/" ~ p))
             .chain(bs.versions.map!(v => dcf.version_(v)))
             .array
