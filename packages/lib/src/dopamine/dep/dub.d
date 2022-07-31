@@ -1,3 +1,4 @@
+/// Module with utilities to fetch and cache Dub dependencies
 module dopamine.dep.dub;
 
 import dopamine.cache_dirs;
