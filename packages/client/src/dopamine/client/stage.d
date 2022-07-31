@@ -88,7 +88,7 @@ int stageMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto service = buildDopDepService(Yes.system, homeCacheDir(), null);
+        auto service = buildDepService(Yes.system, homeCacheDir(), null);
 
         depInfos = collectDepInfos(dag, recipe, profile, service, absDest);
 

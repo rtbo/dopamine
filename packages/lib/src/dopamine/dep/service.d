@@ -169,7 +169,7 @@ final class DepService
     }
 }
 
-DepService buildDopDepService(Flag!"system" enableSystem,
+DepService buildDepService(Flag!"system" enableSystem,
     PackageCache dopCache,
     Registry registry)
 in (dopCache, "Cache is mandatory")
@@ -191,7 +191,7 @@ in (dopCache, "Cache is mandatory")
     return new DepService(system, cache, network);
 }
 
-DepService buildDopDepService(Flag!"system" enableSystem,
+DepService buildDepService(Flag!"system" enableSystem,
     string cacheDir = homeCacheDir(),
     string registryUrl = dopamine.registry.registryUrl())
 in (cacheDir, "Cache directory is mandatory")
@@ -200,5 +200,5 @@ in (cacheDir, "Cache directory is mandatory")
     Registry registry;
     if (registryUrl)
         registry = new Registry(registryUrl);
-    return buildDopDepService(enableSystem, cache, registry);
+    return buildDepService(enableSystem, cache, registry);
 }

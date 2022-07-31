@@ -61,7 +61,7 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
-        auto service = buildDopDepService(No.system);
+        auto service = buildDepService(No.system);
         Heuristics heuristics;
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;

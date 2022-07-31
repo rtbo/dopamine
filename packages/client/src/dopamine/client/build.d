@@ -106,7 +106,7 @@ int buildMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto service = buildDopDepService(Yes.system, homeCacheDir(), registryUrl());
+        auto service = buildDepService(Yes.system, homeCacheDir(), registryUrl());
         depInfos = buildDependencies(dag, recipe, profile, service);
     }
 
