@@ -50,8 +50,7 @@ class AuthRequiredException : Exception
         this.url = url;
         super(format(
                 "%s \"%s\" requires authentication. You need to get a token from " ~
-                environment.get(
-                "DOP_REGISTRY", defaultRegistry) ~ ".",
+                registryUrl() ~ ".",
                 method, url
         ), file, line);
     }
@@ -169,7 +168,13 @@ struct DownloadMetadata
 }
 
 /// The URL of default registry the client connects to.
-enum defaultRegistry = "https://localhost:3500";
+enum defaultRegistryUrl = "https://localhost:3500";
+
+/// The URL of the registry the client will connect to.
+string registryUrl()
+{
+    return environment.get("DOP_REGISTRY", defaultRegistryUrl);
+}
 
 /// Client interface to the registry.
 class Registry
@@ -178,12 +183,7 @@ class Registry
     string _idToken;
     SysTime _idTokenExp;
 
-    this()
-    {
-        _host = checkHost(environment.get("DOP_REGISTRY", defaultRegistry));
-    }
-
-    this(string host)
+    this(string host = registryUrl())
     {
         _host = checkHost(host);
     }

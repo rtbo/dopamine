@@ -92,11 +92,10 @@ int resolveMain(string[] args)
         );
     }
 
+    const system = noSystem ? No.system : Yes.system;
     auto cache = new PackageCache(homeCacheDir);
     auto registry = noNetwork ? null : new Registry();
-    const system = noSystem ? No.system : Yes.system;
-
-    auto service = new DependencyService(cache, registry, system);
+    auto service = buildDopDepService(system, cache, registry);
 
     Heuristics heuristics;
     heuristics.mode = heuristicsMode(preferSystem, preferCache, preferLocal, pickHighest);

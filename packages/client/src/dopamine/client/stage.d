@@ -88,11 +88,7 @@ int stageMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto cache = new PackageCache(homeCacheDir);
-        // FIXME: system should be serialized with DAG.
-        const system = Yes.system;
-
-        auto service = new DependencyService(cache, null, system);
+        auto service = buildDopDepService(Yes.system, homeCacheDir(), null);
 
         depInfos = collectDepInfos(dag, recipe, profile, service, absDest);
 

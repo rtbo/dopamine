@@ -106,11 +106,7 @@ int buildMain(string[] args)
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
-        auto cache = new PackageCache(homeCacheDir);
-        auto registry = noNetwork ? null : new Registry();
-        const system = Yes.system;
-
-        auto service = new DependencyService(cache, registry, system);
+        auto service = buildDopDepService(Yes.system, homeCacheDir(), registryUrl());
         depInfos = buildDependencies(dag, recipe, profile, service);
     }
 

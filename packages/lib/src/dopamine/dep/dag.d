@@ -1067,7 +1067,7 @@ unittest
     import std.array : array;
     import std.typecons : No, Yes;
 
-    auto service = MockDepService.withBase();
+    auto service = buildMockDepService(testPackBase());
     auto profile = mockProfileLinux();
 
     // preferSystem (default): b is a leave
@@ -1120,7 +1120,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto service = buildMockDepService(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferSystem;
@@ -1144,7 +1144,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto service = buildMockDepService(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferCache;
@@ -1168,7 +1168,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto service = buildMockDepService(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferLocal;
@@ -1192,7 +1192,7 @@ unittest
     import std.algorithm : each;
     import std.typecons : Yes;
 
-    auto service = MockDepService.withBase();
+    auto service = buildMockDepService(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.pickHighest;
@@ -1217,7 +1217,7 @@ unittest
     import std.array : array;
     import std.typecons : No, Yes;
 
-    auto service = MockDepService.withBase();
+    auto service = buildMockDepService(testPackBase());
     auto profile = mockProfileLinux();
 
     const heuristics = Heuristics.preferSystem;
@@ -1274,7 +1274,7 @@ unittest
     auto pack = TestPackage("a", [
             TestPackVersion("1.0.1", [], DepLocation.cache)
         ], [Lang.c]);
-    auto service = new MockDepService([]);
+    auto service = buildMockDepService([]);
     auto profile = mockProfileLinux();
 
     auto dag = DepDAG.prepare(pack.recipe("1.0.1"), profile, service);
@@ -1295,7 +1295,7 @@ unittest
 {
     import std.exception : assertThrown;
 
-    auto service = MockDepService.withNotResolvableBase();
+    auto service = buildMockDepService(testPackUnresolvable());
     auto profile = mockProfileLinux();
 
     auto recipe = packNotResolvable.recipe("1.0.0");
@@ -1309,7 +1309,7 @@ unittest
 {
     import std.file : write;
 
-    auto service = MockDepService.withBase();
+    auto service = buildMockDepService(testPackBase());
     auto profile = mockProfileLinux();
 
     auto recipe = packE.recipe("1.0.0");
@@ -1440,6 +1440,8 @@ struct DepthFirstRange(alias getMore)
 // dfmt off
 version (unittest):
 
+import dopamine.dep.source;
+
 struct TestPackVersion
 {
     string ver;
@@ -1480,7 +1482,7 @@ struct TestPackage
     }
 }
 
-TestPackage[] buildTestPackBase()
+TestPackage[] testPackBase()
 {
     auto a = TestPackage(
         "a",
@@ -1574,7 +1576,7 @@ TestPackage packE = TestPackage(
     [Lang.d]
 );
 
-TestPackage[] buildNotResolvable()
+TestPackage[] testPackUnresolvable()
 {
     auto a = TestPackage(
         "a",
@@ -1640,45 +1642,67 @@ TestPackage packNotResolvable = TestPackage(
     [Lang.c],
 );
 
-/// A mock Dependency Service
-final class MockDepService : DepService
+/// A mock Dependency Source
+final class MockDepSource : DepSource
 {
     TestPackage[string] packs;
+    DepLocation loc;
 
-    this(TestPackage[] packs)
+    this (TestPackage[string] packs, DepLocation loc)
     {
-        foreach (p; packs)
+        this.packs = packs;
+        this.loc = loc;
+    }
+
+    Semver[] depAvailVersions(string name) @safe
+    {
+        auto pack = name in packs;
+        if (!pack)
+            return [];
+
+        Semver[] res;
+        foreach (n; pack.nodes)
         {
-            this.packs[p.name] = p;
+            if (n.loc == loc)
+            {
+                res ~= Semver(n.ver);
+            }
         }
+        return res;
     }
 
-    static DepService withBase()
-    {
-        return new MockDepService(buildTestPackBase());
-    }
-
-    static DepService withNotResolvableBase()
-    {
-        return new MockDepService(buildNotResolvable());
-    }
-
-    override AvailVersion[] packAvailVersions(string packname) @trusted
-    {
-        import std.algorithm : map;
-        import std.array : array;
-
-        return packs[packname].nodes.map!(pv => pv.aver).array;
-    }
-
-    override RecipeDir packRecipe(string packname, const(AvailVersion) aver, string rev)
+    /// get the recipe of a package
+    RecipeDir depRecipe(string name, Semver ver, string rev = null) @system
     {
         import std.algorithm : find;
-        import std.range : front;
+        import std.range : empty, front;
 
-        TestPackage p = packs[packname];
-        TestPackVersion pv = p.nodes.find!(pv => pv.aver == aver).front;
+        auto pack = name in packs;
+        if (!pack)
+            return RecipeDir.init;
+
+        auto pvR = pack.nodes.find!(pv => pv.aver == AvailVersion(ver, loc));
+        if (pvR.empty)
+            return RecipeDir.init;
+
+        auto pv = pvR.front;
+
         const revision = rev ? rev : "1";
-        return RecipeDir(new MockRecipe(packname, aver.ver, revision, pv.deps, p.langs), testPackDir);
+        return RecipeDir(new MockRecipe(name, ver, revision, pv.deps, pack.langs), testPackDir);
     }
+}
+
+DepService buildMockDepService(TestPackage[] packs)
+{
+    import std.algorithm : map;
+    import std.array : assocArray;
+    import std.typecons : tuple;
+
+    TestPackage[string] aa = packs.map!(p => tuple(p.name, p)).assocArray;
+
+    return new DepService(
+        new MockDepSource(aa, DepLocation.system),
+        new MockDepSource(aa, DepLocation.cache),
+        new MockDepSource(aa, DepLocation.network),
+    );
 }

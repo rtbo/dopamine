@@ -61,9 +61,7 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
-        auto cache = new PackageCache(cacheDir);
-        auto registry = new Registry();
-        auto service = new DependencyService(cache, registry, No.system);
+        auto service = buildDopDepService(No.system);
         Heuristics heuristics;
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;

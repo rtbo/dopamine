@@ -63,3 +63,8 @@ string homeCacheDir()
 {
     return buildPath(homeDopDir(), "cache");
 }
+
+string homeDubCacheDir()
+{
+    return buildPath(homeDopDir(), "dub-cache");
+}
