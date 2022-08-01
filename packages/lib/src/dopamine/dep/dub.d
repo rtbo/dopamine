@@ -149,6 +149,7 @@ class DubPackageCache
     CacheVersionDir cachePackageZip(string name, Semver ver, string zipFile) const @trusted
     {
         import std.stdio : File;
+        import std.typecons : Yes;
 
         const dir = CachePackageDir(buildPath(_dir, name)).versionDir(ver.toString());
 
@@ -164,11 +165,9 @@ class DubPackageCache
 
         mkdir(dir.dir);
 
-        const removePrefix = format!"%s-%s/"(name, ver);
-
         readBinaryFile(zipFile)
-            .unboxZip()
-            .each!(e => e.extractTo(dir.dir, removePrefix));
+            .unboxZip(Yes.removePrefix)
+            .each!(e => e.extractTo(dir.dir));
 
         return dir;
     }
