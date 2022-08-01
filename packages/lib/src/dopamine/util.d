@@ -646,9 +646,9 @@ struct PkgConfig
     string ver;
     string description;
     string url;
-    string requires;
-    string requiresPriv;
-    string conflicts;
+    string[] requires;
+    string[] requiresPriv;
+    string[] conflicts;
     string cflags;
     string libs;
     string libsPriv;
@@ -679,11 +679,11 @@ struct PkgConfig
         if (url)
             f.writefln!"URL: %s"(url);
         if (requires)
-            f.writefln!"Requires: %s"(requires);
+            f.writefln!"Requires: %s"(requires.join(" , "));
         if (requiresPriv)
-            f.writefln!"Requires.private: %s"(requiresPriv);
+            f.writefln!"Requires.private: %s"(requiresPriv.join(" , "));
         if (conflicts)
-            f.writefln!"Conflicts: %s"(conflicts);
+            f.writefln!"Conflicts: %s"(conflicts.join(" , "));
         if (cflags)
             f.writefln!"Cflags: %s"(cflags);
         if (libs)
