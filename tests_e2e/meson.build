@@ -30,6 +30,7 @@ e2e_tests = [
     'build-zlib-win',
     'build-dublib',
     'build-dub-dep',
+    'build-xlsx-app',
 
     'stage-lib2',
 
