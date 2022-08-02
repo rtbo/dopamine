@@ -6,8 +6,14 @@ RUN apk add --no-cache musl-dev libpq-dev zlib-dev xz-dev bzip2-dev gcc dub ldc 
 RUN python3 -m pip install meson==0.63.0
 RUN dub run --yes dub-build-deep -- vibe-d:http@0.9.4 --compiler=ldc2 --build=release
 
+
 # copy source code
 COPY . /source
+
+# fetch squiz-box if not here
+# dirty hack for squiz-box
+RUN [ ! -f /source/subprojects/squiz-box/meson.build ] && git clone --branch 8ac455 https://github.com/rtbo/squiz-box.git /source/subprojects/squiz
+
 RUN tree /source
 
 # build server app
