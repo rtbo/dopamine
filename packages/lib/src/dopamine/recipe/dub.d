@@ -499,7 +499,14 @@ class LdcCompilerFlags : CompilerFlags
 
 string libraryFileName(string libname)
 {
-    return "lib" ~ libname ~ ".a";
+    version (Windows)
+    {
+        return libname ~ ".lib";
+    }
+    else
+    {
+        return "lib" ~ libname ~ ".a";
+    }
 }
 
 string ninjaQuote(string arg)
