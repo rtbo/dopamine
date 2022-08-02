@@ -15,3 +15,9 @@ option('enable_test',
     value: false,
     description: 'Whether to build the tests',
 )
+
+option('alpine',
+    type: 'boolean',
+    value: false,
+    description: 'Fixes for Alpine linux (docker build - missing pkg-config flags)',
+)

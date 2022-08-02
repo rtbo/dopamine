@@ -11,10 +11,17 @@ dop_server_src = files([
 ])
 dop_server_inc = include_directories('src')
 
+if get_option('alpine')
+    dop_server_link_args = ['-llzma']
+else
+    dop_server_link_args = []
+endif
+
 dop_server_exe = executable('dop-server', dop_server_src,
     install: true,
     include_directories: dop_server_inc,
     dependencies: [vibed_http_dep, squiz_dep, crypto_dep, cors_dep, jwt_dep, pgd_dep, dop_common_dep],
     d_module_versions: ['DopServerMain'],
+    link_args: dop_server_link_args,
 )
 
