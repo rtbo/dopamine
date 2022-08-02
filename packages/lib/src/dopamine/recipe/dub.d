@@ -8,6 +8,7 @@ import dopamine.semver;
 import dopamine.util;
 
 import dub.compilers.buildsettings;
+import dub.internal.utils;
 import dub.internal.vibecompat.inet.path;
 import dub.package_;
 import dub.platform;
@@ -21,6 +22,7 @@ import std.file;
 import std.path;
 import std.range;
 import std.stdio : File;
+import std.string;
 
 DubRecipe parseDubRecipe(string filename, string root, string ver = null)
 {
@@ -105,6 +107,8 @@ class DubRecipe : Recipe
 
     void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
     {
+        import std.process;
+
         const platform = config.profile.toDubPlatform();
         auto bs = _dubPack.getBuildSettings(platform, _defaultConfig);
 
@@ -115,13 +119,36 @@ class DubRecipe : Recipe
                 name, bs.targetType
         ));
 
-        string[string] env;
-        config.profile.collectEnvironment(env);
+        // build pkg-config search path and collect dependencies requirements
+        string pkgconfPath = depInfos.byValue()
+            .map!(d => d.installDir)
+            .filter!(d => d.length > 0)
+            .map!(d => buildPath(d, "lib", "pkgconfig"))
+            .array
+            .join(pathSeparator);
+
+        auto pkgconfEnv = [
+            "PKG_CONFIG_PATH": pkgconfPath,
+        ];
+        foreach(d; depInfos.byKey())
+        {
+            auto df = execute(["pkg-config", "--cflags", d], pkgconfEnv);
+            enforce (df.status == 0, "pkg-config failed: " ~ df.output);
+            bs.dflags ~= df.output.strip().split(" ");
+            auto lf = execute(["pkg-config", "--libs", d], pkgconfEnv);
+            enforce (lf.status == 0, "pkg-config failed " ~ lf.output);
+            bs.lflags ~= lf.output.strip().split(" ");
+        }
+
+        bs.versions ~= "Have_" ~ stripDlangSpecialChars(name);
+
+        string[string] ninjaEnv;
+        config.profile.collectEnvironment(ninjaEnv);
 
         // we create a ninja file to drive the compilation
         auto nb = createNinja(bs, dirs, config);
         nb.writeToFile(buildPath(dirs.build, "build.ninja"));
-        runCommand(["ninja"], dirs.build, LogLevel.verbose, env);
+        runCommand(["ninja"], dirs.build, LogLevel.verbose, ninjaEnv);
 
         auto dc = config.profile.compilerFor(Lang.d);
         auto dcf = CompilerFlags.fromCompiler(dc);
@@ -137,6 +164,8 @@ class DubRecipe : Recipe
         pkg.name = name;
         pkg.description = _dubPack.rawRecipe.description;
         pkg.ver = ver.toString();
+        foreach (k, v; depInfos)
+            pkg.requires ~= format!"%s = %s"(k, v.ver);
         pkg.cflags = bs.importPaths.map!(p => dcf.importPath("${includedir}/" ~ p))
             .chain(bs.versions.map!(v => dcf.version_(v)))
             .array
@@ -424,12 +453,12 @@ class LdcCompilerFlags : CompilerFlags
 
     string makedeps(string filename)
     {
-        return "-makedeps=" ~ filename;
+        return "--makedeps=" ~ filename;
     }
 
     string output(string filename)
     {
-        return "-of=" ~ filename;
+        return "--of=" ~ filename;
     }
 
     string importPath(string path)
@@ -444,12 +473,12 @@ class LdcCompilerFlags : CompilerFlags
 
     string version_(string ident)
     {
-        return "-version=" ~ ident;
+        return "--d-version=" ~ ident;
     }
 
     string debugVersion(string ident)
     {
-        return "-debug=" ~ ident;
+        return "--d-debug=" ~ ident;
     }
 
     string libSearchPath(string path)
@@ -470,7 +499,14 @@ class LdcCompilerFlags : CompilerFlags
 
 string libraryFileName(string libname)
 {
-    return "lib" ~ libname ~ ".a";
+    version (Windows)
+    {
+        return libname ~ ".lib";
+    }
+    else
+    {
+        return "lib" ~ libname ~ ".a";
+    }
 }
 
 string ninjaQuote(string arg)

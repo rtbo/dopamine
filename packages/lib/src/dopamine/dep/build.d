@@ -6,6 +6,7 @@ import dopamine.dep.service;
 import dopamine.log;
 import dopamine.profile;
 import dopamine.recipe;
+import dopamine.semver;
 
 import std.exception;
 import std.file;
@@ -28,7 +29,7 @@ in (!stageDest || isAbsolute(stageDest))
         const buildId = BuildId(rdir.recipe, conf, stageDest);
         const bPaths = rdir.buildPaths(buildId);
 
-        depNode.userData = new DepInfoObj(bPaths.install);
+        depNode.userData = new DepInfoObj(bPaths.install, depNode.ver);
     }
 
     return collectNodeDepInfos(dag.root.resolvedNode);
@@ -99,7 +100,7 @@ in (!stageDest || isAbsolute(stageDest))
             logInfo("%s: Up-to-date", info(packNameHead));
         }
 
-        depNode.userData = new DepInfoObj(bPaths.install);
+        depNode.userData = new DepInfoObj(bPaths.install, depNode.ver);
     }
 
     return collectNodeDepInfos(dag.root.resolvedNode);
@@ -107,9 +108,9 @@ in (!stageDest || isAbsolute(stageDest))
 
 private class DepInfoObj
 {
-    this(string installDir)
+    this(string installDir, Semver ver)
     {
-        info = DepInfo(installDir);
+        info = DepInfo(installDir, ver);
     }
 
     DepInfo info;

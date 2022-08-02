@@ -1,0 +1,9 @@
+SKIP_NOPROG=meson
+
+PRE_CMD=$DOP profile --discover
+PRE_CMD=$DOP resolve
+CMD=$DOP build
+RECIPE=xlsx-app
+
+EXPECT_MATCH=Recipe: OK - xlsx-app/1.0.0
+EXPECT_DIR=.dop/$DOP_BID-build

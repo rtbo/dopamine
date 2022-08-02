@@ -521,6 +521,7 @@ void pushDepInfos(lua_State* L, DepInfo[string] depInfos) @trusted
 
         lua_createtable(L, 0, 1);
         luaSetTable(L, -1, "install_dir", di.installDir);
+        luaSetTable(L, -1, "version", di.ver.toString());
 
         lua_settable(L, depInfosInd);
     }

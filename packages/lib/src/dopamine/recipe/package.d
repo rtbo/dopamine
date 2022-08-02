@@ -52,6 +52,7 @@ struct BuildConfig
 struct DepInfo
 {
     string installDir;
+    Semver ver;
 }
 
 enum RecipeType

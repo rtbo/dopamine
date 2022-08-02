@@ -858,15 +858,15 @@ int luaCreateArchive(lua_State* L) nothrow
 
         logVerbose("creating %s", info(archive));
 
-        auto algo = BoxAlgo.forFilename(archive);
-        auto entries = dirEntries(indir, SpanMode.breadth, false)
+        auto algo = boxAlgo(archive);
+        dirEntries(indir, SpanMode.breadth, false)
             .filter!(e => !e.isDir)
             .map!((dirEntry) {
                 auto boxEntry = fileEntry(dirEntry.name, indir);
                 logVerbose("archiving %s", boxEntry.path);
                 return boxEntry;
-            });
-        algo.box(entries)
+            })
+            .box(algo)
             .writeBinaryFile(archive);
 
         return 0;
@@ -891,9 +891,9 @@ int luaExtractArchive(lua_State* L) nothrow
         const outdir = luaGetTable!string(L, 1, "outdir");
 
         logVerbose("extracting %s", info(archive));
-        auto algo = BoxAlgo.forFilename(archive);
-        auto bytes = readBinaryFile(archive);
-        auto entries = algo.unbox(bytes);
+        auto algo = boxAlgo(archive);
+        auto entries = readBinaryFile(archive)
+            .unbox(algo);
         entries.each!((e) { logVerbose("    %s", e.path); e.extractTo(outdir); });
 
         return 0;
