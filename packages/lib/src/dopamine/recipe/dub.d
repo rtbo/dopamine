@@ -132,10 +132,10 @@ class DubRecipe : Recipe
         ];
         foreach(d; depInfos.byKey())
         {
-            auto df = execute(["pkg-config", "--env-only", "--cflags", d], pkgconfEnv);
+            auto df = execute(["pkg-config", "--cflags", d], pkgconfEnv);
             enforce (df.status == 0, "pkg-config failed: " ~ df.output);
             bs.dflags ~= df.output.strip().split(" ");
-            auto lf = execute(["pkg-config", "--env-only", "--libs", d], pkgconfEnv);
+            auto lf = execute(["pkg-config", "--libs", d], pkgconfEnv);
             enforce (lf.status == 0, "pkg-config failed " ~ lf.output);
             bs.lflags ~= lf.output.strip().split(" ");
         }
