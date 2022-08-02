@@ -1,9 +1,8 @@
-import { AuthResponse, resource } from "./api";
+import { resource } from "./api";
 import { encodeUrlQuery, getFullUrlPath, parseQueryString, QueryObj } from "./util";
 
-import axios from "axios";
 import cryptoRandomString from "crypto-random-string";
-import { App, inject, InjectionKey, provide, ref, Ref } from "vue";
+import { inject, InjectionKey, provide, ref, Ref } from "vue";
 
 export type Provider = "github" | "google";
 
