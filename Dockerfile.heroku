@@ -4,15 +4,16 @@ FROM alpine:3.16 AS build
 ENV DC=ldc2
 RUN apk add --no-cache musl-dev libpq-dev zlib-dev xz-dev bzip2-dev git gcc dub ldc gcc ninja py3-pip nodejs npm tree
 RUN python3 -m pip install meson==0.63.0
-RUN dub run --yes dub-build-deep -- vibe-d:http@0.9.4 --compiler=ldc2 --build=release
-
-
-# copy source code
-COPY . /source
+RUN dub run --yes dub-build-deep --build=release -- vibe-d:http@0.9.4 --compiler=ldc2 --build=release
 
 # fetch squiz-box if not here
 # dirty hack for squiz-box
-RUN [ ! -f /source/subprojects/squiz-box/meson.build ] && git clone --branch 8ac455 https://github.com/rtbo/squiz-box.git /source/subprojects/squiz
+RUN [ ! -f /source/subprojects/squiz-box/meson.build ] && git clone https://github.com/rtbo/squiz-box.git /source/subprojects/squiz-box
+WORKDIR /source/subprojects/squiz-box
+RUN [ -d .git ] && git reset --hard e78fed30 || echo ''
+
+# copy source code
+COPY . /source
 
 RUN tree /source
 
