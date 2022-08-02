@@ -39,12 +39,10 @@ if get_option('enable_server')
     endif
 endif
 
-if get_option('enable_client')
-    vibed_data_dep = dependency('vibe-d:data',
-        method: 'dub',
-        version: vibed_version,
-    )
-endif
+vibed_data_dep = dependency('vibe-d:data',
+    method: 'dub',
+    version: vibed_version,
+)
 
 if get_option('enable_test')
     ut_assertions_dep = dependency('unit-threaded:assertions',
