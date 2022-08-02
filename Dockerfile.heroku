@@ -40,8 +40,8 @@ FROM alpine:3.16
 RUN apk add --no-cache libpq zlib libbz2 xz-libs lua ldc-runtime
 
 # copy installation
-COPY --from=build /install /run
+COPY --from=build /install /app
 
 USER nobody
 
-ENTRYPOINT [ "/run/bin/dop-server" ]
+CMD /app/bin/dop-server
