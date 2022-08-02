@@ -1,10 +1,4 @@
-FROM alpine:3.16 AS build
-
-# install build dependencies
-ENV DC=ldc2
-RUN apk add --no-cache musl-dev libpq-dev zlib-dev xz-dev bzip2-dev git gcc dub ldc gcc ninja py3-pip nodejs npm tree
-RUN python3 -m pip install meson==0.63.0
-RUN dub run --yes dub-build-deep --build=release -- vibe-d:http@0.9.4 --compiler=ldc2 --build=release
+FROM rtbo/dopamine-pm:build-deps AS build
 
 # fetch squiz-box if not here
 # dirty hack for squiz-box
