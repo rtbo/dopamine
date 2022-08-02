@@ -1,6 +1,6 @@
 build:
   docker:
     release:
-      dockerfile: deploy/Dockerfile
+      dockerfile: Dockerfile.heroku
       target: build
-    web: deploy/Dockerfile
+    web: Dockerfile.heroku
