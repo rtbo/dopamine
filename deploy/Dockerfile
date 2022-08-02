@@ -1,0 +1,40 @@
+FROM alpine:3.16 AS build
+
+# install build dependencies
+ENV DC=ldc2
+RUN apk add --no-cache musl-dev libpq-dev zlib-dev xz-dev bzip2-dev gcc dub ldc gcc ninja py3-pip nodejs npm tree
+RUN python3 -m pip install meson==0.63.0
+RUN dub run --yes dub-build-deep -- vibe-d:http@0.9.4 --compiler=ldc2 --build=release
+
+# copy source code
+COPY . /source
+RUN tree /source
+
+# build server app
+WORKDIR /source
+RUN meson /build -Denable_server=true -Denable_client=false -Denable_test=false -Dalpine=true --buildtype=release --prefix=/install
+WORKDIR /build
+RUN ninja install
+
+# build front-end app
+WORKDIR /source/web
+RUN npm install
+RUN npm run build
+
+# copy front-end to server static files
+RUN mkdir -p /install/share/dopamine/public
+RUN cp -r /source/web/dist/* /install/share/dopamine/public
+
+RUN tree /install
+
+FROM alpine:3.16
+
+# install runtime dependencies
+RUN apk add --no-cache libpq zlib libbz2 xz-libs lua ldc-runtime
+
+# copy installation
+COPY --from=build /install /run
+
+USER nobody
+
+ENTRYPOINT [ "/run/bin/dop-server" ]
