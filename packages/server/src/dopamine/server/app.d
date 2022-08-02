@@ -47,6 +47,7 @@ class DopRegistry
         client = new DbClient(conf.dbConnString, conf.dbPoolMaxSize);
 
         settings = new HTTPServerSettings(conf.serverHostname);
+        settings.port = conf.serverPort;
 
         if (conf.httpsCert && conf.httpsKey)
         {
