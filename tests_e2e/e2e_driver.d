@@ -638,7 +638,7 @@ struct Test
     // to obtain a unique port for each instance
     Tuple!(File, int) acquireRegistryPort()
     {
-        int port = 3500;
+        int port = 3501;
         while (1)
         {
             auto fn = e2ePath("sandbox", format("%d.lock", port));
@@ -844,8 +844,9 @@ final class Registry
         errFile = File(errPath, "w");
 
         this.port = port;
-        this.url = env["DOP_REGISTRY"];
-        this.env["DOP_SERVER_HOSTNAME"] = this.url.replace("http://", "").replace("https://", "");
+        this.url = format!"http://localhost:%s"(port);
+        this.env["DOP_SERVER_HOSTNAME"] = "localhost";
+        this.env["DOP_SERVER_PORT"] = port.to!string;
         this.env["DOP_DB_CONNSTRING"] = pgConnString(format("dop-test-%s", port));
         this.env["DOP_TEST_STOPROUTE"] = "1";
 

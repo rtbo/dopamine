@@ -1,0 +1,57 @@
+# dockerfile
+deploy/Dockerfile*
+
+# general
+.git
+.gitignore
+.gitmodules
+.github
+.vscode
+*.code-workspace
+dscanner.ini
+**/TODO*
+
+# environment files and helpers
+**/*.env*
+env_*.sh
+env_*.bat
+!web/.env.production
+
+# certificates
+**/*.pem
+
+# meson
+build*/
+install*/
+
+# dub
+.dub/
+dub.selections.json
+# dub targets
+/*.a
+/*.lib
+/*.exe
+/*.dll
+
+# some doc
+**/*.md
+
+# windows specific
+windows-x64
+
+# node, vite, npm
+web/node_modules
+web/dist
+
+# squiz-box ignores
+subprojects/squiz-box/.gitignore
+subprojects/squiz-box/.github
+subprojects/squiz-box/dub.json
+subprojects/squiz-box/dscanner.ini
+subprojects/squiz-box/doc
+subprojects/squiz-box/3rdparty/xz-5.2.5
+subprojects/squiz-box/3rdparty/zlib-1.2.12
+subprojects/squiz-box/3rdparty/zstd-1.5.2
+
+# not needed for server-app
+tests_e2e

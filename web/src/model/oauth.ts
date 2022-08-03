@@ -1,9 +1,8 @@
-import { AuthResponse, resource } from "./api";
+import { resource } from "./api";
 import { encodeUrlQuery, getFullUrlPath, parseQueryString, QueryObj } from "./util";
 
-import axios from "axios";
 import cryptoRandomString from "crypto-random-string";
-import { App, inject, InjectionKey, provide, ref, Ref } from "vue";
+import { inject, InjectionKey, provide, ref, Ref } from "vue";
 
 export type Provider = "github" | "google";
 
@@ -25,7 +24,7 @@ const config: OAuthConfig = {
         github: {
             clientId: import.meta.env.VITE_GITHUB_CLIENT_ID || "3f2f6c2ce1e0bdf8ae6c",
             requestUrl: "https://github.com/login/oauth/authorize",
-            redirectUrl: `${window.location.origin}/auth/github`,
+            redirectUrl: `${window.location.origin}/oauth/github`,
             scope: "read:user user:email",
         },
         google: {
@@ -33,7 +32,7 @@ const config: OAuthConfig = {
                 import.meta.env.VITE_GOOGLE_CLIENT_ID ||
                 "241559404387-jf6rp461t5ikahsgrjop48jm5u97ur5t.apps.googleusercontent.com",
             requestUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-            redirectUrl: `${window.location.origin}/auth/google`,
+            redirectUrl: `${window.location.origin}/oauth/google`,
             scope: "profile email openid",
         },
     },

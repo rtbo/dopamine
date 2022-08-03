@@ -9,9 +9,13 @@ import std.conv;
 /// Defaults values should suit development environement.
 struct Config
 {
-    /// Hostname of server (including port)
+    /// Hostname of server (without port)
     /// Read from $DOP_SERVER_HOSTNAME
     string serverHostname;
+
+    /// Port of the server
+    /// Read from $DOP_SERVER_PORT or $PORT if $DOP_SERVER_PORT is unset
+    ushort serverPort;
 
     /// Secret of JWT signature
     /// Read from $DOP_SERVER_JWTSECRET
@@ -69,8 +73,12 @@ struct Config
         if (!initialized)
         {
             c.serverHostname = environment.get(
-                "DOP_SERVER_HOSTNAME", "localhost:3500"
+                "DOP_SERVER_HOSTNAME", "localhost"
             );
+            c.serverPort = environment.get(
+                "DOP_SERVER_PORT", environment.get("PORT", "3500")
+            ).to!ushort;
+
             c.serverJwtSecret = environment.get(
                 "DOP_SERVER_JWTSECRET", "test-secret"
             );
