@@ -4,35 +4,46 @@ import e2e_utils;
 import e2e_test;
 
 import std.file;
+import std.getopt;
 import std.path;
 import std.process;
 import std.stdio;
 
-int usage(string[] args, int code)
+int usage(string[] args, int code, Option[] options)
 {
-    stderr.writefln("Usage: %s [TEST_FILE]", args[0]);
+    stderr.writefln("Usage: %s [OPTIONS] [TEST_FILE]", args[0]);
+    defaultGetoptFormatter(stderr.lockingTextWriter, "", options);
     return code;
 }
 
 int main(string[] args)
 {
+    Exes exes;
+
+    // dfmt off
+    auto helpInfo = getopt(args,
+        "client-exe",   &exes.client,
+        "registry-exe", &exes.registry,
+        "admin-exe",    &exes.admin,
+    );
+    // dfmt on
+
+    if (helpInfo.helpWanted)
+    {
+        return usage(args, 0, helpInfo.options);
+    }
+
     if (args.length < 2)
     {
         stderr.writeln(
             "Error: missing test file");
-        return usage(args, 1);
+        return usage(args, 1, helpInfo.options);
     }
     if (!exists(args[1]))
     {
         stderr.writefln("Error: No such file: %s", args[1]);
-        return usage(args, 1);
+        return usage(args, 1, helpInfo.options);
     }
-
-    const exes = Exes(
-        absolutePath(environment["DOP"]),
-        absolutePath(environment["DOP_SERVER"]),
-        absolutePath(environment["DOP_ADMIN"]),
-    );
 
     try
     {

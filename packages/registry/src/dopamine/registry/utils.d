@@ -1,7 +1,7 @@
-module dopamine.server.utils;
+module dopamine.registry.utils;
 
-import dopamine.server.config;
-import dopamine.server.auth;
+import dopamine.registry.config;
+import dopamine.registry.auth;
 
 import dopamine.api.attrs;
 

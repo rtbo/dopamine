@@ -64,12 +64,17 @@ final class Sandbox
 
         const dir = path();
         enforce(!exists(dir), "Sandbox already exists at " ~ dir);
-
         mkdirRecurse(dir);
 
-        copyRecurse(e2ePath("recipes", test.recipe), recipePath());
+        env = [
+            "DOP": exes.client,
+            "DOP_HOME": homePath(),
+            "DOP_E2ETEST_BUILDID": path("build-id.hash"),
+        ];
 
         auto defs = parseJSON(cast(string) read(e2ePath("definitions.json")));
+
+        copyRecurse(e2ePath("recipes", test.recipe), recipePath());
 
         mkdirRecurse(homePath("cache"));
         if (test.cache)
@@ -106,10 +111,6 @@ final class Sandbox
             auto loginFile = File(homePath("login.json"), "w");
             loginFile.writefln!`{"localhost:%s":"%s"}`(port, token);
         }
-
-        env["DOP"] = exes.dop;
-        env["DOP_HOME"] = homePath();
-        env["DOP_E2ETEST_BUILDID"] = path("build-id.hash");
     }
 
     private void acquirePortLock()

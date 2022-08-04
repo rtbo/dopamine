@@ -6,8 +6,8 @@ project('dopamine', ['c', 'd'],
 # check options consistency
 
 if get_option('enable_test')
-    if not get_option('enable_client') or not get_option('enable_server')
-        error('both client and server are needed to enable tests')
+    if not get_option('enable_client') or not get_option('enable_registry')
+        error('both client and registry are needed to enable tests')
     endif
 endif
 
@@ -20,7 +20,7 @@ squiz_dep = squiz_proj.get_variable('squiz_dep')
 
 vibed_version = '0.9.4'
 
-if get_option('enable_server')
+if get_option('enable_registry')
     vibed_http_dep = dependency('vibe-d:http',
         method: 'dub',
         version: vibed_version,

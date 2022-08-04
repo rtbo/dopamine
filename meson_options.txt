@@ -4,10 +4,10 @@ option('enable_client',
     description: 'Whether to build the client application',
 )
 
-option('enable_server',
+option('enable_registry',
     type: 'boolean',
     value: false,
-    description: 'Whether to build the server application',
+    description: 'Whether to build the registry application',
 )
 
 option('enable_admin',

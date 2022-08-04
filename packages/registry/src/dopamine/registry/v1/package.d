@@ -1,7 +1,7 @@
-module dopamine.server.v1;
+module dopamine.registry.v1;
 
-import dopamine.server.db;
-import dopamine.server.v1.recipes;
+import dopamine.registry.db;
+import dopamine.registry.v1.recipes;
 
 import vibe.http.router;
 

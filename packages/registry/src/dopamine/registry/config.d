@@ -1,4 +1,4 @@
-module dopamine.server.config;
+module dopamine.registry.config;
 
 import std.conv;
 
@@ -9,17 +9,17 @@ import std.conv;
 /// Defaults values should suit development environement.
 struct Config
 {
-    /// Hostname of server (without port)
-    /// Read from $DOP_SERVER_HOSTNAME
-    string serverHostname;
+    /// Hostname of registry (without port)
+    /// Read from $DOP_REGISTRY_HOSTNAME
+    string registryHostname;
 
-    /// Port of the server
-    /// Read from $DOP_SERVER_PORT or $PORT if $DOP_SERVER_PORT is unset
-    ushort serverPort;
+    /// Port of the registry
+    /// Read from $DOP_REGISTRY_PORT or $PORT if $DOP_REGISTRY_PORT is unset
+    ushort registryPort;
 
     /// Secret of JWT signature
-    /// Read from $DOP_SERVER_JWTSECRET
-    string serverJwtSecret;
+    /// Read from $DOP_REGISTRY_JWTSECRET
+    string registryJwtSecret;
 
     /// Path to the HTTPS certificate file
     /// Read from $DOP_HTTPS_CERT
@@ -72,15 +72,15 @@ struct Config
 
         if (!initialized)
         {
-            c.serverHostname = environment.get(
-                "DOP_SERVER_HOSTNAME", "localhost"
+            c.registryHostname = environment.get(
+                "DOP_REGISTRY_HOSTNAME", "localhost"
             );
-            c.serverPort = environment.get(
-                "DOP_SERVER_PORT", environment.get("PORT", "3500")
+            c.registryPort = environment.get(
+                "DOP_REGISTRY_PORT", environment.get("PORT", "3500")
             ).to!ushort;
 
-            c.serverJwtSecret = environment.get(
-                "DOP_SERVER_JWTSECRET", "test-secret"
+            c.registryJwtSecret = environment.get(
+                "DOP_REGISTRY_JWTSECRET", "test-secret"
             );
 
             c.httpsCert = environment.get(

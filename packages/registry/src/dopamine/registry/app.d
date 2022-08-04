@@ -1,10 +1,10 @@
-module dopamine.server.app;
+module dopamine.registry.app;
 
-import dopamine.server.auth;
-import dopamine.server.config;
-import dopamine.server.db;
-import dopamine.server.utils;
-import dopamine.server.v1;
+import dopamine.registry.auth;
+import dopamine.registry.config;
+import dopamine.registry.db;
+import dopamine.registry.utils;
+import dopamine.registry.v1;
 
 import cors_vibe;
 
@@ -46,8 +46,8 @@ class DopRegistry
 
         client = new DbClient(conf.dbConnString, conf.dbPoolMaxSize);
 
-        settings = new HTTPServerSettings(conf.serverHostname);
-        settings.port = conf.serverPort;
+        settings = new HTTPServerSettings(conf.registryHostname);
+        settings.port = conf.registryPort;
 
         if (conf.httpsCert && conf.httpsKey)
         {

@@ -1,8 +1,8 @@
-module dopamine.server.auth;
+module dopamine.registry.auth;
 
-import dopamine.server.config;
-import dopamine.server.db;
-import dopamine.server.utils;
+import dopamine.registry.config;
+import dopamine.registry.db;
+import dopamine.registry.utils;
 
 import jwt;
 import pgd.conn;
@@ -175,7 +175,7 @@ class AuthApi
             return userRow;
         });
 
-        auto idToken = Jwt.sign(idPayload(row), Config.get.serverJwtSecret);
+        auto idToken = Jwt.sign(idPayload(row), Config.get.registryJwtSecret);
 
         auto json = Json([
             "idToken": Json(idToken.toString()),
@@ -325,7 +325,7 @@ class AuthApi
                 `, cast(uint) RefreshToken.length, userRow.id, refreshTokenExp, row.name, row.cli,
             );
 
-            auto idToken = Jwt.sign(idPayload(userRow), Config.get.serverJwtSecret);
+            auto idToken = Jwt.sign(idPayload(userRow), Config.get.registryJwtSecret);
 
             auto json = Json([
                 "idToken": Json(idToken.toString()),
@@ -450,7 +450,7 @@ private string elidedToken(string token)
 private Json idPayload(UserRow row)
 {
     const payload = JwtPayload(
-        Config.get.serverHostname,
+        Config.get.registryHostname,
         row.id,
         toJwtTime(Clock.currTime + idTokenDuration),
         row.email,
@@ -544,8 +544,8 @@ UserInfo enforceAuth(scope HTTPServerRequest req) @safe
         const conf = Config.get;
         const jwt = Jwt.verify(
             head[bearer.length .. $].strip(),
-            conf.serverJwtSecret,
-            Jwt.VerifOpts(Yes.checkExpired, [conf.serverHostname]),
+            conf.registryJwtSecret,
+            Jwt.VerifOpts(Yes.checkExpired, [conf.registryHostname]),
         );
         auto payload = jwt.payload;
         return UserInfo(
