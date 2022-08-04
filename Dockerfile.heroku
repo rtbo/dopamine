@@ -13,7 +13,7 @@ RUN tree /source
 
 # build registry app
 WORKDIR /source
-RUN meson /build -Denable_registry=true -Denable_client=false -Denable_test=false -Dalpine=true --buildtype=release --prefix=/install
+RUN meson /build -Denable_registry=true -Denable_client=false -Denable_test=false -Denable_admin -Dalpine=true --buildtype=release --prefix=/install
 WORKDIR /build
 RUN ninja install
 
