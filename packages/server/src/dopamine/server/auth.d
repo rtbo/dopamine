@@ -4,7 +4,6 @@ import dopamine.server.config;
 import dopamine.server.db;
 import dopamine.server.utils;
 
-import crypto;
 import jwt;
 import pgd.conn;
 import pgd.maybe;
