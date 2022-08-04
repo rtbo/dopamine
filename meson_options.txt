@@ -10,6 +10,12 @@ option('enable_server',
     description: 'Whether to build the server application',
 )
 
+option('enable_admin',
+    type: 'boolean',
+    value: false,
+    description: 'Whether to build the dop-admin program',
+)
+
 option('enable_test',
     type: 'boolean',
     value: false,
