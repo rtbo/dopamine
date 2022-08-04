@@ -259,16 +259,15 @@ private class CmdTest
 
         int status = pid.wait();
 
-        auto env = sandbox.env.dup;
         if (exists(sandbox.path("build-id.hash")))
         {
             const hash = cast(string) assumeUnique(read(sandbox.path("build-id.hash")));
-            env["DOP_BID_HASH"] = hash;
-            env["DOP_BID"] = hash[0 .. 10];
+            sandbox.env["DOP_BID_HASH"] = hash;
+            sandbox.env["DOP_BID"] = hash[0 .. 10];
         }
 
         auto result = RunResult(
-            sandbox.name, status, fileOut, fileErr, sandbox.recipePath(), env
+            sandbox.name, status, fileOut, fileErr, sandbox.recipePath(), sandbox.env.dup
         );
 
         reportFileContent(stderr, fileOut, format!"%02s: STDOUT of %s"(id, command));
