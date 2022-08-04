@@ -8,3 +8,6 @@ CMD=$DOP resolve
 CMD=$DOP build
 EXPECT_MATCH=Recipe: OK - dub-dep/1.0.0
 EXPECT_DIR=.dop/$DOP_BID-build
+EXPECT_DIR=.dop/$DOP_BID
+
+CMD=.dop/$DOP_BID/bin/app
