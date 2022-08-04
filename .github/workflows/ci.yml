@@ -72,7 +72,7 @@ jobs:
         with:
           action: build
           directory: build
-          setup-options: --buildtype=${{ matrix.bt }} -Denable_server=true -Denable_test=true -Denable_client=true
+          setup-options: --buildtype=${{ matrix.bt }} -Denable_registry=true -Denable_test=true -Denable_client=true
           meson-version: ${{ matrix.meson }}
 
       - name: Run tests

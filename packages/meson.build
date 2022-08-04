@@ -8,7 +8,7 @@ if get_option('enable_client') or get_option('enable_test')
     subdir('client')
 endif
 
-if get_option('enable_admin') or get_option('enable_test') or get_option('enable_server')
+if get_option('enable_admin') or get_option('enable_test') or get_option('enable_registry')
     subdir('pgd')
 endif
 
@@ -17,7 +17,7 @@ if get_option('enable_admin') or get_option('enable_test')
     subdir('admin')
 endif
 
-if get_option('enable_server')
+if get_option('enable_registry')
     subdir('cors')
-    subdir('server')
+    subdir('registry')
 endif

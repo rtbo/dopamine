@@ -53,5 +53,5 @@ subprojects/squiz-box/3rdparty/xz-5.2.5
 subprojects/squiz-box/3rdparty/zlib-1.2.12
 subprojects/squiz-box/3rdparty/zstd-1.5.2
 
-# not needed for server-app
+# not needed for registry-app
 tests_e2e

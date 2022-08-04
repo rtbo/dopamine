@@ -31,8 +31,8 @@ final class Registry
         this.port = sandbox.port;
         assert(this.port != 0);
         this.url = format!"http://localhost:%s"(sandbox.port);
-        this.env["DOP_SERVER_HOSTNAME"] = "localhost";
-        this.env["DOP_SERVER_PORT"] = sandbox.port.to!string;
+        this.env["DOP_REGISTRY_HOSTNAME"] = "localhost";
+        this.env["DOP_REGISTRY_PORT"] = sandbox.port.to!string;
         this.env["DOP_DB_CONNSTRING"] = pgConnString(format("dop-test-%s", sandbox.port));
         this.env["DOP_TEST_STOPROUTE"] = "1";
 
@@ -55,7 +55,7 @@ final class Registry
         else
             writeln("Run dop-admin:\n", adminRes.output);
 
-        const cmd = [exes.reg];
+        const cmd = [exes.registry];
         pid = spawnProcess(cmd, stdin, outFile, errFile, this.env, Config.none, regPath);
     }
 

@@ -11,9 +11,9 @@ COPY . /source
 
 RUN tree /source
 
-# build server app
+# build registry app
 WORKDIR /source
-RUN meson /build -Denable_server=true -Denable_client=false -Denable_test=false -Dalpine=true --buildtype=release --prefix=/install
+RUN meson /build -Denable_registry=true -Denable_client=false -Denable_test=false -Dalpine=true --buildtype=release --prefix=/install
 WORKDIR /build
 RUN ninja install
 
@@ -22,7 +22,7 @@ WORKDIR /source/web
 RUN npm install
 RUN npm run build
 
-# copy front-end to server static files
+# copy front-end to registry static files
 RUN mkdir -p /install/share/dopamine/public
 RUN cp -r /source/web/dist/* /install/share/dopamine/public
 
@@ -38,4 +38,4 @@ COPY --from=build /install /app
 
 USER nobody
 
-CMD /app/bin/dop-server
+CMD /app/bin/dop-registry

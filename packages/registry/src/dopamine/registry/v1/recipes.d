@@ -1,8 +1,8 @@
-module dopamine.server.v1.recipes;
+module dopamine.registry.v1.recipes;
 
-import dopamine.server.auth;
-import dopamine.server.db;
-import dopamine.server.utils;
+import dopamine.registry.auth;
+import dopamine.registry.db;
+import dopamine.registry.utils;
 
 import dopamine.api.attrs;
 import dopamine.api.v1;

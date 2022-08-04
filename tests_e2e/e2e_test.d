@@ -16,8 +16,8 @@ import std.string;
 
 struct Exes
 {
-    string dop;
-    string reg;
+    string client;
+    string registry;
     string admin;
 }
 

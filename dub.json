@@ -12,7 +12,7 @@
     "packages/jwt/src",
     "packages/lib/src",
     "packages/pgd/src",
-    "packages/server/src",
+    "packages/registry/src",
     "subprojects/squiz-box/src",
     "tests_e2e"
   ],
@@ -26,7 +26,7 @@
     "packages/jwt/src",
     "packages/lib/src",
     "packages/pgd/src",
-    "packages/server/src",
+    "packages/registry/src",
     "subprojects/squiz-box/src",
     "tests_e2e"
   ],
