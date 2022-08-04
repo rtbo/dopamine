@@ -2,11 +2,12 @@ SKIP_POSIX
 SKIP_NOPROG=cmake
 SKIP_NOINET
 
-PRE_CMD=$DOP profile --discover
-PRE_CMD=$DOP source
-CMD=$DOP build
 RECIPE=zlib
 
+CMD=$DOP profile --discover
+CMD=$DOP source
+
+CMD=$DOP build
 EXPECT_MATCH=Recipe: OK - zlib/1.2.11
 EXPECT_MATCH=Source: OK - zlib-1.2.11
 EXPECT_DIR=.dop/$DOP_BID-build

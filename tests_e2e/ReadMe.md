@@ -2,19 +2,24 @@
 
 Ad-hoc test framework where each test is described in a *.test file
 
-Each test define a DOP command to be run and make some assertions (EXPECT_*).
+Each test defines a sandbox environment and a set of commands to be run with test assertions (EXPECT_*).
 
 ## *.test format
 
 The test file format consist of entries in the form `KEY=VALUE`.
 There can be one entry per line.
-Lines starting with `#` are ignored and can be used for comments.
+Empty lines and lines starting with `#` are ignored.
+
+There are 2 sections in a test file. The first is the sandbox definition and the second are the tests.
+The sandbox consists at least of the `RECIPE` instruction.
+Each test starts with the `CMD` instruction and goes to the next `CMD` or end of file.
+Each command is run in sequence in the same sandbox and assertions refer to the result of the previous `CMD`.
 
 ## Sandbox
 
 Each test is run in a sandboxed environment.
 The sandbox system does its best to run the tests in isolation from the system,
-but is not a virual machine. It require some tools to be present on the system,
+but is not a virual machine neither a container. It require some tools to be present on the system,
 as well as a running PostgreSQL instance.
 Depending on the tools installed and their version, the test results may differ.
 
@@ -64,6 +69,7 @@ subsequent assertions are not checked.
 
 ## Skip rules
 
-TO BE DEFINED.
-Rules are needed to skip some tests depending on platform, or if an external
-tool is not found or not in the right version.
+SKIP entries can be written at the start of the *.test file to skip the test on a given condition:
+ - `SKIP_NOPROG=program` will skip a test if `program` is not installed on the system
+ - `SKIP_NOINET` will skip a test if no internet connection can be established.
+ - `SKIP_(WINDOWS|LINUX|POSIX)` will skip the test depending on the running platform.

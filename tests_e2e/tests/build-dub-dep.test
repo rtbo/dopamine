@@ -1,9 +1,10 @@
 SKIP_NOPROG=meson
 
-PRE_CMD=$DOP profile --discover
-PRE_CMD=$DOP resolve
-CMD=$DOP build
 RECIPE=dub-dep
 
+CMD=$DOP profile --discover
+CMD=$DOP resolve
+
+CMD=$DOP build
 EXPECT_MATCH=Recipe: OK - dub-dep/1.0.0
 EXPECT_DIR=.dop/$DOP_BID-build

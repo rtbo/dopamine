@@ -1,11 +1,11 @@
 # Resolve and lock dependencies of a light recipe
-PRE_CMD=$DOP profile --discover
-
-CMD=$DOP resolve --prefer-cache
 RECIPE=lib2
 CACHE=base
 REGISTRY=base
 
+CMD=$DOP profile --discover
+
+CMD=$DOP resolve --prefer-cache
 EXPECT_MATCH=^Recipe: OK - lib2/1.0.0$
 EXPECT_MATCH=Dependency resolution: OK
 EXPECT_MATCH=pkga/1.0.0/1
