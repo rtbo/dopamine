@@ -1,4 +1,4 @@
-CMD=$DOP source
 RECIPE=lib1
 
+CMD=$DOP source
 EXPECT_MATCH=Source: in-tree at .+source-in-tree.* - nothing to do

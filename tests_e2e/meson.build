@@ -1,5 +1,14 @@
 
-e2e_driver_exe = executable('e2e-driver', 'e2e_driver.d',
+e2e_driver_src = files([
+    'e2e_assert.d',
+    'e2e_main.d',
+    'e2e_registry.d',
+    'e2e_sandbox.d',
+    'e2e_test.d',
+    'e2e_utils.d',
+])
+
+e2e_driver_exe = executable('e2e-driver', e2e_driver_src,
     install: false,
     dependencies: [vibed_http_dep, jwt_dep],
 )
@@ -29,8 +38,9 @@ e2e_tests = [
     'build-zlib-posix',
     'build-zlib-win',
     'build-dublib',
-    'build-dub-dep',
     'build-xlsx-app',
+
+    'dub-dep',
 
     'stage-lib2',
 

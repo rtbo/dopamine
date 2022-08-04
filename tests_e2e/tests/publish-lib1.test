@@ -2,10 +2,11 @@ SKIP_NOPROG=meson
 
 REGISTRY=base
 USER=user1
-PRE_CMD=$DOP profile --discover
-CMD=$DOP publish --skip-cvs-clean
 RECIPE=lib1
 
+CMD=$DOP profile --discover
+
+CMD=$DOP publish --skip-cvs-clean
 EXPECT_MATCH=Recipe: OK - lib1/1.0.0
 EXPECT_MATCH=Publish: New package - lib1
 EXPECT_MATCH=Publish: OK - lib1/1.0.0

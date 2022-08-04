@@ -1,10 +1,11 @@
 SKIP_NOPROG=meson
 
-PRE_CMD=$DOP profile --discover
-PRE_CMD=$DOP source
-CMD=$DOP build
 RECIPE=lib1
 
+CMD=$DOP profile --discover
+CMD=$DOP source
+
+CMD=$DOP build
 EXPECT_MATCH=Recipe: OK - lib1/1.0.0
 EXPECT_DIR=.dop/$DOP_BID-build
 EXPECT_LIB=.dop/$DOP_BID-build/lib1
