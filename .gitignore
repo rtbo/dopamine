@@ -8,6 +8,7 @@ install*/
 
 #environment
 .env*
+!.env*example
 
 #dub
 .dub/
