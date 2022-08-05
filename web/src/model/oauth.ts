@@ -22,15 +22,13 @@ const config: OAuthConfig = {
     apiAuthUrl: resource("/auth"),
     providers: {
         github: {
-            clientId: import.meta.env.VITE_GITHUB_CLIENT_ID || "3f2f6c2ce1e0bdf8ae6c",
+            clientId: import.meta.env.VITE_GITHUB_CLIENTID,
             requestUrl: "https://github.com/login/oauth/authorize",
             redirectUrl: `${window.location.origin}/oauth/github`,
             scope: "read:user user:email",
         },
         google: {
-            clientId:
-                import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-                "241559404387-jf6rp461t5ikahsgrjop48jm5u97ur5t.apps.googleusercontent.com",
+            clientId: import.meta.env.VITE_GOOGLE_CLIENTID,
             requestUrl: "https://accounts.google.com/o/oauth2/v2/auth",
             redirectUrl: `${window.location.origin}/oauth/google`,
             scope: "profile email openid",
