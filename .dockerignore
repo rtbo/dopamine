@@ -15,7 +15,6 @@ dscanner.ini
 **/*.env*
 env_*.sh
 env_*.bat
-!web/.env.production
 
 # certificates
 **/*.pem

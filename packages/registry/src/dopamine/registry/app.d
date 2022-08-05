@@ -15,6 +15,7 @@ import vibe.http.router;
 import vibe.http.server;
 import vibe.stream.tls;
 
+import std.exception;
 import std.file;
 import std.format;
 import std.path;
@@ -38,7 +39,6 @@ class DopRegistry
     HTTPServerSettings settings;
 
     URLRouter root;
-    URLRouter api;
 
     this()
     {
@@ -56,7 +56,9 @@ class DopRegistry
             settings.tlsContext.usePrivateKeyFile(conf.httpsKey);
         }
 
-        api = new URLRouter("/api");
+        enforce(conf.registryApiPrefix.length == 0 || conf.registryApiPrefix.startsWith("/"));
+
+        auto api = new URLRouter(conf.registryApiPrefix);
         api.any("*", cors());
 
         auto auth = new AuthApi(client);
@@ -71,10 +73,23 @@ class DopRegistry
                 api.post("/stop", &stop);
         }
 
-        root = new URLRouter;
-        root.any("/api/*", api);
+        // Two possibilities for the deployment:
+        //  1. API and front-end served by this app. Then a prefix is needed for the API
+        //  2. API is served from a sub-domain (https://api.dopamine-pm.org).
+        //     No prefix needed and the server is served by the "dop-server" app
+        // The choice is determined by the DOP_REGISTRY_APIPREFIX environment variable
 
-        // setup front-end
+        if (!conf.registryApiPrefix.length)
+        {
+            root = api;
+            return;
+        }
+
+        // setup front-end service
+
+        root = new URLRouter;
+        root.any(conf.registryApiPrefix ~ "/*", api);
+
         string publicFolder = thisExePath
             .dirName
             .dirName

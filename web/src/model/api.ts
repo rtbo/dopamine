@@ -3,8 +3,8 @@ import axios from "axios";
 import { ref, Ref, unref, withCtx } from "vue";
 import { Provider, OAuthResult } from "./oauth";
 
-const hostUrl = import.meta.env.VITE_API_HOST || "http://localhost:3500";
-const prefix = import.meta.env.VITE_API_PREFIX || "/api";
+const hostUrl = import.meta.env.VITE_API_HOST;
+const prefix = import.meta.env.VITE_API_PREFIX;
 
 export const host = hostUrl.replace("http://", "").replace("https://", "");
 

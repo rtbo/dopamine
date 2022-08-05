@@ -11,20 +11,27 @@ if get_option('enable_test')
     endif
 endif
 
-subdir('3rdparty')
+if get_option('enable_client') or get_option('enable_test')
+    subdir('3rdparty')
+endif
 
-squiz_proj = subproject('squiz-box',
-    default_options: ['enable_zstd=false'],
-)
-squiz_dep = squiz_proj.get_variable('squiz_dep')
+if get_option('enable_client') or get_option('enable_registry') or get_option('enable_test')
+    squiz_proj = subproject('squiz-box',
+        default_options: ['enable_zstd=false'],
+    )
+    squiz_dep = squiz_proj.get_variable('squiz_dep')
+endif
 
 vibed_version = '0.9.4'
 
-if get_option('enable_registry')
+if get_option('enable_registry') or get_option('enable_server') or get_option('enable_test')
     vibed_http_dep = dependency('vibe-d:http',
         method: 'dub',
         version: vibed_version,
     )
+endif
+
+if get_option('enable_registry') or get_option('enable_admin')
     if host_machine.system() == 'windows'
         src_dir = meson.current_source_dir()
         libpq_file = src_dir / 'windows-x64/lib/libpq.lib'
@@ -54,7 +61,9 @@ if get_option('enable_test')
     )
 endif
 
-config_gen = executable('config_generator', 'tools/config_generator.d')
+if get_option('enable_client') or get_option('enable_test')
+    config_gen = executable('config_generator', 'tools/config_generator.d')
+endif
 
 subdir('packages')
 

@@ -10,6 +10,12 @@ option('enable_registry',
     description: 'Whether to build the registry application',
 )
 
+option('enable_server',
+    type: 'boolean',
+    value: false,
+    description: 'Whether to build the frontend server application',
+)
+
 option('enable_admin',
     type: 'boolean',
     value: false,
