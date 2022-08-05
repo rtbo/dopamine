@@ -8,7 +8,6 @@ install*/
 
 #environment
 .env*
-!web/.env.production
 
 #dub
 .dub/
