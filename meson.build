@@ -61,7 +61,9 @@ if get_option('enable_test')
     )
 endif
 
-config_gen = executable('config_generator', 'tools/config_generator.d')
+if get_option('enable_client') or get_option('enable_test')
+    config_gen = executable('config_generator', 'tools/config_generator.d')
+endif
 
 subdir('packages')
 
