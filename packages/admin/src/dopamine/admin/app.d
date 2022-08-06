@@ -30,6 +30,7 @@ struct Options
     bool help;
     Option[] options;
 
+    bool trace;
     bool createUser;
     bool createDb;
     string[] migrationsToRun;
@@ -43,6 +44,7 @@ struct Options
 
         // dfmt off
         auto res = getopt(args,
+            "trace",                &opts.trace,
             "create-user",          &opts.createUser,
             "create-db",            &opts.createDb,
             "run-migration",        &opts.migrationsToRun,
@@ -126,6 +128,9 @@ version (DopAdminMain) int main(string[] args)
         scope (exit)
             db.finish();
 
+        if (opts.trace)
+            db.trace(stdout);
+
         const connInfo = breakdownConnString(conf.dbConnString);
 
         if (opts.createUser)
@@ -150,6 +155,9 @@ version (DopAdminMain) int main(string[] args)
 
     scope (exit)
         db.finish();
+
+    if (opts.trace)
+        db.trace(stdout);
 
     foreach (mig; opts.migrationsToRun)
     {
