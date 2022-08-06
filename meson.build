@@ -15,7 +15,7 @@ if get_option('enable_client') or get_option('enable_test')
     subdir('3rdparty')
 endif
 
-if get_option('enable_client') or get_option('enable_registry') or get_option('enable_test')
+if get_option('enable_client') or get_option('enable_registry') or get_option('enable_admin') or get_option('enable_test')
     squiz_proj = subproject('squiz-box',
         default_options: ['enable_zstd=false'],
     )
