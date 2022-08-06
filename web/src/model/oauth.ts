@@ -105,7 +105,7 @@ export function provideOAuth() {
                 provider,
                 code: params["code"],
                 redirectUri: conf.redirectUrl,
-            }
+            };
         } finally {
             popupOn.value = false;
         }
@@ -126,11 +126,7 @@ export function useOAuth(): OAuth {
 }
 
 // open OAuth popup window of provider and return popup result
-function doPopup(
-    config: ProviderConfig,
-    state: string,
-    partialOpts?: Partial<PopupOptions>
-): Promise<PopupResp> {
+function doPopup(config: ProviderConfig, state: string, partialOpts?: Partial<PopupOptions>): Promise<PopupResp> {
     const query: PopupQuery = {
         client_id: config.clientId,
         redirect_uri: config.redirectUrl,
@@ -179,7 +175,9 @@ function doPopup(
                     clearInterval(poll);
                     popup.close();
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            }
         }, 400);
     });
 }
