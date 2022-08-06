@@ -28,7 +28,7 @@ in(isAbsolute(absDest))
 {
     if (!rdir.recipe.canStage)
     {
-        const config = BuildConfig(profile);
+        const config = BuildConfig(profile.subset(rdir.recipe.langs));
         const buildId = BuildId(rdir.recipe, config, absDest);
         const bPaths = rdir.buildPaths(buildId);
         acquireBuildLockFile(bPaths);
@@ -40,7 +40,7 @@ in(isAbsolute(absDest))
         return;
     }
 
-    auto config = BuildConfig(profile);
+    auto config = BuildConfig(profile.subset(rdir.recipe.langs));
     const buildId = BuildId(rdir.recipe, config, absDest);
     const bPaths = rdir.buildPaths(buildId);
     acquireBuildLockFile(bPaths);

@@ -82,11 +82,14 @@ int profileMain(string[] args)
     Recipe recipe = dir.recipe;
     if (!recipe)
         logVerbose("no recipe available");
+    else
+        logInfo("Recipe: %s", success("OK"));
 
     if (opt.discover)
     {
-        Lang[] langs = [Lang.d, Lang.cpp, Lang.c];
-        auto profile = detectDefaultProfile(langs, Yes.allowMissing);
+        Lang[] langs = recipe ? recipe.langs.dup : [Lang.d, Lang.cpp, Lang.c];
+        const allowMissing = recipe ? No.allowMissing : Yes.allowMissing;
+        auto profile = detectDefaultProfile(langs, allowMissing);
         const homeFile = homeProfileFile(profile.name);
         const dirFile = dir.profileFile;
         logInfo(
@@ -152,13 +155,11 @@ int profileMain(string[] args)
 
     if (opt.addMissing)
     {
-        enforce(recipe, new FormatLogException(
-                "%s recipe file is needed to know which languages are missing.",
-                error("Error:"),
+        enforce(recipe, new ErrorLogException(
+                "recipe file is needed to know which languages are missing.",
         ));
-        enforce(profile, new FormatLogException(
-                "%s no profile found.",
-                error("Error:"),
+        enforce(profile, new ErrorLogException(
+                "no profile found.",
         ));
 
         const allLangs = recipe.langs;
