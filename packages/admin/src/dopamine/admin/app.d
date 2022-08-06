@@ -13,6 +13,7 @@ import std.digest.sha;
 import std.exception;
 import std.getopt;
 import std.file;
+import std.format;
 import std.range;
 import std.stdio;
 import std.string;
@@ -29,6 +30,8 @@ struct Options
     bool help;
     Option[] options;
 
+    bool trace;
+    bool createUser;
     bool createDb;
     string[] migrationsToRun;
     bool createTestUsers;
@@ -41,6 +44,8 @@ struct Options
 
         // dfmt off
         auto res = getopt(args,
+            "trace",                &opts.trace,
+            "create-user",          &opts.createUser,
             "create-db",            &opts.createDb,
             "run-migration",        &opts.migrationsToRun,
             "create-test-users",    &opts.createTestUsers,
@@ -65,7 +70,12 @@ struct Options
 
     bool noop() const
     {
-        return !createDb && !migrationsToRun.length && !createTestUsers && !registryDir && !genCryptoPassword;
+        return !createUser &&
+            !createDb &&
+            !migrationsToRun.length &&
+            !createTestUsers &&
+            !registryDir &&
+            !genCryptoPassword;
     }
 
     int checkErrors() const
@@ -112,13 +122,30 @@ version (DopAdminMain) int main(string[] args)
 
     auto conf = Config.get;
 
-    if (opts.createDb)
+    if (opts.createUser || opts.createDb)
     {
         auto db = new PgConn(conf.adminConnString);
         scope (exit)
             db.finish();
 
-        createDatabase(db, conf.dbConnString);
+        if (opts.trace)
+            db.trace(stdout);
+
+        const connInfo = breakdownConnString(conf.dbConnString);
+
+        if (opts.createUser)
+            createDbUser(db, connInfo);
+
+        if (opts.createDb)
+            createDatabase(db, connInfo);
+
+        const user = connInfo.get("user", null);
+        const dbname = connInfo.get("dbname", null);
+        if (user && dbname)
+            db.exec(format!`GRANT ALL PRIVILEGES ON DATABASE %s TO %s`(
+                db.escapeIdentifier(dbname),
+                db.escapeIdentifier(user)
+            ));
     }
 
     if (!opts.migrationsToRun && !opts.createTestUsers && !opts.registryDir)
@@ -128,6 +155,9 @@ version (DopAdminMain) int main(string[] args)
 
     scope (exit)
         db.finish();
+
+    if (opts.trace)
+        db.trace(stdout);
 
     foreach (mig; opts.migrationsToRun)
     {
@@ -159,20 +189,33 @@ void genCryptoPassword(uint len)
     writeln(b64[0 .. len]);
 }
 
-void createDatabase(PgConn db, string connString)
+void createDbUser(PgConn db, const(string[string]) connInfo)
 {
-    import std.format;
+    const user = *enforce("user" in connInfo, "Could not find USER name in " ~ Config
+            .get.dbConnString);
+    const pswd = connInfo.get("password", null);
+    writefln(`creating user "%s%s"`, user, pswd ? " with password" : "");
 
-    const info = breakdownConnString(connString);
+    const ident = db.escapeIdentifier(user);
 
-    const dbName = *enforce("dbname" in info, "Could not find DB name in " ~ connString);
+    db.exec("DROP ROLE IF EXISTS " ~ ident);
+    if (pswd)
+        db.exec(format!"CREATE ROLE %s WITH LOGIN PASSWORD '%s'"(ident, pswd));
+    else
+        db.exec(format!"CREATE ROLE %s WITH LOGIN PASSWORD NULL"(ident));
+}
 
-    writefln(`(Re)creating database "%s"`, dbName);
+void createDatabase(PgConn db, const(string[string]) connInfo)
+{
+    const name = *enforce("dbname" in connInfo, "Could not find DB name in " ~ Config
+            .get.dbConnString);
 
-    const dbIdent = db.escapeIdentifier(dbName);
+    writefln(`(Re)creating database "%s"`, name);
 
-    db.exec("DROP DATABASE IF EXISTS " ~ dbIdent);
-    db.exec("CREATE DATABASE " ~ dbIdent);
+    const ident = db.escapeIdentifier(name);
+
+    db.exec("DROP DATABASE IF EXISTS " ~ ident);
+    db.exec("CREATE DATABASE " ~ ident);
 }
 
 struct User
@@ -185,7 +228,7 @@ struct User
     string avatarUrl;
 }
 
-int createUserIfNotExist(PgConn db, string email, Flag!"withTestToken" tok=No.withTestToken)
+int createUserIfNotExist(PgConn db, string email, Flag!"withTestToken" tok = No.withTestToken)
 {
     auto ids = db.execScalars!int(
         `SELECT "id" FROM "user" WHERE "email" = $1`,
@@ -204,7 +247,7 @@ int createUserIfNotExist(PgConn db, string email, Flag!"withTestToken" tok=No.wi
     writefln("Created user %s (%s)", email, userId);
     if (tok)
     {
-        const token = cast(const(ubyte)[])email;
+        const token = cast(const(ubyte)[]) email;
         db.exec(`
             INSERT INTO "refresh_token" ("token", "user_id", "cli")
             VALUES ($1, $2, TRUE)
