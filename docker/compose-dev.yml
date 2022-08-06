@@ -1,0 +1,63 @@
+name: dopamine
+
+services:
+  database:
+    image: postgres
+    volumes:
+      - type: volume
+        source: db-data
+        target: /var/lib/postgresql/data
+    ports:
+      # on host, database available at
+      # postgres://pg:pg@localhost:6543/dop-registry
+      - 6543:5432
+    environment:
+      - POSTGRES_PASSWORD=postgres
+
+  # admin helps to initialize database
+  admin:
+    depends_on:
+      - database
+    build:
+      context: ${dopdir}
+      dockerfile: ${dopdir}/docker/admin.dockerfile
+    environment:
+      - DOP_ADMIN_CONNSTRING=postgres://postgres:postgres@database/postgres
+      - DOP_DB_CONNSTRING=postgres://dopreg:dopreg@database/dop-registry
+
+
+  registry:
+    depends_on:
+      - database
+    build:
+      context: ${dopdir}
+      dockerfile: ${dopdir}/docker/registry.dockerfile
+    ports:
+      - 3500:80
+    environment:
+      - DOP_REGISTRY_HOSTNAME=0.0.0.0
+      - DOP_REGISTRY_PORT=80
+      - DOP_REGISTRY_APIPREFIX=
+      - DOP_DB_CONNSTRING=postgres://dopreg:dopreg@database/dop-registry
+    env_file:
+      - ${dopdir}/packages/registry/.env.dev
+
+  frontend:
+    depends_on:
+      - registry
+    build:
+      context: ${dopdir}/web
+      dockerfile: ${dopdir}/docker/frontend-dev.dockerfile
+      args:
+        - web_api_host=http://localhost:3500
+        - web_api_prefix=
+        - web_github_clientid=${web_github_clientid}
+        - web_google_clientid=${web_google_clientid}
+    volumes:
+      - ${dopdir}/web/src:/app/src
+      - ${dopdir}/web/public:/app/public
+    ports:
+      - 3000:3000
+
+volumes:
+  db-data:
