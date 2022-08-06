@@ -168,7 +168,7 @@ struct DownloadMetadata
 }
 
 /// The URL of default registry the client connects to.
-enum defaultRegistryUrl = "https://localhost:3500";
+enum defaultRegistryUrl = "https://dopamine-pm.herokuapp.com";
 
 /// The URL of the registry the client will connect to.
 string registryUrl()
