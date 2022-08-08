@@ -1,4 +1,7 @@
+module dopamine.paths;
+
 import dopamine.build_id;
+import dopamine.log;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
@@ -39,29 +42,28 @@ string homeLuaScript()
 }
 
 string findDopLuaScript()
-out(lua; exists(lua) && isFile(lua))
+out (lua; exists(lua) && isFile(lua))
 {
     debug
     {
-        return buildNormalizedPath(__FILE_FULL_PATH__.dirName.buildPath("lua", "dop.lua"));
+        const dev = buildNormalizedPath(__FILE_FULL_PATH__.dirName.buildPath("lua", "dop.lua"));
+        if (exists(dev))
+            return dev;
     }
-    else
+    const dist = thisExePath.dirName.dirName.buildPath("share", "dopamine", "dop.lua");
+    if (exists(dist))
+        return dist;
+
+    const home = homeLuaScript();
+    if (!exists(home))
     {
-        const dist = thisExePath.dirName.dirName.buildPath("share", "dopamine", "dop.lua");
-        if (exists(dist))
-            return dist;
+        logVerbose("creating %s", info(home));
 
-        const home = homeLuaScript();
-        if (!exists(home))
-        {
-            logVerbose("creating %s", info(home));
-
-            mkdirRecurse(dirName(home));
-            const content = import("dop.lua");
-            write(home, cast(const(ubyte)[])content);
-        }
-        return home;
+        mkdirRecurse(dirName(home));
+        const content = import("dop.lua");
+        write(home, cast(const(ubyte)[]) content);
     }
+    return home;
 }
 
 string homeProfilesDir()
