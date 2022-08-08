@@ -9,34 +9,35 @@ RUN apk add --no-cache tree
 COPY . /source
 WORKDIR /source
 
-# build registry D app
 RUN --mount=type=cache,target=/build \
-    mkdir -p /build/registry
+    mkdir -p /build/client
 
 RUN --mount=type=cache,target=/build \
     tree /build
 
 RUN --mount=type=cache,target=/build \
-    DC=${dc} meson setup /build/registry \
-    -Denable_registry=true \
-    -Dregistry_storage=fs \
+    DC=${dc} meson setup /build/client \
+    -Denable_client=true \
+    -Denable_admin=true \
+    -Denable_registry=false \
     -Denable_server=false \
-    -Denable_client=false \
     -Denable_test=false \
     -Dalpine=true \
-    --buildtype=${build_type} \
-    --prefix=/install
+    --buildtype=${build_type} --prefix=/install
 
-WORKDIR /build/registry
+WORKDIR /build/client
 RUN --mount=type=cache,target=/build \
     ninja install
 
 FROM alpine:3.16
 
-# install runtime dependencies
-RUN apk add --no-cache libpq zlib libbz2 xz-libs lua ldc-runtime dmd
+RUN apk add --no-cache musl-dev libpq-dev zlib-dev xz-dev bzip2-dev git gcc dub ldc dmd gcc ninja py3-pip cmake
+RUN python3 -m pip install meson==0.63.0
 
 # copy installation
 COPY --from=build /install /app
 
-CMD /app/bin/dop-registry
+RUN mkdir /dop
+WORKDIR /dop
+
+ENV PATH="${PATH}:/app/bin"
