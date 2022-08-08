@@ -1,5 +1,6 @@
 module dopamine.registry.v1;
 
+import dopamine.registry.archive;
 import dopamine.registry.db;
 import dopamine.registry.v1.recipes;
 
@@ -15,9 +16,9 @@ struct V1Api
     }
 }
 
-V1Api v1Api(DbClient client)
+V1Api v1Api(DbClient client, ArchiveManager archiveMgr)
 {
     return V1Api(
-        new RecipesApi(client),
+        new RecipesApi(client, archiveMgr),
     );
 }

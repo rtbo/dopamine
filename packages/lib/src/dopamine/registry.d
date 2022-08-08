@@ -4,14 +4,16 @@ import dopamine.api.attrs;
 import dopamine.log;
 import dopamine.login;
 
+import core.time;
 import std.algorithm;
+import std.base64;
 import std.conv;
 import std.datetime;
+import std.digest.sha;
 import std.exception;
 import std.format;
 import std.process;
 import std.string;
-import core.time;
 
 @safe:
 
@@ -170,6 +172,8 @@ struct DownloadMetadata
 /// The URL of default registry the client connects to.
 enum defaultRegistryUrl = "https://dopamine-pm.herokuapp.com";
 
+enum apiPrefix = "/api";
+
 /// The URL of the registry the client will connect to.
 string registryUrl()
 {
@@ -264,142 +268,74 @@ class Registry
         }
     }
 
-    /// Return an input range of const(ubyte)[].
-    /// First a HEAD request is sent to check the data length and to
-    /// check if the server supports Range requests.
-    /// Then the returned range perform a data request each time the popFront is called.
-    /// Throws ErrorResponseException if a status code >= 400 is returned.
-    auto download(ReqT)(auto ref const ReqT req, out DownloadMetadata metadata)
-            if (isDownloadEndpoint!ReqT)
+    void uploadArchive(string bearerToken, string filename, string sha256) @trusted
     {
-        import std.traits : hasUDA;
+        import std.stdio : File;
 
-        enum reqAttr = RequestAttr!ReqT;
-        static assert(
-            reqAttr.method == Method.GET,
-            "Download end-points are only valid for GET requests"
+        assert(filename.endsWith(".tar.xz"));
+
+        auto file = File(filename, "rb");
+
+        if (!sha256)
+        {
+            auto dig = makeDigest!SHA256();
+            file.byChunk(8192).copy(&dig);
+            sha256 = Base64.encode(dig.finish()[]);
+            file.seek(0);
+        }
+
+        auto http = HTTP();
+        http.url = _host ~ apiPrefix ~ "/archive";
+        http.method = HTTP.Method.post;
+        http.addRequestHeader("Authorization", "bearer " ~ bearerToken);
+        http.addRequestHeader("Content-Type", "application/x-gtar");
+        http.addRequestHeader("X-Digest", "sha-256=" ~ sha256);
+        http.contentLength = file.size;
+
+        http.onSend((void[] data) {
+            data = file.rawRead(data);
+            return data.length;
+        });
+
+        http.perform();
+    }
+
+    void downloadArchive(string archiveName, string filename) @trusted
+    {
+        import std.stdio : File;
+        import std.uni : sicmp;
+
+        assert(filename.endsWith(".tar.xz"));
+
+        auto file = File(filename, "wb");
+
+        auto http = HTTP();
+        http.url = _host ~ apiPrefix ~ "/archive/" ~ archiveName;
+        http.method = HTTP.Method.get;
+        http.addRequestHeader("Want-Digest", "sha-256");
+
+        auto dig = makeDigest!SHA256();
+        http.onReceive = (ubyte[] data) {
+            dig.put(data);
+            file.rawWrite(data);
+            return data.length;
+        };
+
+        string expectedSha256;
+        http.onReceiveHeader = (in char[] header, in char[] value) {
+            if (sicmp(header, "digest") == 0) {
+                enforce(value.startsWith("sha-256="), "unsupported digest format");
+                expectedSha256 = value["sha-256=".length .. $].idup.strip();
+            }
+        };
+        http.perform();
+
+        enforce(
+            expectedSha256 == Base64.encode(dig.finish()[]),
+            new ErrorLogException(
+                "Digest verification of %s failed", info(archiveName)
+            )
         );
-
-        enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
-        static if (requiresAuth)
-        {
-            enforce(isLoggedIn, new AuthRequiredException(reqAttr.url));
-        }
-
-        // HEAD request
-        RawRequest raw;
-        raw.method = HTTP.Method.head;
-        raw.host = host;
-        raw.resource = requestResource(req);
-        static if (requiresAuth)
-            raw.headers["Authorization"] = format!"Bearer %s"(_idToken);
-        raw.headers["Want-Digest"] = "sha-256";
-
-        RawResponse resp = perform(raw);
-        if (resp.status.code >= 400)
-            throw new ErrorResponseException(
-                resp.status.code, resp.status.reason, cast(string)(resp.body_.idup)
-            );
-
-        size_t contentLength;
-        if (auto p = "content-length" in resp.headers)
-            contentLength = (*p).to!size_t;
-
-        bool acceptRanges;
-        if (auto p = "accept-ranges" in resp.headers)
-            acceptRanges = *p == "bytes" && contentLength > 0;
-
-        if (auto p = "content-disposition" in resp.headers)
-        {
-            auto head = *p;
-            if (head.startsWith("attachment;"))
-            {
-                head = head["attachment;".length .. $].strip();
-                if (head.startsWith("filename="))
-                    metadata.filename = head["filename=".length .. $];
-            }
-        }
-
-        if (auto p = "digest" in resp.headers)
-        {
-            auto head = *p;
-            if (head.startsWith("sha-256="))
-            {
-                import std.base64;
-
-                metadata.sha256 = Base64.decode(head["sha-256=".length .. $].strip());
-            }
-        }
-
-        // enum size_t chunkSize = 1024 * 1024;
-        enum size_t chunkSize = 256;
-
-        const chunkData = acceptRanges && contentLength > chunkSize;
-
-        // GET request
-        raw.method = HTTP.Method.get;
-        if (contentLength > 0)
-            raw.respBuf = new ubyte[min(contentLength, chunkSize)];
-
-        raw.headers.remove("Want-Digest");
-        if (chunkData)
-            raw.headers["Range"] = format!"bytes=0-%s"(chunkSize - 1);
-
-        resp = perform(raw);
-
-        if (resp.status.code >= 400)
-            throw new ErrorResponseException(
-                resp.status.code, resp.status.reason, cast(string)(resp.body_.idup)
-            );
-
-        if (chunkData)
-        {
-            enforce(
-                resp.headers["content-range"] == format!"bytes 0-%s/%s"(chunkSize - 1, contentLength)
-            );
-        }
-
-        static struct DownloadRange
-        {
-            size_t received;
-            size_t contentLength;
-            const(ubyte)[] data;
-            RawRequest rawReq;
-
-            @property const(ubyte)[] front()
-            {
-                return data;
-            }
-
-            @property bool empty()
-            {
-                return data.length == 0;
-            }
-
-            void popFront()
-            {
-                received += data.length;
-                data = null;
-
-                if (received == contentLength)
-                    return;
-
-                const sz = min(chunkSize, contentLength - received);
-                const end = received + sz - 1;
-                rawReq.headers["Range"] = format!"bytes=%s-%s"(received, end);
-                auto resp = perform(rawReq);
-                if (resp.status.code >= 400)
-                    throw new ErrorResponseException(
-                        resp.status.code, resp.status.reason, cast(string)(resp.body_.idup)
-                    );
-                enforce(
-                    resp.headers["content-range"] == format!"bytes %s-%s/%s"(received, end, contentLength)
-                );
-                data = resp.body_;
-            }
-        }
-
-        return DownloadRange(0, contentLength, resp.body_, raw);
     }
 }
 
@@ -437,10 +373,9 @@ string requestResource(ReqT)(auto ref const ReqT req)
         "Invalid resource URL: " ~ reqAttr.resource ~ " (must start by '/')"
     );
 
-    enum prefix = "/api";
     enum resourceParts = split(reqAttr.resource[1 .. $], '/');
 
-    string resource = prefix;
+    string resource = apiPrefix;
 
     // dfmt off
     static foreach(enum part; resourceParts)

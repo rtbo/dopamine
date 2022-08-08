@@ -61,6 +61,13 @@ struct Config
     /// Read from $DOP_GOOGLE_CLIENTSECRET
     string googleClientSecret;
 
+    version (DopRegistryFsStorage)
+    {
+        /// Storage directory, if FileSystemStorage is used
+        /// Read from $DOP_REGISTRY_STORAGEDIR
+        string registryStorageDir;
+    }
+
     /// Whether to setup a stop route
     /// Only used in testing
     /// Read from $DOP_TEST_STOPROUTE
@@ -122,6 +129,11 @@ struct Config
             c.googleClientSecret = environment.get(
                 "DOP_GOOGLE_CLIENTSECRET", "Not a secret"
             );
+
+            version (DopRegistryFsStorage)
+            {
+                c.registryStorageDir = environment["DOP_REGISTRY_STORAGEDIR"];
+            }
 
             c.testStopRoute = environment.get("DOP_TEST_STOPROUTE", null) !is null;
 

@@ -4,9 +4,11 @@ dop_registry_src = files([
     'src/dopamine/registry/v1/recipes.d',
 
     'src/dopamine/registry/app.d',
+    'src/dopamine/registry/archive.d',
     'src/dopamine/registry/auth.d',
     'src/dopamine/registry/config.d',
     'src/dopamine/registry/db.d',
+    'src/dopamine/registry/storage.d',
     'src/dopamine/registry/utils.d',
 ])
 dop_registry_inc = include_directories('src')

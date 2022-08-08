@@ -1,8 +1,10 @@
 module dopamine.registry.app;
 
+import dopamine.registry.archive;
 import dopamine.registry.auth;
 import dopamine.registry.config;
 import dopamine.registry.db;
+import dopamine.registry.storage;
 import dopamine.registry.utils;
 import dopamine.registry.v1;
 
@@ -21,7 +23,7 @@ import std.format;
 import std.path;
 import std.string;
 
-version (DopServerMain) void main(string[] args)
+version (DopRegistryMain) void main(string[] args)
 {
     setLogLevel(LogLevel.debugV);
 
@@ -58,13 +60,23 @@ class DopRegistry
 
         enforce(conf.registryApiPrefix.length == 0 || conf.registryApiPrefix.startsWith("/"));
 
+        version(DopRegistryFsStorage)
+            auto storage = new FileSystemStorage(conf.registryStorageDir);
+        else
+            static assert(false, "A valid registry storage version must be enabled");
+        auto archiveMgr = new ArchiveManager(client, storage);
+
+        root = new URLRouter;
+
         auto api = new URLRouter(conf.registryApiPrefix);
         api.any("*", cors());
+
+        archiveMgr.setupRoutes(api);
 
         auto auth = new AuthApi(client);
         auth.setupRoutes(api);
 
-        auto v1 = v1Api(client);
+        auto v1 = v1Api(client, archiveMgr);
         v1.setupRoutes(api);
 
         debug
