@@ -21,6 +21,7 @@ import std.base64;
 import std.datetime;
 import std.exception;
 import std.format;
+
 // import std.net.curl;
 import std.string;
 import std.traits;
@@ -345,7 +346,7 @@ class AuthApi
     {
         int id;
         const(ubyte)[] token;
-        string name;
+        MayBeText name;
         MayBeTimestamp expiration;
 
         static CliTokenRow[] byUserId(scope DbConn db, int userId)
@@ -363,7 +364,8 @@ class AuthApi
             auto js = Json.emptyObject;
             js["id"] = id;
             js["elidedToken"] = elidedToken(Base64.encode(token).idup);
-            js["name"] = name;
+            if (name.valid)
+                js["name"] = name.value;
             if (expiration.valid)
                 js["expJs"] = Json(expiration.value.toUnixTime() * 1000);
             return js;
@@ -395,7 +397,7 @@ class AuthApi
         static struct Row
         {
             string token;
-            string name;
+            MayBeText name;
             MayBeTimestamp exp;
         }
 
