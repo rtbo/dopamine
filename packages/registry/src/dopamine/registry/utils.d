@@ -21,31 +21,18 @@ import std.json;
 import std.string;
 import std.traits;
 
-class StatusException : Exception
-{
-    int statusCode;
-    string reason;
-
-    this(int statusCode, lazy string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
-    {
-        super(format!"%s: %s%s"(statusCode, httpStatusText(statusCode), reason ? "\n" ~ reason : ""), file, line);
-        this.statusCode = statusCode;
-        this.reason = reason;
-    }
-}
-
 T enforceStatus(T)(T condition, int statusCode, lazy string reason = null,
     string file = __FILE__, size_t line = __LINE__) @safe
 {
     static assert(is(typeof(!condition)), "condition must cast to bool");
     if (!condition)
-        throw new StatusException(statusCode, reason, file, line);
+        throw new HTTPStatusException(statusCode, reason, file, line);
     return condition;
 }
 
 noreturn statusError(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
 {
-    throw new StatusException(statusCode, reason, file, line);
+    throw new HTTPStatusException(statusCode, reason, file, line);
 }
 
 T enforceProp(T)(Json json, string prop) @safe
@@ -141,9 +128,8 @@ Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
         part = part.strip();
         const indices = part.split("-");
         if (indices.length != 2 || (!indices[0].length && !indices[1].length))
-        {
             statusError(400, "Bad format of range header");
-        }
+
         Rng rng;
         if (indices[0].length)
             rng.first = indices[0].to!uint;
@@ -175,10 +161,10 @@ HTTPServerRequestDelegateS genericHandler(H)(H handler) @safe
             resp.statusCode = 404;
             resp.writeBody(ex.msg);
         }
-        catch (StatusException ex)
+        catch (HTTPStatusException ex)
         {
             () @trusted { logError("Status error: %s", ex); }();
-            resp.statusCode = ex.statusCode;
+            resp.statusCode = ex.status;
             resp.writeBody(ex.msg);
         }
         catch (JSONException ex)
@@ -315,11 +301,11 @@ private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
             }
             catch (ConvException ex)
             {
-                throw new StatusException(400, "Invalid parameter: " ~ ident);
+                throw new HTTPStatusException(400, "Invalid parameter: " ~ ident);
             }
             catch (Exception ex)
             {
-                throw new StatusException(400, "Missing parameter: " ~ ident);
+                throw new HTTPStatusException(400, "Missing parameter: " ~ ident);
             }
         }
     }}

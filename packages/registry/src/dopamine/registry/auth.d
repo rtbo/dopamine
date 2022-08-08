@@ -228,7 +228,7 @@ class AuthApi
                 if (resp.statusCode >= 400)
                 {
                     import vibe.stream.operations;
-                    throw new StatusException(
+                    throw new HTTPStatusException(
                         403,
                         format!"Could not request token to %s: %s"(config.tokenUrl, resp.bodyReader().readAllUTF8()),
                     );
@@ -523,7 +523,7 @@ private Provider toProvider(string provider)
     case "google":
         return Provider.google;
     default:
-        throw new StatusException(400, "Unknown provider: " ~ provider);
+        throw new HTTPStatusException(400, "Unknown provider: " ~ provider);
     }
 }
 
