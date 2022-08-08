@@ -209,7 +209,7 @@ void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
     auto routeHandler = genericHandler((scope HTTPServerRequest httpReq, scope HTTPServerResponse httpResp) @safe {
         static if (requiresAuth)
         {
-            const userInfo = enforceAuth(httpReq);
+            const userInfo = enforceUserAuth(httpReq);
         }
         auto req = adaptRequest!ReqT(httpReq);
         static if (requiresAuth)
@@ -359,4 +359,43 @@ private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
     // dfmt on
 
     return req;
+}
+
+Json enforceAuth(scope HTTPServerRequest req) @safe
+{
+    const head = enforceStatus(
+        req.headers.get("authorization"), 401, "Authorization required"
+    );
+    const bearer = "bearer ";
+    enforceStatus(
+        head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
+        400, "Ill-formed authorization header"
+    );
+    try
+    {
+        import std.typecons : Yes;
+
+        const conf = Config.get;
+        const jwt = Jwt.verify(
+            head[bearer.length .. $].strip(),
+            conf.registryJwtSecret,
+            Jwt.VerifOpts(Yes.checkExpired, [conf.registryHostname]),
+        );
+        return jwt.payload;
+    }
+    catch (JwtException ex)
+    {
+        final switch (ex.cause)
+        {
+        case JwtVerifFailure.structure:
+            statusError(400, format!"Ill-formed authorization header: %s"(ex.msg));
+        case JwtVerifFailure.payload:
+            // 500 because it is checked after signature
+            statusError(500, format!"Improper field in authorization header payload: %s"(ex.msg));
+        case JwtVerifFailure.expired:
+            statusError(403, "Expired authorization token");
+        case JwtVerifFailure.signature:
+            statusError(403, "Invalid authorization token");
+        }
+    }
 }

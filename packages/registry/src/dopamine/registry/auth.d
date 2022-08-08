@@ -372,7 +372,7 @@ class AuthApi
 
     void cliTokens(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
-        const userInfo = enforceAuth(req);
+        const userInfo = enforceUserAuth(req);
 
         const rows = client.connect((scope db) => CliTokenRow.byUserId(db, userInfo.id));
         auto json = rows.map!(r => r.toElidedJson()).array;
@@ -382,7 +382,7 @@ class AuthApi
 
     void cliTokensCreate(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
-        const userInfo = enforceAuth(req);
+        const userInfo = enforceUserAuth(req);
 
         const name = req.json["name"].opt!string(null);
 
@@ -419,7 +419,7 @@ class AuthApi
     {
         import std.conv : to;
 
-        const userInfo = enforceAuth(req);
+        const userInfo = enforceUserAuth(req);
 
         const tokenId = req.params["id"].to!int;
 
@@ -527,47 +527,14 @@ private Provider toProvider(string provider)
     }
 }
 
-UserInfo enforceAuth(scope HTTPServerRequest req) @safe
+UserInfo enforceUserAuth(scope HTTPServerRequest req) @safe
 {
-    const head = enforceStatus(
-        req.headers.get("authorization"), 401, "Authorization required"
-    );
-    const bearer = "bearer ";
-    enforceStatus(
-        head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
-        400, "Ill-formed authorization header"
-    );
-    try
-    {
-        import std.typecons : Yes;
+    auto payload = enforceAuth(req);
 
-        const conf = Config.get;
-        const jwt = Jwt.verify(
-            head[bearer.length .. $].strip(),
-            conf.registryJwtSecret,
-            Jwt.VerifOpts(Yes.checkExpired, [conf.registryHostname]),
-        );
-        auto payload = jwt.payload;
-        return UserInfo(
-            payload["sub"].get!int,
-            payload["email"].get!string,
-            payload["name"].opt!string.mayBeText(),
-            payload["avatarUrl"].opt!string.mayBeText(),
-        );
-    }
-    catch (JwtException ex)
-    {
-        final switch (ex.cause)
-        {
-        case JwtVerifFailure.structure:
-            statusError(400, format!"Ill-formed authorization header: %s"(ex.msg));
-        case JwtVerifFailure.payload:
-            // 500 because it is checked after signature
-            statusError(500, format!"Improper field in authorization header payload: %s"(ex.msg));
-        case JwtVerifFailure.expired:
-            statusError(403, "Expired authorization token");
-        case JwtVerifFailure.signature:
-            statusError(403, "Invalid authorization token");
-        }
-    }
+    return UserInfo(
+        payload["sub"].get!int,
+        payload["email"].get!string,
+        payload["name"].opt!string.mayBeText(),
+        payload["avatarUrl"].opt!string.mayBeText(),
+    );
 }
