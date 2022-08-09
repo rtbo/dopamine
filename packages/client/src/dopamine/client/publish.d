@@ -202,10 +202,9 @@ int publishMain(string[] args)
     }
     catch (Exception ex)
     {
-        throw ex;
-        // throw new ErrorLogException(
-        //     "Could not log to %s. Publishing requires to be logged-in. Get a login key on the registry front-end.",
-        //     info(registry.host));
+        throw new ErrorLogException(
+            "Could not log to %s (%s).\nPublishing requires to be logged-in. Get a login key on the registry front-end.",
+            info(registry.host), ex.msg);
     }
 
     PostRecipe req;

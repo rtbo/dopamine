@@ -270,6 +270,7 @@ class Registry
 
     void uploadArchive(string bearerToken, string filename, string sha256) @trusted
     {
+        import std.path : baseName;
         import std.stdio : File;
 
         assert(filename.endsWith(".tar.xz"));
@@ -292,12 +293,20 @@ class Registry
         http.addRequestHeader("X-Digest", "sha-256=" ~ sha256);
         http.contentLength = file.size;
 
-        http.onSend((void[] data) {
-            data = file.rawRead(data);
-            return data.length;
-        });
+        http.onSend((void[] data) { data = file.rawRead(data); return data.length; });
+        HTTP.StatusLine status;
+        http.onReceiveStatusLine((sl) { status = sl; });
 
         http.perform();
+
+        enforce(status.code < 400, new ErrorLogException(
+                "Registry returned error during upload of %s\nPOST %s: %s %s",
+                info(baseName(filename)), info(apiPrefix ~ "/archive"),
+                error(status.code), status.reason
+        ));
+        logVerbose(
+            "POST %s: %s %s", info(apiPrefix ~ "/archive"), success(status.code), status.reason
+        );
     }
 
     void downloadArchive(string archiveName, string filename) @trusted
@@ -323,7 +332,8 @@ class Registry
 
         string expectedSha256;
         http.onReceiveHeader = (in char[] header, in char[] value) {
-            if (sicmp(header, "digest") == 0) {
+            if (sicmp(header, "digest") == 0)
+            {
                 enforce(value.startsWith("sha-256="), "unsupported digest format");
                 expectedSha256 = value["sha-256=".length .. $].idup.strip();
             }
@@ -334,7 +344,7 @@ class Registry
             expectedSha256 == Base64.encode(dig.finish()[]),
             new ErrorLogException(
                 "Digest verification of %s failed", info(archiveName)
-            )
+        )
         );
     }
 }
