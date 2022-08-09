@@ -82,12 +82,6 @@ class DopRegistry
         auto v1 = v1Api(client, archiveMgr);
         v1.setupRoutes(api);
 
-        debug
-        {
-            if (conf.testStopRoute)
-                api.post("/stop", &stop);
-        }
-
         // Two possibilities for the deployment:
         //  1. API and front-end served by this app. Then a prefix is needed for the API
         //  2. API is served from a sub-domain (https://api.dopamine-pm.org).
@@ -144,15 +138,5 @@ class DopRegistry
     HTTPListener listen()
     {
         return listenHTTP(settings, root);
-    }
-
-    debug
-    {
-        void stop(HTTPServerRequest req, HTTPServerResponse resp)
-        {
-            resp.writeBody("", 200);
-            client.finish();
-            exitEventLoop();
-        }
     }
 }
