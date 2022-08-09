@@ -74,23 +74,23 @@ final class Registry
             return res.status;
         }
 
-        const stopUrl = url ~ "/api/stop";
-        auto settings = new HTTPClientSettings;
-        settings.defaultKeepAliveTimeout = 0.msecs;
+        version (Posix)
+        {
+            import core.sys.posix.signal : SIGINT;
 
-        requestHTTP(
-            stopUrl,
-            (scope req) { req.method = HTTPMethod.POST; },
-            (scope res) {},
-            settings
-        );
+            pid.kill(SIGINT);
+        }
+        version (Windows)
+        {
+            pid.kill(0);
+        }
 
-        int ret = pid.wait();
+        int code = pid.wait();
 
         outFile.close();
         errFile.close();
 
-        return ret;
+        return code;
     }
 
     string pgConnString(string dbName)

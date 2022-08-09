@@ -1,4 +1,4 @@
-module dopamine.server;
+module dopamine.frontend_server;
 
 import vibe.core.core;
 import vibe.core.log;

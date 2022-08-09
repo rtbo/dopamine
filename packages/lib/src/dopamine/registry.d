@@ -172,7 +172,10 @@ struct DownloadMetadata
 /// The URL of default registry the client connects to.
 enum defaultRegistryUrl = "https://dopamine-pm.herokuapp.com";
 
-enum apiPrefix = "/api";
+version(DopRegistryServesFrontend)
+    enum apiPrefix = "/api";
+else
+    enum apiPrefix = "";
 
 /// The URL of the registry the client will connect to.
 string registryUrl()
@@ -490,7 +493,7 @@ string requestResource(ReqT)(auto ref const ReqT req)
     static assert(!reqAttr.resource.canFind(":"), "URL parameters not allowed for POST requests");
     static assert(getSymbolsByUDA!(ReqT, Query).length == 0, "Query parameters not allowed for POST");
 
-    enum result = format!"/api%s"(reqAttr.resource);
+    enum result = format!"%s%s"(apiPrefix, reqAttr.resource);
     return result;
 }
 
@@ -658,13 +661,13 @@ version (unittest)
 unittest
 {
     requestResource(GetPackage("pkga"))
-        .shouldEqual("/api/v1/packages/pkga");
+        .shouldEqual(apiPrefix ~ "/v1/packages/pkga");
 
     requestResource(GetLatestRecipeRevision("pkga", "1.0.0"))
-        .shouldEqual("/api/v1/packages/pkga/1.0.0/latest");
+        .shouldEqual(apiPrefix ~ "/v1/packages/pkga/1.0.0/latest");
 
     requestResource(GetRecipeRevision("pkga", "1.0.0", "somerev"))
-        .shouldEqual("/api/v1/packages/pkga/1.0.0/somerev");
+        .shouldEqual(apiPrefix ~ "/v1/packages/pkga/1.0.0/somerev");
 
     requestResource(GetRecipeRevision("pkga", "1.0.0", null))
         .shouldThrow();

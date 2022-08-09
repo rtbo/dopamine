@@ -13,7 +13,7 @@ WORKDIR /source
 RUN DC=ldc2 meson /build \
     -Denable_registry=true \
     -Dregistry_storage=fs \
-    -Denable_server=false \
+    -Dregistry_serves_frontend=true \
     -Denable_client=false \
     -Denable_test=false \
     -Dalpine=true \

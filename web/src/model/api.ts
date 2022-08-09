@@ -4,7 +4,18 @@ import { ref, Ref, unref, withCtx } from "vue";
 import { Provider, OAuthResult } from "./oauth";
 
 const hostUrl = import.meta.env.VITE_API_HOST;
-const prefix = import.meta.env.VITE_API_PREFIX;
+
+function apiPrefix(): string
+{
+    const port = window.location.port;
+    const thisUrl = `${window.location.protocol}//${window.location.hostname}${port ? ':' : ''}${port}`
+    if (thisUrl === hostUrl)
+        return '/api'
+    else
+        return ''
+}
+
+const prefix = apiPrefix();
 
 export const host = hostUrl.replace("http://", "").replace("https://", "");
 

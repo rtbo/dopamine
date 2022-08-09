@@ -20,7 +20,8 @@ RUN --mount=type=cache,target=/build \
     DC=${dc} meson setup /build/registry \
     -Denable_registry=true \
     -Dregistry_storage=fs \
-    -Denable_server=false \
+    -Dregistry_serves_frontend=false \
+    -Denable_frontend_server=false \
     -Denable_client=false \
     -Denable_test=false \
     -Dalpine=true \
