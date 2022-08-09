@@ -16,6 +16,7 @@ jobs:
       matrix:
         os: [ ubuntu-latest, windows-latest ]
         bt: [ debug ]
+        storage: [ db, fs ]
         include:
           - os: ubuntu-latest
             dc: ldc-latest
@@ -72,7 +73,7 @@ jobs:
         with:
           action: build
           directory: build
-          setup-options: --buildtype=${{ matrix.bt }} -Denable_registry=true -Dregistry_storage=fs -Denable_admin=true -Denable_test=true -Denable_client=true
+          setup-options: --buildtype=${{ matrix.bt }} -Denable_registry=true -Dregistry_storage=${{ matrix.storage }} -Denable_admin=true -Denable_test=true -Denable_client=true
           meson-version: ${{ matrix.meson }}
 
       - name: Run tests
