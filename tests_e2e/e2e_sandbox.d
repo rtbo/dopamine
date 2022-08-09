@@ -99,6 +99,11 @@ final class Sandbox
                 });
             acquirePortLock();
             env["DOP_REGISTRY"] = format!"http://localhost:%s"(port);
+
+            version (DopRegistryFsStorage)
+            {
+                mkdir(path("storage"));
+            }
         }
 
         if (test.user)

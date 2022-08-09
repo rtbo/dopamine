@@ -1,4 +1,10 @@
 
+if get_option('registry_storage') == 'fs'
+    dop_registry_storage_versions = ['DopRegistryFsStorage']
+elif get_option('registry_storage') == 'db'
+    dop_registry_storage_versions = ['DopRegistryDbStorage']
+endif
+
 if get_option('enable_client') or get_option('enable_admin') or get_option('enable_test') or get_option('enable_registry')
     subdir('common')
     subdir('jwt')

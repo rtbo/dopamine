@@ -19,13 +19,7 @@ else
     dop_registry_link_args = []
 endif
 
-dop_registry_versions = ['DopRegistryMain']
-
-if get_option('registry_storage') == 'fs'
-    dop_registry_versions += ['DopRegistryFsStorage']
-elif get_option('registry_storage') == 'db'
-    dop_registry_versions += ['DopRegistryDbStorage']
-endif
+dop_registry_versions = ['DopRegistryMain'] + dop_registry_storage_versions
 
 dop_registry_exe = executable('dop-registry', dop_registry_src,
     install: true,
