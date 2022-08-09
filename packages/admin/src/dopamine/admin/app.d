@@ -143,8 +143,8 @@ version (DopAdminMain) int main(string[] args)
         const dbname = connInfo.get("dbname", null);
         if (user && dbname)
             db.exec(format!`GRANT ALL PRIVILEGES ON DATABASE %s TO %s`(
-                db.escapeIdentifier(dbname),
-                db.escapeIdentifier(user)
+                    db.escapeIdentifier(dbname),
+                    db.escapeIdentifier(user)
             ));
     }
 
@@ -298,57 +298,115 @@ void populateRegistry(PgConn db, string regDir)
                 if (!exists(rdir.recipeFile))
                     continue;
 
-                const recipe = cast(string) read(rdir.recipeFile);
+                const archiveName = format!"%s-%s-%s.tar.xz"(pkg.name, vdir.ver, rdir.revision);
+                int archiveId = storeArchive(db, rdir.dir, archiveName, adminId);
 
-                auto fileEntries = dirEntries(rdir.dir, SpanMode.breadth)
-                    .filter!(e => !e.isDir)
-                    .map!(e => fileEntry(e.name, rdir.dir))
-                    .array;
-
-                auto recipeFileBlob = fileEntries
-                    .boxTarXz()
-                    .join();
-
-                const sha1 = sha1Of(recipeFileBlob);
-
-                const recId = db.transac(() @trusted {
-                    const recId = db.execScalar!int(
-                        `
-                            INSERT INTO "recipe" (
-                                "package_name",
-                                "maintainer_id",
-                                "version",
-                                "revision",
-                                "recipe",
-                                "archive_data",
-                                "created"
-                            ) VALUES(
-                                $1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP
-                            )
-                            RETURNING "id"
-                        `,
-                        pkg.name, adminId, vdir.ver, rdir.revision, recipe, recipeFileBlob
-                    );
-                    auto dbSha1 = db.execScalar!(ubyte[20])(
-                        `
-                            SELECT digest("archive_data", 'sha1') FROM "recipe"
-                            WHERE "id" = $1
-                        `,
-                        recId
-                    );
-                    enforce(dbSha1 == sha1);
-
-                    foreach (entry; fileEntries)
-                        db.exec(
-                            `INSERT INTO "recipe_file" ("recipe_id", "name", "size") VALUES ($1, $2, $3)`,
-                            recId, entry.path, entry.size,
-                        );
-
-                    return recId;
-                });
+                const recId = db.execScalar!int(
+                    `
+                        INSERT INTO "recipe" (
+                            "package_name",
+                            "maintainer_id",
+                            "created",
+                            "version",
+                            "revision",
+                            "archive_id"
+                        ) VALUES(
+                            $1, $2, CURRENT_TIMESTAMP, $3, $4, $5
+                        )
+                        RETURNING "id"
+                    `,
+                    pkg.name, adminId, vdir.ver, rdir.revision, archiveId
+                );
 
                 writefln("Created recipe %s/%s/%s (%s)", pkg.name, vdir.ver, rdir.revision, recId);
             }
 
     }
+}
+
+version (DopRegistryFsStorage) int storeArchive(PgConn db, string dir, string archiveName, int userId)
+{
+    import std.path;
+
+    const storageDir = Config.get.registryStorageDir;
+
+    auto fileEntries = dirEntries(dir, SpanMode.breadth)
+        .filter!(e => !e.isDir)
+        .map!(e => fileEntry(e.name, dir))
+        .array;
+
+    fileEntries
+        .boxTarXz()
+        .writeBinaryFile(buildPath(storageDir, archiveName));
+
+    return db.transac(() @trusted {
+        const id = db.execScalar!int(
+            `
+                INSERT INTO archive (
+                    name,
+                    created,
+                    created_by,
+                    counter,
+                    upload_done
+                ) VALUES (
+                    $1, CURRENT_TIMESTAMP, $2, 0, TRUE
+                )
+                RETURNING id
+            `, archiveName, userId
+        );
+        foreach (entry; fileEntries)
+            db.exec(
+                `INSERT INTO archive_file (archive_id, name, size) VALUES ($1, $2, $3)`,
+                id, entry.path, entry.size,
+            );
+        return id;
+    });
+}
+
+version (DopRegistryDbStorage) int storeArchive(PgConn db, string dir, string archiveName, int userId)
+{
+    auto fileEntries = dirEntries(dir, SpanMode.breadth)
+        .filter!(e => !e.isDir)
+        .map!(e => fileEntry(e.name, dir))
+        .array;
+
+    const blob = fileEntries
+        .boxTarXz()
+        .join();
+
+    const sha1 = sha1Of(blob);
+
+    return db.transac(() @trusted {
+        const id = db.execScalar!int(
+            `
+            INSERT INTO archive (
+                name,
+                created,
+                created_by,
+                counter,
+                upload_done,
+                data
+            ) VALUES (
+                $1, CURRENT_TIMESTAMP, $2, 0, TRUE, $3
+            )
+            RETURNING id
+        `, archiveName, userId, blob
+        );
+
+        auto dbSha1 = db.execScalar!(ubyte[20])(
+            `
+                SELECT digest(data, 'sha1') FROM archive
+                WHERE id = $1
+            `, id
+        );
+        enforce(dbSha1 == sha1);
+
+        foreach (entry; fileEntries)
+            db.exec(
+                `INSERT INTO archive_file (archive_id, name, size) VALUES ($1, $2, $3)`,
+                id, entry.path, entry.size,
+            );
+
+        return id;
+    });
 }

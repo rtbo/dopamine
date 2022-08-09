@@ -21,6 +21,7 @@ import std.base64;
 import std.datetime;
 import std.exception;
 import std.format;
+
 // import std.net.curl;
 import std.string;
 import std.traits;
@@ -228,7 +229,7 @@ class AuthApi
                 if (resp.statusCode >= 400)
                 {
                     import vibe.stream.operations;
-                    throw new StatusException(
+                    throw new HTTPStatusException(
                         403,
                         format!"Could not request token to %s: %s"(config.tokenUrl, resp.bodyReader().readAllUTF8()),
                     );
@@ -345,7 +346,7 @@ class AuthApi
     {
         int id;
         const(ubyte)[] token;
-        string name;
+        MayBeText name;
         MayBeTimestamp expiration;
 
         static CliTokenRow[] byUserId(scope DbConn db, int userId)
@@ -363,7 +364,8 @@ class AuthApi
             auto js = Json.emptyObject;
             js["id"] = id;
             js["elidedToken"] = elidedToken(Base64.encode(token).idup);
-            js["name"] = name;
+            if (name.valid)
+                js["name"] = name.value;
             if (expiration.valid)
                 js["expJs"] = Json(expiration.value.toUnixTime() * 1000);
             return js;
@@ -372,7 +374,7 @@ class AuthApi
 
     void cliTokens(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
-        const userInfo = enforceAuth(req);
+        const userInfo = enforceUserAuth(req);
 
         const rows = client.connect((scope db) => CliTokenRow.byUserId(db, userInfo.id));
         auto json = rows.map!(r => r.toElidedJson()).array;
@@ -382,7 +384,7 @@ class AuthApi
 
     void cliTokensCreate(scope HTTPServerRequest req, scope HTTPServerResponse resp)
     {
-        const userInfo = enforceAuth(req);
+        const userInfo = enforceUserAuth(req);
 
         const name = req.json["name"].opt!string(null);
 
@@ -395,7 +397,7 @@ class AuthApi
         static struct Row
         {
             string token;
-            string name;
+            MayBeText name;
             MayBeTimestamp exp;
         }
 
@@ -419,7 +421,7 @@ class AuthApi
     {
         import std.conv : to;
 
-        const userInfo = enforceAuth(req);
+        const userInfo = enforceUserAuth(req);
 
         const tokenId = req.params["id"].to!int;
 
@@ -523,51 +525,18 @@ private Provider toProvider(string provider)
     case "google":
         return Provider.google;
     default:
-        throw new StatusException(400, "Unknown provider: " ~ provider);
+        throw new HTTPStatusException(400, "Unknown provider: " ~ provider);
     }
 }
 
-UserInfo enforceAuth(scope HTTPServerRequest req) @safe
+UserInfo enforceUserAuth(scope HTTPServerRequest req) @safe
 {
-    const head = enforceStatus(
-        req.headers.get("authorization"), 401, "Authorization required"
-    );
-    const bearer = "bearer ";
-    enforceStatus(
-        head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
-        400, "Ill-formed authorization header"
-    );
-    try
-    {
-        import std.typecons : Yes;
+    auto payload = enforceAuth(req);
 
-        const conf = Config.get;
-        const jwt = Jwt.verify(
-            head[bearer.length .. $].strip(),
-            conf.registryJwtSecret,
-            Jwt.VerifOpts(Yes.checkExpired, [conf.registryHostname]),
-        );
-        auto payload = jwt.payload;
-        return UserInfo(
-            payload["sub"].get!int,
-            payload["email"].get!string,
-            payload["name"].opt!string.mayBeText(),
-            payload["avatarUrl"].opt!string.mayBeText(),
-        );
-    }
-    catch (JwtException ex)
-    {
-        final switch (ex.cause)
-        {
-        case JwtVerifFailure.structure:
-            statusError(400, format!"Ill-formed authorization header: %s"(ex.msg));
-        case JwtVerifFailure.payload:
-            // 500 because it is checked after signature
-            statusError(500, format!"Improper field in authorization header payload: %s"(ex.msg));
-        case JwtVerifFailure.expired:
-            statusError(403, "Expired authorization token");
-        case JwtVerifFailure.signature:
-            statusError(403, "Invalid authorization token");
-        }
-    }
+    return UserInfo(
+        payload["sub"].get!int,
+        payload["email"].get!string,
+        payload["name"].opt!string.mayBeText(),
+        payload["avatarUrl"].opt!string.mayBeText(),
+    );
 }

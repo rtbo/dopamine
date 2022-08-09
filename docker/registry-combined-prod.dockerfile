@@ -12,11 +12,14 @@ COPY . /source
 WORKDIR /source
 RUN DC=ldc2 meson /build \
     -Denable_registry=true \
+    -Dregistry_storage=fs \
     -Denable_server=false \
     -Denable_client=false \
     -Denable_test=false \
     -Dalpine=true \
-    --buildtype=release --prefix=/install
+    --reconfigure \
+    --buildtype=release \
+    --prefix=/install
 
 WORKDIR /build
 RUN ninja install

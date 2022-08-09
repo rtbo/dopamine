@@ -33,3 +33,10 @@ option('alpine',
     value: false,
     description: 'Fixes for Alpine linux (docker build - missing pkg-config flags)',
 )
+
+option('registry_storage',
+    type: 'combo',
+    choices: ['fs', 'db'],
+    value: 'db',
+    description: 'Storage model for binary blobs on the registry',
+)

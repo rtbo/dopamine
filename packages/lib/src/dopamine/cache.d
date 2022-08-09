@@ -99,34 +99,12 @@ class PackageCache
         else
             revision = recipeRes.revision;
 
-        auto dig = makeDigest!SHA256();
-        auto downloadReq = DownloadRecipeArchive(recipeRes.id);
-        DownloadMetadata archiveMetadata;
-        auto archiveData = registry.download(downloadReq, archiveMetadata)
-            .tee(&dig)
-            .join();
+        const archiveName = recipeRes.archiveName;
+        const filename = buildPath(tempDir(), archiveName);
+        registry.downloadArchive(archiveName, filename);
 
-        // keep filename creation lazy
-        const filenameFun = (() => archiveMetadata.filename ?
-                archiveMetadata.filename
-                : format!"%s-%s-%s.tar.xz"(pack.name, ver, revision));
-
-        if (archiveMetadata.sha256.length)
-        {
-            enforce(
-                dig.finish() == archiveMetadata.sha256,
-                "Could not verify integrity of " ~ filenameFun(),
-            );
-        }
-        else
-        {
-            logWarningH(
-                "Cannot verify integrity of %s: No digest received from registry",
-                info(filenameFun())
-            );
-        }
-
-        // now that archive is verified, proceed filesystem modifications and decompression
+        scope(exit)
+            remove(filename);
 
         auto revDir = packageDir(pack.name)
             .versionDir(recipeRes.ver)
@@ -139,7 +117,7 @@ class PackageCache
 
         mkdirRecurse(revDir.dir);
 
-        only(archiveData)
+        readBinaryFile(filename)
             .unboxTarXz()
             .each!(e => e.extractTo(revDir.dir));
 

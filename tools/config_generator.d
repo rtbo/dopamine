@@ -4,6 +4,7 @@ module tools.config_generator;
 
 import std.exception;
 import std.getopt;
+import std.file;
 import std.path;
 import std.process;
 import std.regex;
@@ -76,9 +77,12 @@ int main(string[] args)
             return 0;
         }
 
+        const gitDir = buildPath(dopRoot, ".git");
+        const bool isGit = exists(gitDir) && isDir(gitDir);
+
         const mv = mesonVersion();
-        const glt = gitLastTag();
-        const dirty = gitDirty();
+        const glt = isGit ? gitLastTag() : mv;
+        const dirty = isGit && gitDirty();
 
         string dopVersion = mv;
         string dopBuildId = mv;

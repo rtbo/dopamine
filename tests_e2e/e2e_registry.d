@@ -35,6 +35,8 @@ final class Registry
         this.env["DOP_REGISTRY_PORT"] = sandbox.port.to!string;
         this.env["DOP_DB_CONNSTRING"] = pgConnString(format("dop-test-%s", sandbox.port));
         this.env["DOP_TEST_STOPROUTE"] = "1";
+        version (DopRegistryFsStorage)
+            this.env["DOP_REGISTRY_STORAGEDIR"] = sandbox.path("storage");
 
         const regPath = sandbox.registryPath();
 

@@ -8,23 +8,32 @@ services:
         source: db-data
         target: /var/lib/postgresql/data
     ports:
-      # on host, database available at
-      # postgres://pg:pg@localhost:6543/dop-registry
+      # on host, the database available at
+      # postgres://dopreg:dopreg@localhost:6543/dop-registry
+      # psql -U dopreg -h localhost -p 6543 -d dop-registry
+      # dop-admin must be run first with --create-user and --create-db
       - 6543:5432
     environment:
       - POSTGRES_PASSWORD=postgres
 
-  # admin helps to initialize database
-  admin:
+  # client applications: dop and dop-admin
+  client:
     depends_on:
+      # we specify the database and not the registry on purpose
+      # client can run without registry for some commands
+      # we start the database so that dop-admin connects to it
       - database
     build:
       context: ${dopdir}
-      dockerfile: ${dopdir}/docker/admin.dockerfile
+      dockerfile: ${dopdir}/docker/client.dockerfile
+    volumes:
+      - type: volume
+        source: client-home
+        target: /home/me
     environment:
+      - DOP_REGISTRY=http://registry
       - DOP_ADMIN_CONNSTRING=postgres://postgres:postgres@database/postgres
       - DOP_DB_CONNSTRING=postgres://dopreg:dopreg@database/dop-registry
-
 
   registry:
     depends_on:
@@ -32,13 +41,18 @@ services:
     build:
       context: ${dopdir}
       dockerfile: ${dopdir}/docker/registry.dockerfile
+    volumes:
+      - type: volume
+        source: registry-storage
+        target: /storage
     ports:
       - 3500:80
     environment:
       - DOP_REGISTRY_HOSTNAME=0.0.0.0
       - DOP_REGISTRY_PORT=80
-      - DOP_REGISTRY_APIPREFIX=
+      - DOP_REGISTRY_APIPREFIX=/api
       - DOP_DB_CONNSTRING=postgres://dopreg:dopreg@database/dop-registry
+      - DOP_REGISTRY_STORAGEDIR=/storage
     env_file:
       - ${dopdir}/packages/registry/.env.dev
 
@@ -50,7 +64,7 @@ services:
       dockerfile: ${dopdir}/docker/frontend-dev.dockerfile
       args:
         - web_api_host=http://localhost:3500
-        - web_api_prefix=
+        - web_api_prefix=/api
         - web_github_clientid=${web_github_clientid}
         - web_google_clientid=${web_google_clientid}
     volumes:
@@ -61,3 +75,5 @@ services:
 
 volumes:
   db-data:
+  client-home:
+  registry-storage:

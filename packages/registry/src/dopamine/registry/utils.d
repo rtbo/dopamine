@@ -21,31 +21,18 @@ import std.json;
 import std.string;
 import std.traits;
 
-class StatusException : Exception
-{
-    int statusCode;
-    string reason;
-
-    this(int statusCode, lazy string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
-    {
-        super(format!"%s: %s%s"(statusCode, httpStatusText(statusCode), reason ? "\n" ~ reason : ""), file, line);
-        this.statusCode = statusCode;
-        this.reason = reason;
-    }
-}
-
 T enforceStatus(T)(T condition, int statusCode, lazy string reason = null,
     string file = __FILE__, size_t line = __LINE__) @safe
 {
     static assert(is(typeof(!condition)), "condition must cast to bool");
     if (!condition)
-        throw new StatusException(statusCode, reason, file, line);
+        throw new HTTPStatusException(statusCode, reason, file, line);
     return condition;
 }
 
 noreturn statusError(int statusCode, string reason = null, string file = __FILE__, size_t line = __LINE__) @safe
 {
-    throw new StatusException(statusCode, reason, file, line);
+    throw new HTTPStatusException(statusCode, reason, file, line);
 }
 
 T enforceProp(T)(Json json, string prop) @safe
@@ -141,9 +128,8 @@ Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
         part = part.strip();
         const indices = part.split("-");
         if (indices.length != 2 || (!indices[0].length && !indices[1].length))
-        {
             statusError(400, "Bad format of range header");
-        }
+
         Rng rng;
         if (indices[0].length)
             rng.first = indices[0].to!uint;
@@ -175,10 +161,10 @@ HTTPServerRequestDelegateS genericHandler(H)(H handler) @safe
             resp.statusCode = 404;
             resp.writeBody(ex.msg);
         }
-        catch (StatusException ex)
+        catch (HTTPStatusException ex)
         {
             () @trusted { logError("Status error: %s", ex); }();
-            resp.statusCode = ex.statusCode;
+            resp.statusCode = ex.status;
             resp.writeBody(ex.msg);
         }
         catch (JSONException ex)
@@ -223,7 +209,7 @@ void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
     auto routeHandler = genericHandler((scope HTTPServerRequest httpReq, scope HTTPServerResponse httpResp) @safe {
         static if (requiresAuth)
         {
-            const userInfo = enforceAuth(httpReq);
+            const userInfo = enforceUserAuth(httpReq);
         }
         auto req = adaptRequest!ReqT(httpReq);
         static if (requiresAuth)
@@ -315,11 +301,11 @@ private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
             }
             catch (ConvException ex)
             {
-                throw new StatusException(400, "Invalid parameter: " ~ ident);
+                throw new HTTPStatusException(400, "Invalid parameter: " ~ ident);
             }
             catch (Exception ex)
             {
-                throw new StatusException(400, "Missing parameter: " ~ ident);
+                throw new HTTPStatusException(400, "Missing parameter: " ~ ident);
             }
         }
     }}
@@ -373,4 +359,43 @@ private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
     // dfmt on
 
     return req;
+}
+
+Json enforceAuth(scope HTTPServerRequest req) @safe
+{
+    const head = enforceStatus(
+        req.headers.get("authorization"), 401, "Authorization required"
+    );
+    const bearer = "bearer ";
+    enforceStatus(
+        head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,
+        400, "Ill-formed authorization header"
+    );
+    try
+    {
+        import std.typecons : Yes;
+
+        const conf = Config.get;
+        const jwt = Jwt.verify(
+            head[bearer.length .. $].strip(),
+            conf.registryJwtSecret,
+            Jwt.VerifOpts(Yes.checkExpired, [conf.registryHostname]),
+        );
+        return jwt.payload;
+    }
+    catch (JwtException ex)
+    {
+        final switch (ex.cause)
+        {
+        case JwtVerifFailure.structure:
+            statusError(400, format!"Ill-formed authorization header: %s"(ex.msg));
+        case JwtVerifFailure.payload:
+            // 500 because it is checked after signature
+            statusError(500, format!"Improper field in authorization header payload: %s"(ex.msg));
+        case JwtVerifFailure.expired:
+            statusError(403, "Expired authorization token");
+        case JwtVerifFailure.signature:
+            statusError(403, "Invalid authorization token");
+        }
+    }
 }

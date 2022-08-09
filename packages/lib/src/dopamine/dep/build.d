@@ -77,9 +77,9 @@ in (!stageDest || isAbsolute(stageDest))
             srcDir = state.srcDir = rdir.recipe.source();
             rdir.stateFile.write(state);
         }
-        assert(srcDir && exists(srcDir));
-
+        enforce(srcDir, "recipe did not return the source code location");
         srcDir = absolutePath(srcDir, rdir.root);
+        enforce(exists(srcDir) && isDir(srcDir), "No such source directory: " ~ srcDir);
 
         if (!rdir.checkBuildReady(bid, reason))
         {

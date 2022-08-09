@@ -1,5 +1,6 @@
 module dopamine.registry.v1.recipes;
 
+import dopamine.registry.archive;
 import dopamine.registry.auth;
 import dopamine.registry.db;
 import dopamine.registry.utils;
@@ -27,10 +28,13 @@ import std.range;
 class RecipesApi
 {
     DbClient client;
+    ArchiveManager archiveMgr;
 
-    this(DbClient client)
+
+    this(DbClient client, ArchiveManager archiveMgr)
     {
         this.client = client;
+        this.archiveMgr = archiveMgr;
     }
 
     void setupRoutes(URLRouter router)
@@ -40,8 +44,6 @@ class RecipesApi
         setupRoute!GetLatestRecipeRevision(router, &getLatestRecipeRevision);
         setupRoute!GetRecipeRevision(router, &getRecipeRevision);
         setupRoute!GetRecipe(router, &getRecipe);
-        setupRoute!GetRecipeFiles(router, &getRecipeFiles);
-        setupDownloadRoute!DownloadRecipeArchive(router, &downloadRecipeArchive);
     }
 
     @OrderedCols
@@ -84,12 +86,12 @@ class RecipesApi
         SysTime created;
         string ver;
         string revision;
-        string recipe;
+        string archiveName;
 
         RecipeResource toResource() const @safe
         {
             return RecipeResource(
-                id, ver, revision, recipe, maintainerId, created.toUTC()
+                id, ver, revision, maintainerId, created.toUTC(), archiveName
             );
         }
     }
@@ -99,11 +101,12 @@ class RecipesApi
         return client.connect((scope DbConn db) {
             const row = db.execRow!RecipeRow(
                 `
-                    SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
-                    FROM "recipe" WHERE
-                        "package_name" = $1 AND
-                        "version" = $2
-                    ORDER BY "created" DESC
+                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
+                    FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
+                    WHERE
+                        r.package_name = $1 AND
+                        r.version = $2
+                    ORDER BY r.created DESC
                     LIMIT 1
                 `,
                 req.name, req.ver,
@@ -117,11 +120,12 @@ class RecipesApi
         return client.connect((scope DbConn db) {
             const row = db.execRow!RecipeRow(
                 `
-                    SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
-                    FROM "recipe" WHERE
-                        "package_name" = $1 AND
-                        "version" = $2 AND
-                        "revision" = $3
+                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
+                    FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
+                    WHERE
+                        r.package_name = $1 AND
+                        r.version = $2 AND
+                        r.revision = $3
                 `,
                 req.name, req.ver, req.revision,
             );
@@ -134,101 +138,14 @@ class RecipesApi
         return client.connect((scope DbConn db) {
             const row = db.execRow!RecipeRow(
                 `
-                    SELECT "id", "maintainer_id", "created", "version", "revision", "recipe"
-                    FROM "recipe" WHERE "id" = $1
+                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
+                    FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
+                    WHERE r.id = $1
                 `,
                 req.id
             );
             return row.toResource();
         });
-    }
-
-    const(RecipeFile)[] getRecipeFiles(GetRecipeFiles req) @safe
-    {
-        return client.connect((scope DbConn db) {
-            return db.execRows!RecipeFile(
-                `SELECT "name", "size" FROM "recipe_file" WHERE "recipe_id" = $1`, req.id,
-            );
-        });
-    }
-
-    void downloadRecipeArchive(scope HTTPServerRequest req, scope HTTPServerResponse resp) @safe
-    {
-        const id = convParam!int(req, "id");
-
-        auto rng = parseRangeHeader(req);
-        enforceStatus(rng.length <= 1, 400, "Multi-part ranges not supported");
-
-        @OrderedCols
-        static struct Info
-        {
-            string pkgName;
-            string ver;
-            string revision;
-            uint totalLength;
-        }
-
-        const info = client.connect(db => db.execRow!Info(
-                `SELECT package_name, version, revision, length(archive_data) FROM recipe WHERE id = $1`,
-                id
-        ));
-        const totalLength = info.totalLength;
-
-        resp.headers["Content-Disposition"] = format!"attachment; filename=%s-%s-%s.tar.xz"(
-            info.pkgName, info.ver, info.revision
-        );
-
-        if (reqWantDigestSha256(req))
-        {
-            const sha = client.connect(db => db.execScalar!(ubyte[32])(
-                    `SELECT sha256(archive_data) FROM recipe WHERE id = $1`,
-                    id,
-            ));
-            resp.headers["Digest"] = () @trusted {
-                return assumeUnique("sha-256=" ~ Base64.encode(sha));
-            }();
-        }
-
-        resp.headers["Accept-Ranges"] = "bytes";
-
-        const slice = rng.length ?
-            rng[0].slice(totalLength) : ContentSlice(0, totalLength - 1, totalLength);
-        enforceStatus(slice.last >= slice.first, 400, "Invalid range: " ~ req.headers.get("Range"));
-        enforceStatus(slice.end <= totalLength, 400, "Invalid range: content bounds exceeded");
-
-        resp.headers["Content-Length"] = slice.sliceLength.to!string;
-        if (rng.length)
-            resp.headers["Content-Range"] = format!"bytes %s-%s/%s"(slice.first, slice.last, totalLength);
-
-        if (req.method == HTTPMethod.HEAD)
-        {
-            resp.writeVoidBody();
-            return;
-        }
-
-        const(ubyte)[] data;
-        if (rng.length)
-        {
-            data = client.connect((scope db) {
-                // substring index is one based
-                return db.execScalar!(const(ubyte)[])(
-                    `SELECT substring(archive_data FROM $1 FOR $2) FROM recipe WHERE id = $3`,
-                    slice.first + 1, slice.sliceLength, id,
-                );
-            });
-            resp.statusCode = 206;
-        }
-        else
-        {
-            data = client.connect((scope db) {
-                return db.execScalar!(const(ubyte)[])(
-                    `SELECT archive_data FROM recipe WHERE id = $1`, id,
-                );
-            });
-        }
-        enforce(slice.sliceLength == data.length, "No match of data length and content length");
-
-        resp.writeBody(data);
     }
 
     PackageResource createPackageIfNotExist(scope DbConn db, int userId, string packName, out bool newPkg) @safe
@@ -261,45 +178,6 @@ class RecipesApi
         return prows[0].toResource(vers);
     }
 
-    RecipeFile[] checkAndReadRecipeArchive(const(ubyte)[] archiveData,
-        const(ubyte)[] archiveSha256,
-        out string recipe) @trusted
-    {
-        enum szLimit = 1 * 1024 * 1024;
-
-        enforceStatus(
-            archiveData.length <= szLimit, 400,
-            "Recipe archive is too big. Ensure to not leave unneeded data."
-        );
-
-        const sha256 = sha256Of(archiveData);
-        enforceStatus(
-            sha256[] == archiveSha256, 400, "Could not verify archive integrity (invalid SHA256 checksum)"
-        );
-
-        RecipeFile[] files;
-        auto entries = only(archiveData)
-            .unboxTarXz();
-
-        bool seenRecipe;
-        foreach (e; entries)
-        {
-            enforceStatus(!e.isBomb(10 * szLimit), 400, "Archive bomb detected!");
-
-            if (e.path == "dopamine.lua")
-            {
-                enforceStatus(e.size <= szLimit, 400, "dopamine.lua file is too big!");
-                recipe = cast(string) e.byChunk().join().idup;
-                seenRecipe = true;
-            }
-            files ~= RecipeFile(e.path, cast(uint) e.size);
-        }
-        enforceStatus(
-            seenRecipe, 400, "Recipe archive do not contain dopamine.lua file"
-        );
-        return files;
-    }
-
     NewRecipeResp postRecipe(UserInfo user, PostRecipe req) @safe
     {
         // FIXME: package name rules
@@ -309,12 +187,6 @@ class RecipesApi
         enforceStatus(
             req.revision.length, 400, "Invalid package revision"
         );
-
-        const archiveSha256 = Base64.decode(req.archiveSha256);
-        const archive = Base64.decode(req.archive);
-
-        string recipe;
-        auto files = checkAndReadRecipeArchive(archive, archiveSha256, recipe);
 
         return client.transac((scope db) @safe {
             bool newPkg;
@@ -331,7 +203,11 @@ class RecipesApi
                 format!"recipe %s/%s/%s already exists!"(req.name, req.ver, req.revision)
             );
 
-            const recipeRow = db.execRow!RecipeRow(
+            const archiveName = format!"%s-%s-%s.tar.xz"(req.name, req.ver, req.revision);
+
+            const uploadReq = archiveMgr.requestUpload(db, user.id, archiveName);
+
+            auto recipeRow = db.execRow!RecipeRow(
                 `
                     INSERT INTO recipe (
                         package_name,
@@ -339,10 +215,9 @@ class RecipesApi
                         created,
                         version,
                         revision,
-                        recipe,
-                        archive_data
+                        archive_id
                     ) VALUES (
-                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6
+                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5
                     )
                     RETURNING
                         id,
@@ -350,22 +225,13 @@ class RecipesApi
                         created,
                         version,
                         revision,
-                        recipe
-                `, req.name, user.id, req.ver, req.revision, recipe, archive
+                        ''
+                `, req.name, user.id, req.ver, req.revision, uploadReq.archiveId
             );
+            recipeRow.archiveName = archiveName;
 
-            const doubleCheck = db.execScalar!(const(ubyte)[])(
-                `SELECT digest(archive_data, 'sha256') FROM recipe WHERE id = $1`, recipeRow.id
-            );
-            enforce(doubleCheck == archiveSha256, "Could not verify archive integrity after insert");
-
-            foreach (f; files)
-                db.exec(
-                    `INSERT INTO recipe_file (recipe_id, name, size) VALUES ($1, $2, $3)`,
-                    recipeRow.id, f.name, f.size
-                );
             return NewRecipeResp(
-                newPkg, pkg, recipeRow.toResource()
+                newPkg, pkg, recipeRow.toResource(), uploadReq.bearerToken,
             );
         });
     }

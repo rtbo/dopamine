@@ -114,7 +114,7 @@ int publishMain(string[] args)
     auto recipe = rdir.recipe;
 
     enforce(!recipe.isDub, new ErrorLogException(
-        "Dub packages can't be published to Dopamine registry"
+            "Dub packages can't be published to Dopamine registry"
     ));
     enforce(!recipe.isLight, new ErrorLogException(
             "Light recipes can't be published"
@@ -147,7 +147,8 @@ int publishMain(string[] args)
     enforceRecipeIdentity(recipe);
 
     const cacheDir = tempPath(null, "dop-cache", null);
-    const archivePath = buildPath(tempDir(), format!"%s-%s-%s.tar.xz"(recipe.name, recipe.ver, recipe.revision));
+    const archivePath = buildPath(tempDir(), format!"%s-%s-%s.tar.xz"(recipe.name, recipe.ver, recipe
+            .revision));
     const extractPath = archivePath[0 .. $ - ".tar.xz".length];
 
     mkdirRecurse(extractPath);
@@ -201,32 +202,36 @@ int publishMain(string[] args)
     }
     catch (Exception ex)
     {
-        throw new ErrorLogException(
-            "Could not log to %s. Publishing requires to be logged-in. Get a login key on the registry front-end.",
-            info(registry.host));
+        throw ex;
+        // throw new ErrorLogException(
+        //     "Could not log to %s. Publishing requires to be logged-in. Get a login key on the registry front-end.",
+        //     info(registry.host));
     }
+
     PostRecipe req;
     req.name = recipe.name;
     req.ver = recipe.ver.toString();
     req.revision = recipe.revision;
-    req.archiveSha256 = Base64.encode(dig.finish()[]);
-    req.archive = Base64.encode(cast(const(ubyte)[]) read(archivePath));
     auto resp = registry.sendRequest(req);
     if (!resp)
     {
         logErrorH("Creation of new recipe failed: %s", resp.error);
         return 1;
     }
-    else
-    {
-        const pkg = resp.payload.pkg;
-        const rec = resp.payload.recipe;
 
-        if (resp.payload.newPkg)
-            logInfo("Publish: New package - %s", info(pkg.name));
+    NewRecipeResp newRecResp = resp.payload;
 
-        logInfo("Publish: %s - %s/%s/%s", success("OK"), info(pkg.name), info(rec.ver), rec
-                .revision);
-    }
+    const pkg = newRecResp.pkg;
+    const rec = newRecResp.recipe;
+    const sha256 = Base64.encode(dig.finish()[]).idup;
+
+    if (newRecResp.newPkg)
+        logInfo("Publish: New package - %s", info(pkg.name));
+
+    logInfo("Uploading archive...");
+    registry.uploadArchive(newRecResp.uploadBearerToken, archivePath, sha256);
+
+    logInfo("Publish: %s - %s/%s/%s", success("OK"), info(pkg.name), info(rec.ver), rec
+            .revision);
     return 0;
 }

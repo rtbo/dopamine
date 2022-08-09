@@ -32,6 +32,34 @@ CREATE TABLE "user_clikey" (
     FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE
 );
 
+-- support for downloadable content
+CREATE TABLE "archive" (
+    "id"            serial PRIMARY KEY,
+    "name"          text NOT NULL,
+    "created"       timestamptz NOT NULL,
+    "created_by"    integer,
+    "counter"       integer NOT NULL,
+    "upload_done"   boolean NOT NULL,
+    "data"          bytea, -- may or may not be stored in database
+
+    FOREIGN KEY ("created_by") REFERENCES "user"("id") ON DELETE SET NULL
+);
+
+-- Fast lookup with "name" is needed
+CREATE INDEX "idx_archive_name" ON "archive" ("name");
+
+-- archive data is received compressed, therefore the following will save CPU time on the server.
+-- See https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/
+ALTER TABLE "archive" ALTER COLUMN "data" SET STORAGE EXTERNAL;
+
+CREATE TABLE "archive_file" (
+    "archive_id"    integer,
+    "name"          text,
+    "size"          integer NOT NULL,
+
+    FOREIGN KEY ("archive_id") REFERENCES "archive"("id") ON DELETE CASCADE
+);
+
 CREATE TABLE "package" (
     "name"          text PRIMARY KEY,
     "maintainer_id" integer,
@@ -47,23 +75,10 @@ CREATE TABLE "recipe" (
     "created"       timestamptz NOT NULL,
     "version"       text NOT NULL,
     "revision"      text NOT NULL,
-    "recipe"        text NOT NULL,
-    "archive_data"  bytea NOT NULL,
+    "archive_id"    integer NOT NULL,
 
     FOREIGN KEY ("package_name") REFERENCES "package"("name") ON DELETE CASCADE,
     FOREIGN KEY ("maintainer_id") REFERENCES "user"("id") ON DELETE SET NULL,
+    FOREIGN KEY ("archive_id") REFERENCES "archive"("id") ON DELETE CASCADE,
     UNIQUE("package_name", "version", "revision")
-);
-
--- recipe file data is received compressed, therefore the following will save CPU time on the server.
--- See https://www.cybertec-postgresql.com/en/binary-data-performance-in-postgresql/
-ALTER TABLE "recipe" ALTER COLUMN "archive_data" SET STORAGE EXTERNAL;
-
-CREATE TABLE "recipe_file" (
-    "recipe_id"     integer,
-    "name"          text,
-    "size"          integer NOT NULL,
-
-    FOREIGN KEY ("recipe_id") REFERENCES "recipe"("id") ON DELETE CASCADE,
-    PRIMARY KEY("recipe_id", "name")
 );

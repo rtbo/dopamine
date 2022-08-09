@@ -23,6 +23,13 @@ struct Config
     /// The name of the database to be administrated is extracted from $DOP_DB_CONNSTRING
     string adminConnString;
 
+    version (DopRegistryFsStorage)
+    {
+        /// Storage directory, if FileSystemStorage is used
+        /// Read from $DOP_REGISTRY_STORAGEDIR
+        string registryStorageDir;
+    }
+
     static @property Config get()
     {
         import std.process : environment;
@@ -42,6 +49,11 @@ struct Config
             c.adminConnString = environment.get(
                 "DOP_ADMIN_CONNSTRING", "postgres:///postgres"
             );
+
+            version (DopRegistryFsStorage)
+            {
+                c.registryStorageDir = environment["DOP_REGISTRY_STORAGEDIR"];
+            }
 
             initialized = true;
         }
