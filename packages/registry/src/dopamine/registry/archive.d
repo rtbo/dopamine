@@ -118,7 +118,8 @@ final class ArchiveManager
         });
 
         try
-            storage.storeBlob(name, req.bodyReader, sha256);
+            storage.storeBlob(id, name, req.bodyReader,
+                req.headers["Content-Length"].to!ulong, Base64.decode(sha256));
         catch (Exception ex)
         {
             client.connect(db => db.exec(`DELETE FROM archive WHERE id = $1`, id));
@@ -131,29 +132,22 @@ final class ArchiveManager
     {
         string name = req.params["name"];
 
-        @OrderedCols
-        struct Info
-        {
-            int id;
-            string name;
-        }
-
-        const info = client.connect((scope db) {
-            return db.execRow!Info(
-                `SELECT id, name FROM archive WHERE name = $1`,
+        const id = client.connect((scope db) {
+            return db.execScalar!int(
+                `SELECT id FROM archive WHERE name = $1`,
                 name
             );
         });
 
         if (reqWantDigestSha256(req))
         {
-            const sha = storage.blobSha256(name);
+            const sha = storage.blobSha256(id, name);
             resp.headers["Digest"] = () @trusted {
                 return assumeUnique("sha-256=" ~ Base64.encode(sha));
             }();
         }
 
-        const totalLength = storage.blobSize(name);
+        const totalLength = storage.blobSize(id, name);
 
         resp.headers["Content-Disposition"] = format!"attachment; filename=%s"(name);
 
@@ -185,13 +179,13 @@ final class ArchiveManager
             return;
         }
 
-        auto blob = storage.getBlob(name, start, end);
+        auto blob = storage.getBlob(id, name, start, end);
 
         resp.statusCode = (end - start) != totalLength ? 206 : 200;
 
         client.connect((scope db) => db.exec(
                 `UPDATE archive SET counter = counter + 1 WHERE id = $1`,
-                info.id
+                id
         ));
 
         pipe(blob, resp.bodyWriter);
