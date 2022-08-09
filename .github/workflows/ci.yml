@@ -16,14 +16,15 @@ jobs:
       matrix:
         os: [ ubuntu-latest, windows-latest ]
         bt: [ debug ]
-        storage: [ db, fs ]
         include:
           - os: ubuntu-latest
             dc: ldc-latest
             meson: '0.63.0'
+            storage: db
           - os: windows-latest
             dc: dmd-latest
             meson: '0.63.0'
+            storage: fs
 
     runs-on: ${{ matrix.os }}
 
