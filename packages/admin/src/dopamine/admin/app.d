@@ -22,6 +22,8 @@ immutable(string[string]) migrations;
 
 shared static this()
 {
+    migrations["0.auth"] = import("0.auth.sql");
+    migrations["1.archive"] = import("1.archive.sql");
     migrations["v1"] = import("v1.sql");
 }
 
