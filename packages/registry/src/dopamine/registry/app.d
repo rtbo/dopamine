@@ -60,10 +60,13 @@ class DopRegistry
 
         enforce(conf.registryApiPrefix.length == 0 || conf.registryApiPrefix.startsWith("/"));
 
-        version(DopRegistryFsStorage)
+        version (DopRegistryFsStorage)
             auto storage = new FileSystemStorage(conf.registryStorageDir);
-        else
-            static assert(false, "A valid registry storage version must be enabled");
+        version (DopRegistryDbStorage)
+            auto storage = new DatabaseStorage(client);
+
+        static assert (is(typeof(storage) : Storage), "a suitable storage version must be defined");
+
         auto archiveMgr = new ArchiveManager(client, storage);
 
         root = new URLRouter;

@@ -98,7 +98,7 @@ final class FileSystemStorage : Storage
     }
 }
 
-final class DatabaseStorage
+final class DatabaseStorage : Storage
 {
     DbClient client;
 
