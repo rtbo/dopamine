@@ -49,7 +49,7 @@ struct Options
             "trace",                &opts.trace,
             "create-user",          &opts.createUser,
             "create-db",            &opts.createDb,
-            "run-migration",        &opts.migrationsToRun,
+            "run-migration|r",      &opts.migrationsToRun,
             "create-test-users",    &opts.createTestUsers,
             "populate-from",        &opts.registryDir,
             "gen-crypto-password",  &opts.genCryptoPassword,
