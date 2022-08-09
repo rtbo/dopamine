@@ -19,7 +19,7 @@ else
     dop_registry_link_args = []
 endif
 
-dop_registry_versions = ['DopRegistryMain'] + dop_registry_storage_versions
+dop_registry_versions = ['DopRegistryMain'] + dop_registry_storage_versions + dop_registry_serves_frontend_versions
 
 dop_registry_exe = executable('dop-registry', dop_registry_src,
     install: true,

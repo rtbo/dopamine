@@ -17,10 +17,6 @@ struct Config
     /// Read from $DOP_REGISTRY_PORT or $PORT if $DOP_REGISTRY_PORT is unset
     ushort registryPort;
 
-    /// Path prefix of the API
-    /// Read from $DOP_REGISTRY_APIPREFIX
-    string registryApiPrefix;
-
     /// Secret of JWT signature
     /// Read from $DOP_REGISTRY_JWTSECRET
     string registryJwtSecret;
@@ -89,10 +85,6 @@ struct Config
             c.registryPort = environment.get(
                 "DOP_REGISTRY_PORT", environment.get("PORT", "3500")
             ).to!ushort;
-
-            c.registryApiPrefix = environment.get(
-                "DOP_REGISTRY_APIPREFIX", "/api"
-            );
 
             c.registryJwtSecret = environment.get(
                 "DOP_REGISTRY_JWTSECRET", "test-secret"

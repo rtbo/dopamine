@@ -50,7 +50,6 @@ services:
     environment:
       - DOP_REGISTRY_HOSTNAME=0.0.0.0
       - DOP_REGISTRY_PORT=80
-      - DOP_REGISTRY_APIPREFIX=/api
       - DOP_DB_CONNSTRING=postgres://dopreg:dopreg@database/dop-registry
       - DOP_REGISTRY_STORAGEDIR=/storage
     env_file:
@@ -64,7 +63,6 @@ services:
       dockerfile: ${dopdir}/docker/frontend-dev.dockerfile
       args:
         - web_api_host=http://localhost:3500
-        - web_api_prefix=/api
         - web_github_clientid=${web_github_clientid}
         - web_google_clientid=${web_google_clientid}
     volumes:

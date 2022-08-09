@@ -10,10 +10,23 @@ option('enable_registry',
     description: 'Whether to build the registry application',
 )
 
-option('enable_server',
+option('registry_storage',
+    type: 'combo',
+    choices: ['fs', 'db'],
+    value: 'db',
+    description: 'Storage model for binary blobs on the registry',
+)
+
+option('registry_serves_frontend',
     type: 'boolean',
     value: false,
-    description: 'Whether to build the frontend server application',
+    description: 'Whether the registry also serves the frontend',
+)
+
+option('enable_frontend_server',
+    type: 'boolean',
+    value: false,
+    description: 'Whether to build the frontend static file server application',
 )
 
 option('enable_admin',
@@ -32,11 +45,4 @@ option('alpine',
     type: 'boolean',
     value: false,
     description: 'Fixes for Alpine linux (docker build - missing pkg-config flags)',
-)
-
-option('registry_storage',
-    type: 'combo',
-    choices: ['fs', 'db'],
-    value: 'db',
-    description: 'Storage model for binary blobs on the registry',
 )
