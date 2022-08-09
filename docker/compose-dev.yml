@@ -28,11 +28,8 @@ services:
       dockerfile: ${dopdir}/docker/client.dockerfile
     volumes:
       - type: volume
-        source: client-cache
-        target: /root/.dopamine
-      - type: volume
-        source: client-work
-        target: /dop
+        source: client-home
+        target: /home/me
     environment:
       - DOP_REGISTRY=http://registry
       - DOP_ADMIN_CONNSTRING=postgres://postgres:postgres@database/postgres
@@ -78,6 +75,5 @@ services:
 
 volumes:
   db-data:
-  client-cache:
-  client-work:
+  client-home:
   registry-storage:

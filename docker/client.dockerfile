@@ -31,13 +31,13 @@ RUN --mount=type=cache,target=/build \
 
 FROM alpine:3.16
 
-RUN apk add --no-cache musl-dev libpq-dev zlib-dev xz-dev bzip2-dev git gcc dub ldc dmd gcc ninja py3-pip cmake
+RUN apk add --no-cache musl-dev libpq-dev zlib-dev xz-dev bzip2-dev git gcc dub ldc dmd gcc g++ ninja py3-pip cmake curl
 RUN python3 -m pip install meson==0.63.0
 
 # copy installation
-COPY --from=build /install /app
+COPY --from=build /install /usr
 
-RUN mkdir /dop
-WORKDIR /dop
-
-ENV PATH="${PATH}:/app/bin"
+RUN addgroup -S mine
+RUN adduser -h /home/me -s /bin/sh -G mine -D me
+USER me
+WORKDIR /home/me
