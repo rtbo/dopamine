@@ -119,7 +119,7 @@ final class DatabaseStorage : Storage
         client.transac((scope db) {
             const writtenSha256 = db.execScalar!(const(ubyte)[])(
                 `
-                    INSERT INTO archive(data) VALUES($1) WHERE id = $2
+                    UPDATE archive SET data = $1 WHERE id = $2
                     RETURNING sha256(data)
                 `, buf, id
             );
