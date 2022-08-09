@@ -43,6 +43,8 @@ final class ArchiveManager
         this.client = client;
         this.storage = storage;
 
+        // if server is stopped before upload is done,
+        // invalidate it
         client.connect((scope db) {
             db.exec(`DELETE FROM archive WHERE upload_done = FALSE`);
         });
@@ -52,7 +54,7 @@ final class ArchiveManager
     {
         router.match(HTTPMethod.HEAD, "/archive/:name", genericHandler(&download));
         router.match(HTTPMethod.GET, "/archive/:name", genericHandler(&download));
-        router.post("/archive", &upload);
+        router.post("/archive", genericHandler(&upload));
     }
 
     UploadRequest requestUpload(scope DbConn db, int userId, string archiveName) @trusted
@@ -72,9 +74,9 @@ final class ArchiveManager
         Json bearerJson = Json.emptyObject;
         bearerJson["sub"] = id;
         bearerJson["exp"] = toJwtTime(Clock.currTime + timeout);
-        bearerJson["aud"] = "upload";
         bearerJson["iss"] = conf.registryHostname;
         bearerJson["name"] = archiveName;
+        bearerJson["typ"] = "upload";
         const bearerToken = Jwt.sign(bearerJson, conf.registryJwtSecret);
 
         // if upload is still not done after timeout, we erase the archive,
@@ -99,10 +101,9 @@ final class ArchiveManager
     {
         auto payload = enforceAuth(req);
 
+        enforceStatus(payload["typ"].opt!string == "upload", 400, "did not supply an upload token");
         const id = payload["sub"].get!int;
-        const aud = payload["aud"].get!string;
         const name = payload["name"].get!string;
-        enforceStatus(aud == "upload", 400, "did not supply an upload token");
 
         string sha256 = req.headers.get("x-digest");
         enforceStatus(
@@ -113,13 +114,17 @@ final class ArchiveManager
 
         client.transac((scope db) {
             const uploaded = db.execScalar!bool(`SELECT upload_done FROM archive WHERE id = $1`, id);
-            enforceStatus(!uploaded, 403, "archive already uploaded");
+            enforceStatus(!uploaded, 409, "archive already uploaded");
             db.exec(`UPDATE archive SET upload_done = TRUE WHERE id = $1`, id);
         });
 
         try
-            storage.storeBlob(id, name, req.bodyReader,
-                req.headers["Content-Length"].to!ulong, Base64.decode(sha256));
+        {
+            const contentLength = req.headers["Content-Length"].to!ulong;
+            enforceStatus(contentLength <= 5 * 1024 * 1024 , 403, name ~ " exceeds the maximum size of 5Mb.\n" ~
+                    "Consider to download the big files with the `source` function");
+            storage.storeBlob(id, name, req.bodyReader, contentLength, Base64.decode(sha256));
+        }
         catch (Exception ex)
         {
             client.connect(db => db.exec(`DELETE FROM archive WHERE id = $1`, id));
