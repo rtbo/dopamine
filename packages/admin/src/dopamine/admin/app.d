@@ -36,9 +36,9 @@ struct Options
     bool createUser;
     bool createDb;
     string[] migrationsToRun;
-    bool createTestUsers;
-    string registryDir;
     uint genCryptoPassword;
+    bool testCreateUsers;
+    string testPopulateFrom;
 
     static Options parse(string[] args)
     {
@@ -50,8 +50,8 @@ struct Options
             "create-user",          &opts.createUser,
             "create-db",            &opts.createDb,
             "run-migration|r",      &opts.migrationsToRun,
-            "create-test-users",    &opts.createTestUsers,
-            "populate-from",        &opts.registryDir,
+            "test-populate-from",   &opts.testPopulateFrom,
+            "test-create-users",    &opts.testCreateUsers,
             "gen-crypto-password",  &opts.genCryptoPassword,
         );
         // dfmt on
@@ -75,8 +75,8 @@ struct Options
         return !createUser &&
             !createDb &&
             !migrationsToRun.length &&
-            !createTestUsers &&
-            !registryDir &&
+            !testCreateUsers &&
+            !testPopulateFrom &&
             !genCryptoPassword;
     }
 
@@ -92,9 +92,9 @@ struct Options
                 errs += 1;
             }
         }
-        if (registryDir && !isDir(registryDir))
+        if (testPopulateFrom && !isDir(testPopulateFrom))
         {
-            stderr.writefln("%s: No such directory", registryDir);
+            stderr.writefln("%s: No such directory", testPopulateFrom);
             errs += 1;
         }
         return errs;
@@ -150,7 +150,7 @@ version (DopAdminMain) int main(string[] args)
             ));
     }
 
-    if (!opts.migrationsToRun && !opts.createTestUsers && !opts.registryDir)
+    if (!opts.migrationsToRun && !opts.testCreateUsers && !opts.testPopulateFrom)
         return 0;
 
     auto db = new PgConn(conf.dbConnString);
@@ -167,14 +167,14 @@ version (DopAdminMain) int main(string[] args)
         db.exec(migrations[mig]);
     }
 
-    if (opts.createTestUsers)
+    if (opts.testCreateUsers)
     {
         createUserIfNotExist(db, "user1@dop.test", Yes.withTestToken);
         createUserIfNotExist(db, "user2@dop.test", Yes.withTestToken);
     }
 
-    if (opts.registryDir)
-        populateRegistry(db, opts.registryDir);
+    if (opts.testPopulateFrom)
+        populateRegistry(db, opts.testPopulateFrom);
 
     return 0;
 }
