@@ -1,6 +1,7 @@
 
 dop_registry_src = files([
     'src/dopamine/registry/v1/package.d',
+    'src/dopamine/registry/v1/packages.d',
     'src/dopamine/registry/v1/recipes.d',
 
     'src/dopamine/registry/app.d',
