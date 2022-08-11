@@ -7,9 +7,19 @@ import std.datetime.systime;
 struct PackageResource
 {
     string name;
-    int maintainerId;
-    SysTime created;
+    string description;
     string[] versions;
+}
+
+/// only what is needed for searching and dependency resolution/fetching
+struct PackageRecipeResource
+{
+    string name;
+    @Name("version") string ver;
+    string revision;
+    int recipeId;
+    string archiveName;
+    string description;
 }
 
 @Request(Method.GET, "/v1/packages/:name")
@@ -19,19 +29,9 @@ struct GetPackage
     string name;
 }
 
-struct RecipeResource
-{
-    int id;
-    @Name("version") string ver;
-    string revision;
-    int maintainerId;
-    SysTime created;
-    string archiveName;
-}
-
 @Request(Method.GET, "/v1/packages/:name/:version/latest")
-@Response!RecipeResource
-struct GetLatestRecipeRevision
+@Response!PackageRecipeResource
+struct GetPackageLatestRecipe
 {
     string name;
     @("version")
@@ -39,8 +39,8 @@ struct GetLatestRecipeRevision
 }
 
 @Request(Method.GET, "/v1/packages/:name/:version/:revision")
-@Response!RecipeResource
-struct GetRecipeRevision
+@Response!PackageRecipeResource
+struct GetPackageRecipe
 {
     string name;
     @("version")
@@ -48,6 +48,28 @@ struct GetRecipeRevision
     string revision;
 }
 
+/// Recipe resource
+struct RecipeResource
+{
+    int id;
+    string packName;
+
+    int createdBy;
+    SysTime created;
+
+    @Name("version") string ver;
+    string revision;
+
+    string archiveName;
+
+    string description;
+    string upstreamUrl;
+    string license;
+
+    string recipe;
+    string readmeMimeType;
+    string readme;
+}
 
 @Request(Method.GET, "/v1/recipes/:id")
 @Response!RecipeResource
@@ -58,7 +80,7 @@ struct GetRecipe
 
 struct NewRecipeResp
 {
-    @Name("new") bool newPkg;
+    @Name("new") string new_; // "package", "version" or ""
     @Name("package") PackageResource pkg;
     RecipeResource recipe;
     string uploadBearerToken;
@@ -73,6 +95,9 @@ struct PostRecipe
     @Name("version")
     string ver;
     string revision;
+    string description;
+    string upstreamUrl;
+    string license;
 }
 
 static assert (isRequestFor!(PostRecipe, Method.POST));

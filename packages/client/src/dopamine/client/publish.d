@@ -34,20 +34,33 @@ import std.typecons;
 void enforceRecipeIdentity(Recipe recipe)
 {
     enforce(
-        // FIXME: package name rules
-        recipe.name.length,
-        new ErrorLogException("Invalid recipe name"),
+        recipe.name.length && recipe.description.length && recipe.license.length && recipe.upstreamUrl.length,
+        new ErrorLogException(
+            "The following fields are needed to publish a recipe:\n - %s\n - %s\n - %s\n - %s",
+            info("name"), info("description"), info("license"), info("upstream_url")
+        )
     );
+
+    const forbidden = ["/", "\\", "@"];
+    foreach (c; forbidden)
+    {
+        enforce(
+            !recipe.name.canFind(c),
+            new ErrorLogException(
+                "Invalid recipe name. Illegal character: %s", info(c)
+            )
+        );
+    }
 
     enforce(
         // should not happen
         recipe.ver != Semver.init,
-        new ErrorLogException("Invalid recipe version"),
+        "Invalid recipe version",
     );
 
     enforce(
         recipe.revision.length,
-        new ErrorLogException("Recipe needs a revision"),
+        "Recipe needs a revision",
     );
 }
 
@@ -211,6 +224,9 @@ int publishMain(string[] args)
     req.name = recipe.name;
     req.ver = recipe.ver.toString();
     req.revision = recipe.revision;
+    req.description = recipe.description;
+    req.license = recipe.license;
+    req.upstreamUrl = recipe.upstreamUrl;
     auto resp = registry.sendRequest(req);
     if (!resp)
     {
@@ -224,10 +240,23 @@ int publishMain(string[] args)
     const rec = newRecResp.recipe;
     const sha256 = Base64.encode(dig.finish()[]).idup;
 
-    if (newRecResp.newPkg)
-        logInfo("Publish: New package - %s", info(pkg.name));
+    switch (newRecResp.new_)
+    {
+        case "package":
+            logInfo("Publish: New package - %s/%s", info(pkg.name), info(rec.ver));
+            break;
+        case "version":
+            logInfo("Publish: Adding version %s to package %s", info(rec.ver), info(pkg.name));
+            break;
+        case "":
+            logInfo("Publish: Adding new revision to %s/%s", info(pkg.name), info(rec.ver));
+            break;
+        default:
+            debug assert(false, "unknown new_ field value");
+            else break;
+    }
 
-    logInfo("Uploading archive...");
+    logInfo("Uploading archive and checking archive...");
     registry.uploadArchive(newRecResp.uploadBearerToken, archivePath, sha256);
 
     logInfo("Publish: %s - %s/%s/%s", success("OK"), info(pkg.name), info(rec.ver), rec

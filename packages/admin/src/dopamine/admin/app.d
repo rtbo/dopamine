@@ -297,10 +297,9 @@ void populateRegistry(PgConn db, string regDir)
 
         db.exec(
             `
-                INSERT INTO "package" ("name", "maintainer_id", "created")
-                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                INSERT INTO "package" ("name", "description") VALUES ($1, $2)
             `,
-            pkg.name, adminId
+            pkg.name, "Description of " ~ pkg.name
         );
         writefln("Created package %s", pkg.name);
 
@@ -317,17 +316,21 @@ void populateRegistry(PgConn db, string regDir)
                     `
                         INSERT INTO "recipe" (
                             "package_name",
-                            "maintainer_id",
+                            "created_by",
                             "created",
                             "version",
                             "revision",
-                            "archive_id"
+                            "archive_id",
+                            "description",
+                            "upstream_url",
+                            "license"
                         ) VALUES(
-                            $1, $2, CURRENT_TIMESTAMP, $3, $4, $5
+                            $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8
                         )
                         RETURNING "id"
                     `,
-                    pkg.name, adminId, vdir.ver, rdir.revision, archiveId
+                    pkg.name, adminId, vdir.ver, rdir.revision, archiveId,
+                    "Description of " ~ pkg.name, "http://dop.test/" ~ pkg.name, "TEST"
                 );
 
                 writefln("Created recipe %s/%s/%s (%s)", pkg.name, vdir.ver, rdir.revision, recId);

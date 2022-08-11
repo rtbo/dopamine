@@ -40,68 +40,69 @@ class RecipesApi
     void setupRoutes(URLRouter router)
     {
         setupRoute!GetPackage(router, &getPackage);
-        setupRoute!PostRecipe(router, &postRecipe);
-        setupRoute!GetLatestRecipeRevision(router, &getLatestRecipeRevision);
-        setupRoute!GetRecipeRevision(router, &getRecipeRevision);
+        setupRoute!GetPackageLatestRecipe(router, &getPackageLatestRecipe);
+        setupRoute!GetPackageRecipe(router, &getPackageRecipe);
+
         setupRoute!GetRecipe(router, &getRecipe);
+        setupRoute!PostRecipe(router, &postRecipe);
     }
 
     @OrderedCols
     static struct PackRow
     {
         string name;
-        int maintainerId;
-        SysTime created;
+        string description;
 
         PackageResource toResource(string[] versions) const @safe
         {
-            return PackageResource(name, maintainerId, created.toUTC(), versions);
+            return PackageResource(name, description, versions);
         }
     }
 
     PackageResource getPackage(GetPackage req) @safe
     {
+        import std.algorithm : sort;
+
         return client.connect((scope DbConn db) @safe {
             const row = db.execRow!PackRow(
-                `SELECT "name", "maintainer_id", "created" FROM "package" WHERE "name" = $1`,
+                `SELECT name, description FROM package WHERE name = $1`,
                 req.name
             );
             auto vers = db.execScalars!string(
-                `SELECT DISTINCT "version" FROM "recipe" WHERE "package_name" = $1`,
+                `SELECT DISTINCT version FROM recipe WHERE package_name = $1`,
                 row.name,
             );
-            // sorting descending order (latest versions first)
-            import std.algorithm : sort;
 
+            // sorting descending order (latest versions first)
             vers.sort!((a, b) => Semver(a) > Semver(b));
             return row.toResource(vers);
         });
     }
 
     @OrderedCols
-    static struct RecipeRow
+    static struct PkgRevRow
     {
-        int id;
-        int maintainerId;
-        SysTime created;
+        int recipeId;
+        string name;
         string ver;
         string revision;
         string archiveName;
+        string description;
 
-        RecipeResource toResource() const @safe
+        PackageRecipeResource toResource() const @safe
         {
-            return RecipeResource(
-                id, ver, revision, maintainerId, created.toUTC(), archiveName
+            return PackageRecipeResource(
+                name, ver, revision, recipeId, archiveName, description,
             );
         }
     }
 
-    RecipeResource getLatestRecipeRevision(GetLatestRecipeRevision req) @safe
+    PackageRecipeResource getPackageLatestRecipe(GetPackageLatestRecipe req) @safe
     {
         return client.connect((scope DbConn db) {
-            const row = db.execRow!RecipeRow(
+            const row = db.execRow!PkgRevRow(
                 `
-                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
+                    SELECT r.id, r.package_name, r.version, r.revision, a.name, r.description
                     FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
                     WHERE
                         r.package_name = $1 AND
@@ -115,12 +116,12 @@ class RecipesApi
         });
     }
 
-    RecipeResource getRecipeRevision(GetRecipeRevision req) @safe
+    PackageRecipeResource getPackageRecipe(GetPackageRecipe req) @safe
     {
         return client.connect((scope DbConn db) {
-            const row = db.execRow!RecipeRow(
+            const row = db.execRow!PkgRevRow(
                 `
-                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
+                    SELECT r.id, r.package_name, r.version, r.revision, a.name, r.description
                     FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
                     WHERE
                         r.package_name = $1 AND
@@ -133,12 +134,39 @@ class RecipesApi
         });
     }
 
+    @OrderedCols
+    struct RecipeRow
+    {
+        int id;
+        string name;
+        int createdBy;
+        SysTime created;
+        string ver;
+        string revision;
+        string archiveName;
+        string description;
+        string upstreamUrl;
+        string license;
+        string recipe;
+        string readmeMt;
+        string readme;
+
+        RecipeResource toResource() const @safe
+        {
+            return RecipeResource(
+                id, name, createdBy, created, ver, revision, archiveName,
+                description, upstreamUrl, license, recipe, readmeMt, readme,
+            );
+        }
+    }
+
     RecipeResource getRecipe(GetRecipe req) @safe
     {
         return client.connect((scope DbConn db) {
             const row = db.execRow!RecipeRow(
                 `
-                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
+                    SELECT r.id, r.package_name, r.created_by, r.created, r.version, r.revision, a.name,
+                            r.description, r.upstream_url, r.license, r.recipe, r.readme_mt, r.readme
                     FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
                     WHERE r.id = $1
                 `,
@@ -148,30 +176,33 @@ class RecipesApi
         });
     }
 
-    PackageResource createPackageIfNotExist(scope DbConn db, int userId, string packName, out bool newPkg) @safe
+    PackageResource createPackageIfNotExist(scope DbConn db, PostRecipe req, out string new_) @safe
     {
         auto prows = db.execRows!PackRow(
-            `SELECT name, maintainer_id, created FROM package WHERE name = $1`, packName
+            `SELECT name, description FROM package WHERE name = $1`, req.name
         );
         string[] vers;
-        newPkg = prows.length == 0;
         if (prows.length == 0)
         {
+            new_ = "package";
+
             prows = db.execRows!PackRow(
                 `
-                    INSERT INTO package (name, maintainer_id, created)
-                    VALUES ($1, $2, CURRENT_TIMESTAMP)
-                    RETURNING name, maintainer_id, created
+                    INSERT INTO package (name, description)
+                    VALUES ($1, $2)
+                    RETURNING name, description
                 `,
-                packName, userId
+                req.name, req.description
             );
         }
         else
         {
             import std.algorithm : sort;
 
+            assert(prows.length == 1);
+
             vers = db.execScalars!string(
-                `SELECT version FROM recipe WHERE package_name = $1`, packName
+                `SELECT version FROM recipe WHERE package_name = $1`, req.name
             );
             vers.sort!((a, b) => Semver(a) > Semver(b));
         }
@@ -189,8 +220,8 @@ class RecipesApi
         );
 
         return client.transac((scope db) @safe {
-            bool newPkg;
-            auto pkg = createPackageIfNotExist(db, user.id, req.name, newPkg);
+            string new_;
+            auto pkg = createPackageIfNotExist(db, req, new_);
             const recExists = db.execScalar!bool(
                 `
                     SELECT count(id) <> 0 FROM recipe
@@ -203,6 +234,19 @@ class RecipesApi
                 format!"recipe %s/%s/%s already exists!"(req.name, req.ver, req.revision)
             );
 
+            if (!new_)
+            {
+                const verExists = db.execScalar!bool(
+                    `
+                        SELECT count(id) <> 0 FROM recipe
+                        WHERE package_name = $1 AND version = $2
+                    `,
+                    req.name, req.ver
+                );
+                if (!verExists)
+                    new_ = "version";
+            }
+
             const archiveName = format!"%s-%s-%s.tar.xz"(req.name, req.ver, req.revision);
 
             const uploadReq = archiveMgr.requestUpload(db, user.id, archiveName);
@@ -211,27 +255,37 @@ class RecipesApi
                 `
                     INSERT INTO recipe (
                         package_name,
-                        maintainer_id,
+                        created_by,
                         created,
                         version,
                         revision,
-                        archive_id
+                        archive_id,
+                        description,
+                        upstream_url,
+                        license
                     ) VALUES (
-                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5
+                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8
                     )
                     RETURNING
                         id,
-                        maintainer_id,
+                        package_name,
+                        created_by,
                         created,
                         version,
                         revision,
-                        ''
-                `, req.name, user.id, req.ver, req.revision, uploadReq.archiveId
+                        '',
+                        description,
+                        upstream_url,
+                        license,
+                        '', '', '' -- recipe and readme not known at this point
+                `,
+                req.name, user.id, req.ver, req.revision, uploadReq.archiveId,
+                req.description, req.upstreamUrl, req.license,
             );
             recipeRow.archiveName = archiveName;
 
             return NewRecipeResp(
-                newPkg, pkg, recipeRow.toResource(), uploadReq.bearerToken,
+                new_, pkg, recipeRow.toResource(), uploadReq.bearerToken,
             );
         });
     }

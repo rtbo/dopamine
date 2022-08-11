@@ -69,14 +69,14 @@ class PackageCache
         }
         else
         {
-            logInfo("Fetching recipe %s/%s from registry", info(pack.name), info(ver));
+            logInfo("Fetching recipe %s/%s latest revision from registry", info(pack.name), info(ver));
         }
 
-        Response!RecipeResource resp;
+        Response!PackageRecipeResource resp;
         if (revision)
-            resp = registry.sendRequest(GetRecipeRevision(pack.name, ver, revision));
+            resp = registry.sendRequest(GetPackageRecipe(pack.name, ver, revision));
         else
-            resp = registry.sendRequest(GetLatestRecipeRevision(pack.name, ver));
+            resp = registry.sendRequest(GetPackageLatestRecipe(pack.name, ver));
 
         enforce(resp.code < 400, new ErrorLogException(
                 "Could not fetch %s/%s%s%s: registry returned %s",
@@ -84,22 +84,22 @@ class PackageCache
                 error(resp.code.to!string)
         ));
 
-        const recipeRes = resp.payload;
+        const res = resp.payload;
 
-        enforce(recipeRes.ver == ver, new Exception(
+        enforce(res.ver == ver, new Exception(
                 "Registry returned a package version that do not match request:\n" ~
                 format("  - requested %s/%s\n", pack.name, ver) ~
-                format("  - obtained %s/%s", pack.name, recipeRes.ver)
+                format("  - obtained %s/%s", pack.name, res.ver)
         ));
 
         if (revision)
-            enforce(recipeRes.revision == revision, new Exception(
+            enforce(res.revision == revision, new Exception(
                     "Registry returned a revision that do not match request"
             ));
         else
-            revision = recipeRes.revision;
+            revision = res.revision;
 
-        const archiveName = recipeRes.archiveName;
+        const archiveName = res.archiveName;
         const filename = buildPath(tempDir(), archiveName);
         registry.downloadArchive(archiveName, filename);
 
@@ -107,8 +107,8 @@ class PackageCache
             remove(filename);
 
         auto revDir = packageDir(pack.name)
-            .versionDir(recipeRes.ver)
-            .dopRevisionDir(recipeRes.revision);
+            .versionDir(res.ver)
+            .dopRevisionDir(res.revision);
 
         mkdirRecurse(revDir.versionDir.dir);
 
