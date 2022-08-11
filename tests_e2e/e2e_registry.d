@@ -43,7 +43,6 @@ final class Registry
         const adminCmd = [
             exes.admin,
             "--create-db",
-            "--run-migration", "v1",
             "--test-create-users",
             "--test-populate-from", regPath,
         ];

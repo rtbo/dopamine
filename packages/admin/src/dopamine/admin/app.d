@@ -27,6 +27,9 @@ shared static this()
     migrations["v1"] = import("v1.sql");
 }
 
+// migrations run with create-db
+const initMigs = ["0.auth", "1.archive", "v1"];
+
 struct Options
 {
     bool help;
@@ -139,7 +142,14 @@ version (DopAdminMain) int main(string[] args)
             createDbUser(db, connInfo);
 
         if (opts.createDb)
+        {
             createDatabase(db, connInfo);
+            foreach (mig; initMigs)
+            {
+                if (!opts.migrationsToRun.canFind(mig))
+                    opts.migrationsToRun ~= mig;
+            }
+        }
 
         const user = connInfo.get("user", null);
         const dbname = connInfo.get("dbname", null);
