@@ -1,0 +1,12 @@
+SKIP_NOPROG=meson
+
+REGISTRY=base
+USER=user1
+RECIPE=lib1-missingfields
+
+CMD=$DOP profile --discover
+
+CMD=$DOP publish --skip-cvs-clean
+EXPECT_FAIL
+EXPECT_MATCH=Recipe: OK - lib1/1.0.0
+EXPECT_MATCH=fields are needed to publish
