@@ -10,6 +10,7 @@ pgd_src = files([
     'src/pgd/conv/package.d',
     'src/pgd/conv/time.d',
     'src/pgd/maybe.d',
+    'src/pgd/param.d',
     'src/pgd/result.d',
 ])
 
@@ -36,6 +37,7 @@ if get_option('enable_test')
         'src/pgd/conn.d',
         'src/pgd/connstring.d',
         'src/pgd/maybe.d',
+        'src/pgd/param.d',
         'src/pgd/result.d',
         'src/pgd/test.d',
     ])

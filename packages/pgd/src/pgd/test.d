@@ -1,31 +1,34 @@
 module pgd.test;
 
-version (unittest)  : import pgd.conn;
-import pgd.connstring;
-
-import std.process;
-
-string adminConnString()
+version (unittest)
 {
-    return environment.get("PGD_TEST_ADMIN_DB", "postgres:///postgres");
-}
+    import pgd.conn;
+    import pgd.connstring;
 
-string dbConnString()
-{
-    return environment.get("PGD_TEST_DB", "postgres:///test-pgd");
-}
+    import std.process;
 
-shared static this()
-{
-    const info = breakdownConnString(dbConnString());
-    const dbName = info["dbname"];
+    string adminConnString()
+    {
+        return environment.get("PGD_TEST_ADMIN_DB", "postgres:///postgres");
+    }
 
-    auto db = new PgConn(adminConnString());
-    scope (exit)
-        db.finish();
+    string dbConnString()
+    {
+        return environment.get("PGD_TEST_DB", "postgres:///test-pgd");
+    }
 
-    const dbIdent = db.escapeIdentifier(dbName);
+    shared static this()
+    {
+        const info = breakdownConnString(dbConnString());
+        const dbName = info["dbname"];
 
-    db.exec("DROP DATABASE IF EXISTS " ~ dbIdent);
-    db.exec("CREATE DATABASE " ~ dbIdent);
+        auto db = new PgConn(adminConnString());
+        scope (exit)
+            db.finish();
+
+        const dbIdent = db.escapeIdentifier(dbName);
+
+        db.exec("DROP DATABASE IF EXISTS " ~ dbIdent);
+        db.exec("CREATE DATABASE " ~ dbIdent);
+    }
 }

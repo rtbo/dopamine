@@ -2,6 +2,7 @@ module pgd.conn;
 
 import pgd.libpq;
 import pgd.conv;
+import pgd.param;
 import pgd.result;
 
 import std.array;
@@ -82,6 +83,7 @@ class PgConn
     private PGconn* conn;
     private bool inTransac;
     private int transacSavePoint;
+    private string lastSql;
     // A provision of counters for results.
     private int[64] refCounts;
 
@@ -232,38 +234,67 @@ class PgConn
         }
     }
 
-    /// Execute a SQL statement expecting no result.
-    void exec(Args...)(string sql, Args args) @trusted
+    /// Send a SQL statement with params but do not wait for completion.
+    /// Use the get method family to wait for completion.
+    /// Multiple SQL statements are not allowed.
+    void send(Args...)(string sql, Args args) @trusted
     {
-        sendPriv!false(sql, args);
+        sendPriv!true(sql, args);
+    }
 
-        pollResult();
+    /// Send a SQL statement with dynamic params but do not wait for completion.
+    /// Use the get method family to wait for completion.
+    /// Multiple SQL statements are not allowed.
+    void sendDyn(string sql, Param[] params) @trusted
+    {
+        lastSql = sql;
 
+        auto pgParams = pgQueryDynParams(params);
+
+        auto res = PQsendQueryParams(conn, sql.toStringz(),
+            cast(int) pgParams.num,
+            &pgParams.oids[0],
+            &pgParams.values[0],
+            &pgParams.lengths[0],
+            &pgParams.formats[0],
+            1
+        );
+
+        if (res != 1)
+            badConnection(conn);
+    }
+
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting no result
+    void getNone() @trusted
+    {
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (status != ExecStatus.COMMAND_OK)
             badResultLayout("Expected an empty result", res);
     }
 
-    T execScalar(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting a single scalar result
+    T getScalar(T)() @trusted if (isScalar!T)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (PQnfields(res) != 1)
             badResultLayout("Expected a single column", res);
@@ -275,19 +306,19 @@ class PgConn
         return convScalar!T(0, 0, res);
     }
 
-    T[] execScalars(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting multiple single scalar results (one scalar per row)
+    T[] getScalars(T)() @trusted if (isScalar!T)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (PQnfields(res) != 1)
             badResultLayout("Expected a single column", res);
@@ -303,21 +334,20 @@ class PgConn
         return scalars;
     }
 
-    /// Execute a SQL statement expecting a single row result.
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting a single row result.
     /// Result row is converted to the provided struct type.
-    R execRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    R getRow(R)() @trusted if (isRow!R)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (PQntuples(res) == 0)
             notFound();
@@ -330,21 +360,20 @@ class PgConn
         return row;
     }
 
-    /// Execute a SQL statement expecting a zero or many row result.
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting zero or many rows result.
     /// Result rows are converted to the provided struct type.
-    R[] execRows(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    R[] getRows(R)() @trusted if (isRow!R)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         const nrows = PQntuples(res);
         if (!nrows)
@@ -361,12 +390,55 @@ class PgConn
         return rows;
     }
 
+    /// Execute a SQL statement expecting no result.
+    /// It is possible to submit multiple statements separated with ';'
+    void exec(Args...)(string sql, Args args) @trusted
+    {
+        sendPriv!false(sql, args);
+        pollResult();
+        getNone();
+    }
+
+    T execScalar(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getScalar!T();
+    }
+
+    T[] execScalars(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getScalars!T();
+    }
+
+    /// Execute a SQL statement expecting a single row result.
+    /// Result row is converted to the provided struct type.
+    R execRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getRow!R();
+    }
+
+    /// Execute a SQL statement expecting a zero or many row result.
+    /// Result rows are converted to the provided struct type.
+    R[] execRows(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getRows!R();
+    }
+
     private void sendPriv(bool withResults, Args...)(string sql, Args args) @trusted
     {
         // PQsendQueryParams is needed to specify that we need results in binary format
         // The downside is that it does not allow to send multiple sql commands at once
         // (; separated in the same string)
         // so when no result is expected and no param is needed we use PQsendQuery
+
+        lastSql = sql;
 
         static if (Args.length > 0)
         {
@@ -410,25 +482,6 @@ class PgConn
         return last;
     }
 
-    /// Get the (untyped) result for the current query
-    /// if result casts to false, it means there is no more result
-    Result getResult() @trusted
-    {
-        auto res = PQgetResult(conn);
-        // FIXME: check for error
-        return Result(res, findRefCount());
-    }
-
-    private int* findRefCount()
-    {
-        for (size_t i = 0; i < refCounts.length; ++i)
-        {
-            if (refCounts[i] == 0)
-                return &refCounts[i];
-        }
-        return null;
-    }
-
     string escapeIdentifier(string ident) @trusted
     {
         auto res = PQescapeIdentifier(conn, ident.ptr, ident.length);
@@ -463,9 +516,9 @@ noreturn badConnection(PGconn* conn)
     throw new ConnectionException(msg);
 }
 
-noreturn badExecution(Args...)(PGresult* res, string sql, Args args)
+noreturn badExecution(Args...)(PGresult* res, string sql)
 {
-    const msg = formatExecErrorMsg(res, sql, args);
+    const msg = formatExecErrorMsg(res, sql);
     throw new ExecutionException(msg);
 }
 
@@ -487,16 +540,10 @@ noreturn notFound()
     throw new ResourceNotFoundException("The expected resource could not be found");
 }
 
-string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args) @system
+string formatExecErrorMsg(PGresult* res, string sql) @system
 {
     string msg = "Error during query execution.\n";
     msg ~= "SQL:\n" ~ sql ~ "\n";
-    if (args.length)
-    {
-        msg ~= "Params:\n";
-        static foreach (i, arg; args)
-            msg ~= format("  $%s = %s\n", i + 1, arg);
-    }
     const pgMsg = PQresultErrorMessage(res).fromStringz;
     msg ~= "PostgreSQL message: " ~ pgMsg;
     return msg ~ "\n";
