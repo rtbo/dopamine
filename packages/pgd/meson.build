@@ -11,7 +11,6 @@ pgd_src = files([
     'src/pgd/conv/time.d',
     'src/pgd/maybe.d',
     'src/pgd/param.d',
-    'src/pgd/result.d',
 ])
 
 pgd_inc = include_directories('src')
@@ -38,7 +37,6 @@ if get_option('enable_test')
         'src/pgd/connstring.d',
         'src/pgd/maybe.d',
         'src/pgd/param.d',
-        'src/pgd/result.d',
         'src/pgd/test.d',
     ])
 

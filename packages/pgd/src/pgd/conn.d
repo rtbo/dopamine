@@ -3,7 +3,6 @@ module pgd.conn;
 import pgd.libpq;
 import pgd.conv;
 import pgd.param;
-import pgd.result;
 
 import std.array;
 import std.conv;
