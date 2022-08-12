@@ -7,12 +7,12 @@ version (unittest)
 
     import std.process;
 
-    string adminConnString()
+    string adminConnString() @safe
     {
         return environment.get("PGD_TEST_ADMIN_DB", "postgres:///postgres");
     }
 
-    string dbConnString()
+    string dbConnString() @safe
     {
         return environment.get("PGD_TEST_DB", "postgres:///test-pgd");
     }

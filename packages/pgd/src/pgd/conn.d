@@ -14,6 +14,11 @@ import std.typecons;
 import std.stdio : File;
 import core.exception;
 
+version(unittest)
+{
+    import pgd.test;
+}
+
 // exporting a few Postgresql enums
 alias ConnStatus = pgd.libpq.ConnStatus;
 alias PostgresPollingStatus = pgd.libpq.PostgresPollingStatus;
@@ -263,6 +268,13 @@ class PgConn
             badConnection(conn);
     }
 
+    void enableRowByRow() @trusted
+    {
+        int res = PQsetSingleRowMode(conn);
+        if (!res)
+            badConnection(conn);
+    }
+
     /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
     /// expecting no result
     void getNone() @trusted
@@ -353,7 +365,10 @@ class PgConn
         if (PQntuples(res) > 1)
             badResultLayout("Expected a single row", res);
 
-        auto colInds = getColIndices!R(res);
+        mixin(generateColIndexStruct!R());
+        _ColIndices colInds = void;
+        fillColIndices!R(res, colInds);
+
         auto row = convRow!R(colInds, 0, res);
 
         return row;
@@ -378,7 +393,9 @@ class PgConn
         if (!nrows)
             return [];
 
-        auto colInds = getColIndices!R(res);
+        mixin(generateColIndexStruct!R());
+        _ColIndices colInds = void;
+        fillColIndices!R(res, colInds);
 
         R[] rows = uninitializedArray!(R[])(nrows);
         foreach (ri; 0 .. nrows)
@@ -387,6 +404,148 @@ class PgConn
         }
 
         return rows;
+    }
+
+    auto getRowByRow(R)() @trusted if (isRow!R)
+    {
+        scope(exit)
+            lastSql = null;
+
+        PGresult* res1 = PQgetResult(conn);
+
+        mixin(generateColIndexStruct!R());
+        _ColIndices colInds;
+
+        if (res1)
+        {
+            const status = PQresultStatus(res1);
+            if (status.isError)
+                badExecution(res1, lastSql);
+            if (status != ExecStatus.SINGLE_TUPLE && status != ExecStatus.TUPLES_OK)
+            {
+                throw new Exception("RowByRow mode was not enabled");
+            }
+            if (status != ExecStatus.TUPLES_OK)
+            {
+                fillColIndices!R(res1, colInds);
+            }
+            else
+            {
+                while (res1)
+                {
+                    PQclear(res1);
+                    res1 = PQgetResult(conn);
+                }
+            }
+        }
+
+        static struct RowRange
+        {
+            PGconn* conn;
+            PGresult* res;
+            _ColIndices colInds;
+            string lastSql;
+
+            @property R front() @trusted
+            {
+                return convRow!R(colInds, 0, res);
+            }
+
+            @property bool empty() @safe
+            {
+                return res is null;
+            }
+
+            void popFront() @trusted
+            {
+                if (res)
+                    PQclear(res);
+
+                res = PQgetResult(conn);
+                if (!res)
+                    return;
+
+                const status = PQresultStatus(res);
+                // if error, we drain then throw
+                if (status.isError)
+                {
+                    const msg = formatExecErrorMsg(res, lastSql);
+                    while (res)
+                    {
+                        PQclear(res);
+                        res = PQgetResult(conn);
+                    }
+                    throw new ExecutionException(msg);
+                }
+                // if last, we drain the last results (should be the last one)
+                if (status == ExecStatus.TUPLES_OK)
+                {
+                    while (res)
+                    {
+                        PQclear(res);
+                        res = PQgetResult(conn);
+                    }
+                }
+            }
+        }
+
+        return RowRange(conn, res1, colInds, lastSql);
+    }
+
+    @("getRowByRow")
+    unittest
+    {
+        auto db = new PgConn(dbConnString());
+        scope(exit)
+            db.finish();
+
+        db.exec(`
+            CREATE TABLE row_by_row (
+                id integer PRIMARY KEY,
+                t1 text,
+                t2 text,
+                i1 integer,
+                oddid boolean
+            )
+        `);
+        scope (exit)
+            db.exec("DROP TABLE row_by_row");
+
+        for (int id=1; id<=1000; ++id)
+        {
+            db.exec(`
+                INSERT INTO row_by_row (
+                    id, t1, t2, i1, oddid
+                ) VALUES (
+                    $1, $2, $3, 3 * $1, mod($1, 2) <> 0
+                )
+            `, id, "Some text", "Another text for t2");
+        }
+
+        static struct R
+        {
+            int id;
+            string t1;
+            string t2;
+            int i1;
+            bool oddid;
+        }
+
+        auto rows = db.execRowByRow!R(`
+            SELECT id, t1, t2, i1, oddid FROM row_by_row
+        `);
+
+        int id = 1;
+        foreach (row; rows)
+        {
+            assert(row.id == id);
+            assert(row.t1 == "Some text");
+            assert(row.t2 == "Another text for t2");
+            assert(row.i1 == id * 3);
+            assert(row.oddid == ((id % 2) != 0));
+            id++;
+        }
+        assert(id == 1001);
     }
 
     /// Execute a SQL statement expecting no result.
@@ -428,6 +587,14 @@ class PgConn
         sendPriv!true(sql, args);
         pollResult();
         return getRows!R();
+    }
+
+    auto execRowByRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    {
+        sendPriv!true(sql, args);
+        enableRowByRow();
+        pollResult();
+        return getRowByRow!R();
     }
 
     private void sendPriv(bool withResults, Args...)(string sql, Args args) @trusted
@@ -580,9 +747,8 @@ string generateColNameStruct(R)() if (isRow!R)
     return res;
 }
 
-auto getColIndices(R)(const(PGresult)* res)
+void fillColIndices(R, CI)(const(PGresult)* res, ref CI inds)
 {
-    mixin(generateColIndexStruct!R());
     mixin(generateColNameStruct!R());
 
     enum expectedCount = (Fields!R).length;
@@ -590,8 +756,6 @@ auto getColIndices(R)(const(PGresult)* res)
 
     enforce(colCount == expectedCount, format!"Expected %s columns, but result has %s"(
             expectedCount, colCount));
-
-    _ColIndices inds = void;
 
     static if (hasUDA!(R, OrderedCols))
     {
@@ -633,6 +797,4 @@ auto getColIndices(R)(const(PGresult)* res)
         }}
         // dfmt on
     }
-
-    return inds;
 }
