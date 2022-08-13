@@ -24,11 +24,12 @@ shared static this()
 {
     migrations["0.auth"] = import("0.auth.sql");
     migrations["1.archive"] = import("1.archive.sql");
+    migrations["2.semver"] = import("2.semver.sql");
     migrations["v1"] = import("v1.sql");
 }
 
 // migrations run with create-db
-const initMigs = ["0.auth", "1.archive", "v1"];
+const initMigs = ["0.auth", "1.archive", "2.semver", "v1"];
 
 struct Options
 {
