@@ -377,7 +377,7 @@ string requestResource(ReqT)(auto ref const ReqT req)
 {
     import std.array : split;
     import std.conv : to;
-    import std.traits : getUDAs, getSymbolsByUDA, Unqual;
+    import std.traits : getUDAs, getSymbolsByUDA, hasUDA, Unqual;
     import std.uri : encodeComponent;
 
     enum reqAttr = RequestAttr!ReqT;
@@ -473,8 +473,14 @@ string requestResource(ReqT)(auto ref const ReqT req)
             }
             else
             {
-                resource ~= sep ~ paramName ~ "=" ~ encodeComponent(value.to!string);
-                sep = "&";
+                enum omitIfInit = hasUDA!(sym, OmitIfInit);
+                const omitted = omitIfInit && value == (typeof(value).init);
+
+                if (!omitted)
+                {
+                    resource ~= sep ~ paramName ~ "=" ~ encodeComponent(value.to!string);
+                    sep = "&";
+                }
             }
         }}
         // dfmt on

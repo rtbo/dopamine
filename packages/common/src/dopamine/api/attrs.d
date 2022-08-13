@@ -29,6 +29,11 @@ struct Query
     string name;
 }
 
+/// Query parameter can be omitted if they are set to their default (aka .init) value.
+/// This attribute is not needed on boolean attributes and strings for which it is the default behavior.
+/// (i.e. false booleans and null strings are not added on the query string)
+enum OmitIfInit;
+
 /// A Decorator to change the name of a Json field
 alias Name = vibe.data.serialization.name;
 
