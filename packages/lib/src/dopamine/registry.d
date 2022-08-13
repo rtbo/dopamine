@@ -469,6 +469,7 @@ string requestResource(ReqT)(auto ref const ReqT req)
                 if (value !is null)
                 {
                     resource ~= sep ~ paramName ~ "=" ~ encodeComponent(value);
+                    sep = "&";
                 }
             }
             else
