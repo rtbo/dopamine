@@ -349,11 +349,11 @@ private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
         }
         catch (ConvException ex)
         {
-            throw new StatusException(400, "Invalid query parameter: " ~ queryName);
+            throw new HTTPStatusException(400, "Invalid query parameter: " ~ queryName);
         }
         catch (Exception ex)
         {
-            throw new StatusException(400, "Missing query parameter: " ~ queryName);
+            throw new HTTPStatusException(400, "Missing query parameter: " ~ queryName);
         }
     }}
     // dfmt on
