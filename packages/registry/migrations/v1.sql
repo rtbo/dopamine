@@ -25,3 +25,6 @@ CREATE TABLE "recipe" (
     FOREIGN KEY ("archive_id") REFERENCES "archive"("id") ON DELETE CASCADE,
     UNIQUE("package_name", "version", "revision")
 );
+
+-- index on server_order_map to quickly perform order by clause with this function
+CREATE INDEX "idx_recipe_version" ON "recipe" (semver_order_str("version"));
