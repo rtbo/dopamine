@@ -85,6 +85,16 @@ struct SearchPackages
     @Query("q")
     string pattern;
 
+    /// If defined, pattern is interpreted as a POSIX regular expression.
+    /// Otherwise it is a simple substring matching
+    @Query
+    bool regex;
+
+    /// If defined, the string matching is case sensitive.
+    /// Otherwise it is case insensitive
+    @Query("cs")
+    bool caseSensitive;
+
     /// If defined, pattern is only tested against package name.
     /// Incompatible with extended
     @Query
