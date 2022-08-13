@@ -19,8 +19,11 @@ version (unittest)
 
     shared static this()
     {
+        import std.format : format;
+
         const info = breakdownConnString(dbConnString());
         const dbName = info["dbname"];
+        const user = info.get("user", null);
 
         auto db = new PgConn(adminConnString());
         scope (exit)
@@ -30,5 +33,11 @@ version (unittest)
 
         db.exec("DROP DATABASE IF EXISTS " ~ dbIdent);
         db.exec("CREATE DATABASE " ~ dbIdent);
+
+        if (user && dbName)
+            db.exec(format!`GRANT ALL PRIVILEGES ON DATABASE %s TO %s`(
+                    db.escapeIdentifier(dbName),
+                    db.escapeIdentifier(user)
+            ));
     }
 }
