@@ -4,6 +4,8 @@ import dopamine.api.attrs;
 
 import std.datetime.systime;
 
+/+ packages API +/
+
 struct PackageResource
 {
     string name;
@@ -11,7 +13,7 @@ struct PackageResource
     string[] versions;
 }
 
-/// only what is needed for searching and dependency resolution/fetching
+/// only what is needed for dependency resolution/fetching
 struct PackageRecipeResource
 {
     string name;
@@ -20,6 +22,31 @@ struct PackageRecipeResource
     int recipeId;
     string archiveName;
     string description;
+}
+
+struct PackageSearchEntry
+{
+    string name;
+    string description;
+    PkgVersionSearchEntry[] versions;
+    // the following are useful with `latestOnly` search option
+    uint totalVersions;
+    uint totalRecipes;
+}
+
+struct PkgVersionSearchEntry
+{
+    @Name("version")
+    string ver;
+    PkgRecipeSearchEntry[] recipes;
+}
+
+struct PkgRecipeSearchEntry
+{
+    string revision;
+    string description;
+    string createdBy;
+    SysTime created;
 }
 
 @Request(Method.GET, "/v1/packages/:name")
@@ -48,6 +75,43 @@ struct GetPackageRecipe
     string revision;
 }
 
+/// Search packages and package recipes according a pattern and options
+@Request(Method.GET, "/v1/packages")
+@Response!(PackageRecipeResource[])
+struct SearchPackages
+{
+    /// Pattern to search for.
+    /// By default, the pattern is searched in the name and description or each recipe.
+    @Query("q")
+    string pattern;
+
+    /// If defined, pattern is only tested against package name.
+    /// Incompatible with extended
+    @Query
+    bool nameOnly;
+
+    /// If defined, pattern is also tested against extended content, like ReadMe and Recipe.
+    /// Can take substancially longer time as the extended content is not always indexed.
+    /// Incompatible with nameOnly
+    @Query
+    bool extended;
+
+    /// if defined, a single version and revision is returned per package
+    /// (the latest revision of the highest version)
+    @Query
+    bool latestOnly;
+
+    /// limit the number of distinct packages returned
+    @Query @OmitIfInit
+    int limit;
+
+    /// limit the total number of recipe entries returned.
+    @Query @OmitIfInit
+    int recLimit;
+}
+
+/+ recipes API +/
+
 /// Recipe resource
 struct RecipeResource
 {
@@ -67,7 +131,8 @@ struct RecipeResource
     string license;
 
     string recipe;
-    string readmeMimeType;
+    /// mime type of readme
+    string readmeMt;
     string readme;
 }
 
@@ -87,8 +152,7 @@ struct NewRecipeResp
 }
 
 @Request(Method.POST, "/v1/recipes")
-@Response!NewRecipeResp
-@RequiresAuth
+@Response!NewRecipeResp @RequiresAuth
 struct PostRecipe
 {
     string name;
@@ -100,7 +164,7 @@ struct PostRecipe
     string license;
 }
 
-static assert (isRequestFor!(PostRecipe, Method.POST));
-static assert (!isRequestFor!(PostRecipe, Method.GET));
-static assert (isRequestFor!(GetRecipe, Method.GET));
-static assert (!isRequestFor!(GetRecipe, Method.POST));
+static assert(isRequestFor!(PostRecipe, Method.POST));
+static assert(!isRequestFor!(PostRecipe, Method.GET));
+static assert(isRequestFor!(GetRecipe, Method.GET));
+static assert(!isRequestFor!(GetRecipe, Method.POST));

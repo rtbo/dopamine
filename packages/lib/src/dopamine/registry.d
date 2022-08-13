@@ -172,7 +172,7 @@ struct DownloadMetadata
 /// The URL of default registry the client connects to.
 enum defaultRegistryUrl = "https://dopamine-pm.herokuapp.com";
 
-version(DopRegistryServesFrontend)
+version (DopRegistryServesFrontend)
     enum apiPrefix = "/api";
 else
     enum apiPrefix = "";
@@ -688,4 +688,7 @@ unittest
 
     requestResource(GetPackageRecipe("pkga", "1.0.0", null))
         .shouldThrow();
+
+    requestResource(SearchPackages("pat", false, true, true, 12))
+        .shouldEqual(apiPrefix ~ "/v1/packages?q=pat&extended&latestOnly&limit=12");
 }
