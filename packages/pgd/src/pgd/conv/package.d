@@ -148,7 +148,7 @@ package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @syst
         else
         {
             const name = fromStringz(PQfname(res, colInd)).idup;
-            throw new NullValueException("Unexpected null value for column " ~ name);
+            throw new NullValueException("Unexpected nullable field for column " ~ name);
         }
     }
 
