@@ -9,16 +9,18 @@ import std.array;
 import std.traits;
 import std.typecons;
 
+@safe:
+
 /// A query parameter known at runtime
-interface Param
+interface PgParam
 {
     @property Oid oid() const;
     @property const(char)[] value() const;
     @property bool binary() const;
 }
 
-/// Build a `Param` from the provided value
-Param param(T)(T value) if (isScalar!(Unqual!T))
+/// Build a `PgParam` from the provided value
+PgParam pgParam(T)(T value) if (isScalar!(Unqual!T))
 {
     static if (sizeKnownAtCt!T)
     {
@@ -40,7 +42,7 @@ version (unittest)
     import pgd.conn;
 }
 
-@("Param")
+@("PgParam")
 unittest
 {
     import std.datetime;
@@ -49,12 +51,12 @@ unittest
     scope (exit)
         db.finish();
 
-    Param[] params;
-    params ~= param("some text");
-    params ~= param(12);
-    params ~= param(true);
-    params ~= param(12.2);
-    params ~= param(Date(1989, 11, 9));
+    PgParam[] params;
+    params ~= pgParam("some text");
+    params ~= pgParam(12);
+    params ~= pgParam(true);
+    params ~= pgParam(12.2);
+    params ~= pgParam(Date(1989, 11, 9));
 
     @OrderedCols
     static struct R
@@ -76,7 +78,7 @@ unittest
     assert(r.date == Date(1989, 11, 9));
 }
 
-private class CtSzParam(size_t N) : Param
+private class CtSzParam(size_t N) : PgParam
 {
     private Oid _oid;
     private char[N] _value;
@@ -97,7 +99,7 @@ private class CtSzParam(size_t N) : Param
     }
 }
 
-private class RtSzParam : Param
+private class RtSzParam : PgParam
 {
     private Oid _oid;
     private char[] _value;
@@ -226,7 +228,7 @@ unittest
 }
 
 /// ditto
-package(pgd) PgQueryParams pgQueryDynParams(const(Param)[] params) @trusted
+package(pgd) PgQueryParams pgQueryDynParams(const(PgParam)[] params) @trusted
 {
     auto res = PgQueryParams.uninitialized(params.length);
 
