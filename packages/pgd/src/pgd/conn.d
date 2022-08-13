@@ -249,7 +249,7 @@ class PgConn
     /// Send a SQL statement with dynamic params but do not wait for completion.
     /// Use the get method family to wait for completion.
     /// Multiple SQL statements are not allowed.
-    void sendDyn(string sql, Param[] params) @trusted
+    void sendDyn(string sql, PgParam[] params) @trusted
     {
         lastSql = sql;
 
