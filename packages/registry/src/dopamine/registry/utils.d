@@ -247,7 +247,7 @@ void setupDownloadRoute(ReqT, H)(URLRouter router, H handler) @safe
     router.match(HTTPMethod.GET, reqAttr.resource, downloadHandler);
 }
 
-private ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
+package(dopamine.registry) ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
 {
     enum reqAttr = RequestAttr!ReqT;
     static if (reqAttr.method == Method.GET)
@@ -333,27 +333,33 @@ private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
 
         try
         {
-            const value = httpReq.query[queryName];
             static if (is(T == bool))
             {
+                const value = httpReq.query.get(queryName, "false");
                 // empty string means true
                 if (value == "")
                     __traits(getMember, req, __traits(identifier,  sym)) = true;
                 else
                     __traits(getMember, req, __traits(identifier,  sym)) = value.to!bool;
             }
+            else static if (is(T == string))
+            {
+                const value = httpReq.query.get(queryName, null);
+                __traits(getMember, req, __traits(identifier,  sym)) = value;
+            }
             else
             {
-                __traits(getMember, req, __traits(identifier,  sym)) = value.to!T;
+                enum omitIfInit = hasUDA!(sym, OmitIfInit);
+                const value = httpReq.query.get(queryName, null);
+                if (!omitIfInit && !value)
+                    throw new HTTPStatusException(400, "Missing query parameter: " ~ queryName);
+                if (value)
+                    __traits(getMember, req, __traits(identifier,  sym)) = value.to!T;
             }
         }
         catch (ConvException ex)
         {
             throw new HTTPStatusException(400, "Invalid query parameter: " ~ queryName);
-        }
-        catch (Exception ex)
-        {
-            throw new HTTPStatusException(400, "Missing query parameter: " ~ queryName);
         }
     }}
     // dfmt on
