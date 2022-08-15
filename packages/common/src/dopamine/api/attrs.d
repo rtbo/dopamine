@@ -37,6 +37,9 @@ enum OmitIfInit;
 /// A Decorator to change the name of a Json field
 alias Name = vibe.data.serialization.name;
 
+/// A Decorator to make a field optional during deserialization
+alias Optional = vibe.data.serialization.optional;
+
 /// Decorator to specify the type of response expected by a request.
 /// The response is encoded in Json.
 struct Response(T)
