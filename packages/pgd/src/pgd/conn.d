@@ -184,7 +184,7 @@ class PgConn
     /// Wait for result by polling on the socket.
     /// Default impl does nothing, which has the effect that
     /// exec, execScalar etc. will block the current thread while waiting.
-    protected void pollResult() @safe
+    void pollResult() @safe
     {
     }
 

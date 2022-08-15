@@ -140,7 +140,7 @@ final class DbConn : PgConn
         }
     }
 
-    override protected void pollResult() @safe
+    override void pollResult() @safe
     {
         while (!isBusy)
         {
