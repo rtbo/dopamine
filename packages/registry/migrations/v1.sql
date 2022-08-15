@@ -28,3 +28,10 @@ CREATE TABLE "recipe" (
 
 -- index on server_order_map to quickly perform order by clause with this function
 CREATE INDEX "idx_recipe_version" ON "recipe" (semver_order_str("version"));
+
+CREATE VIEW "package_counter" AS
+    SELECT p.name AS name, sum(a.counter)::integer AS counter, count(DISTINCT r.version)::integer AS num_versions, count(r.id)::integer AS num_recipes
+    FROM "archive" AS a
+        LEFT OUTER JOIN "recipe" AS r ON r.archive_id = a.id
+        LEFT OUTER JOIN "package" AS p ON p.name = r.package_name
+    GROUP BY p.name;
