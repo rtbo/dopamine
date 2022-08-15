@@ -73,6 +73,21 @@ class DubRecipe : Recipe
         assert(false, "Dub recipes have no revision");
     }
 
+    @property string description() const @safe
+    {
+        return (() @trusted => _dubPack.recipe.description)();
+    }
+
+    @property string license() const @safe
+    {
+        return (() @trusted => _dubPack.recipe.license)();
+    }
+
+    @property string upstreamUrl() const @safe
+    {
+        return (() @trusted => _dubPack.recipe.homepage)();
+    }
+
     @property const(Lang)[] langs() const @safe
     {
         return [Lang.d];

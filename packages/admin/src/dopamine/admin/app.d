@@ -22,8 +22,14 @@ immutable(string[string]) migrations;
 
 shared static this()
 {
+    migrations["0.auth"] = import("0.auth.sql");
+    migrations["1.archive"] = import("1.archive.sql");
+    migrations["2.semver"] = import("2.semver.sql");
     migrations["v1"] = import("v1.sql");
 }
+
+// migrations run with create-db
+const initMigs = ["0.auth", "1.archive", "2.semver", "v1"];
 
 struct Options
 {
@@ -34,9 +40,9 @@ struct Options
     bool createUser;
     bool createDb;
     string[] migrationsToRun;
-    bool createTestUsers;
-    string registryDir;
     uint genCryptoPassword;
+    bool testCreateUsers;
+    string testPopulateFrom;
 
     static Options parse(string[] args)
     {
@@ -47,9 +53,9 @@ struct Options
             "trace",                &opts.trace,
             "create-user",          &opts.createUser,
             "create-db",            &opts.createDb,
-            "run-migration",        &opts.migrationsToRun,
-            "create-test-users",    &opts.createTestUsers,
-            "populate-from",        &opts.registryDir,
+            "run-migration|r",      &opts.migrationsToRun,
+            "test-populate-from",   &opts.testPopulateFrom,
+            "test-create-users",    &opts.testCreateUsers,
             "gen-crypto-password",  &opts.genCryptoPassword,
         );
         // dfmt on
@@ -73,8 +79,8 @@ struct Options
         return !createUser &&
             !createDb &&
             !migrationsToRun.length &&
-            !createTestUsers &&
-            !registryDir &&
+            !testCreateUsers &&
+            !testPopulateFrom &&
             !genCryptoPassword;
     }
 
@@ -90,9 +96,9 @@ struct Options
                 errs += 1;
             }
         }
-        if (registryDir && !isDir(registryDir))
+        if (testPopulateFrom && !isDir(testPopulateFrom))
         {
-            stderr.writefln("%s: No such directory", registryDir);
+            stderr.writefln("%s: No such directory", testPopulateFrom);
             errs += 1;
         }
         return errs;
@@ -137,7 +143,14 @@ version (DopAdminMain) int main(string[] args)
             createDbUser(db, connInfo);
 
         if (opts.createDb)
+        {
             createDatabase(db, connInfo);
+            foreach (mig; initMigs)
+            {
+                if (!opts.migrationsToRun.canFind(mig))
+                    opts.migrationsToRun ~= mig;
+            }
+        }
 
         const user = connInfo.get("user", null);
         const dbname = connInfo.get("dbname", null);
@@ -148,7 +161,7 @@ version (DopAdminMain) int main(string[] args)
             ));
     }
 
-    if (!opts.migrationsToRun && !opts.createTestUsers && !opts.registryDir)
+    if (!opts.migrationsToRun && !opts.testCreateUsers && !opts.testPopulateFrom)
         return 0;
 
     auto db = new PgConn(conf.dbConnString);
@@ -165,14 +178,14 @@ version (DopAdminMain) int main(string[] args)
         db.exec(migrations[mig]);
     }
 
-    if (opts.createTestUsers)
+    if (opts.testCreateUsers)
     {
         createUserIfNotExist(db, "user1@dop.test", Yes.withTestToken);
         createUserIfNotExist(db, "user2@dop.test", Yes.withTestToken);
     }
 
-    if (opts.registryDir)
-        populateRegistry(db, opts.registryDir);
+    if (opts.testPopulateFrom)
+        populateRegistry(db, opts.testPopulateFrom);
 
     return 0;
 }
@@ -285,10 +298,9 @@ void populateRegistry(PgConn db, string regDir)
 
         db.exec(
             `
-                INSERT INTO "package" ("name", "maintainer_id", "created")
-                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                INSERT INTO "package" ("name", "description") VALUES ($1, $2)
             `,
-            pkg.name, adminId
+            pkg.name, "Description of " ~ pkg.name
         );
         writefln("Created package %s", pkg.name);
 
@@ -305,17 +317,21 @@ void populateRegistry(PgConn db, string regDir)
                     `
                         INSERT INTO "recipe" (
                             "package_name",
-                            "maintainer_id",
+                            "created_by",
                             "created",
                             "version",
                             "revision",
-                            "archive_id"
+                            "archive_id",
+                            "description",
+                            "upstream_url",
+                            "license"
                         ) VALUES(
-                            $1, $2, CURRENT_TIMESTAMP, $3, $4, $5
+                            $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8
                         )
                         RETURNING "id"
                     `,
-                    pkg.name, adminId, vdir.ver, rdir.revision, archiveId
+                    pkg.name, adminId, vdir.ver, rdir.revision, archiveId,
+                    "Description of " ~ pkg.name, "http://dop.test/" ~ pkg.name, "TEST"
                 );
 
                 writefln("Created recipe %s/%s/%s (%s)", pkg.name, vdir.ver, rdir.revision, recId);

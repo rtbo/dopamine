@@ -29,24 +29,22 @@ struct Query
     string name;
 }
 
-/// Decorator for a request Json body
-enum JsonBody;
+/// Query parameter can be omitted if they are set to their default (aka .init) value.
+/// This attribute is not needed on boolean attributes and strings for which it is the default behavior.
+/// (i.e. false booleans and null strings are not added on the query string)
+enum OmitIfInit;
 
 /// A Decorator to change the name of a Json field
 alias Name = vibe.data.serialization.name;
+
+/// A Decorator to make a field optional during deserialization
+alias Optional = vibe.data.serialization.optional;
 
 /// Decorator to specify the type of response expected by a request.
 /// The response is encoded in Json.
 struct Response(T)
 {
     private T _ = T.init;
-}
-
-/// Decorator to specify that the request is an endpoint
-/// to download files. Download end-points have several additional
-/// features such as Content-Range, Digest, Content-Disposition, ...
-struct DownloadEndpoint
-{
 }
 
 /// Checks whether `ReqT` is a request type
@@ -99,12 +97,4 @@ template ResponseType(ReqT)
     {
         alias ResponseType = void;
     }
-}
-
-/// Checks whether the request is a download endpoint
-template isDownloadEndpoint(ReqT)
-{
-    static assert(isRequest!ReqT, ReqT.stringof ~ " do not appear to be a valid Request type");
-
-    enum isDownloadEndpoint = hasUDA!(ReqT, DownloadEndpoint);
 }

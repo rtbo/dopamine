@@ -53,6 +53,7 @@ final class DopRecipe : Recipe
     Semver _ver;
     string _license;
     string _copyright;
+    string _upstreamUrl;
     Lang[] _langs;
     string[] _included;
 
@@ -139,6 +140,7 @@ final class DopRecipe : Recipe
             _description = luaGetGlobal!string(L, "description", null);
             _license = luaGetGlobal!string(L, "license", null);
             _copyright = luaGetGlobal!string(L, "copyright", null);
+            _upstreamUrl = luaGetGlobal!string(L, "upstream_url", null);
 
             if (revision)
                 _revision = revision;
@@ -268,6 +270,21 @@ final class DopRecipe : Recipe
     @property void revision(string rev) @safe
     {
         _revision = rev;
+    }
+
+    @property string description() const @safe
+    {
+        return _description;
+    }
+
+    @property string license() const @safe
+    {
+        return _license;
+    }
+
+    @property string upstreamUrl() const @safe
+    {
+        return _upstreamUrl;
     }
 
     @property const(Lang)[] langs() const @safe

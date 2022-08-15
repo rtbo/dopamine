@@ -94,6 +94,15 @@ interface Recipe
     @property string revision() const @safe;
     @property void revision(string rev) @safe;
 
+    /// The description of the packaged software
+    @property string description() const @safe;
+
+    /// The license of the packaged software
+    @property string license() const @safe;
+
+    /// The upstream URL of the packaged software
+    @property string upstreamUrl() const @safe;
+
     // FIXME: change "langs" to "tools" with possibility of arbitrary tools
     /// Return languages present in this recipe.
     /// This will determine the toolchain needed to build the package.
@@ -207,6 +216,21 @@ version (unittest)  : final class MockRecipe : Recipe
     @property void revision(string rev) @safe
     {
         _rev = rev;
+    }
+
+    @property string description() const @safe
+    {
+        return "Description of " ~ _name;
+    }
+
+    @property string upstreamUrl() const @safe
+    {
+        return "Description of " ~ _name;
+    }
+
+    @property string license() const @safe
+    {
+        return "";
     }
 
     // FIXME: change "langs" to "tools" with possibility of arbitrary tools

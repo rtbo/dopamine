@@ -19,10 +19,8 @@ services:
   # client applications: dop and dop-admin
   client:
     depends_on:
-      # we specify the database and not the registry on purpose
-      # client can run without registry for some commands
-      # we start the database so that dop-admin connects to it
       - database
+      - registry
     build:
       context: ${dopdir}
       dockerfile: ${dopdir}/docker/client.dockerfile
@@ -53,8 +51,11 @@ services:
       - DOP_DB_CONNSTRING=postgres://dopreg:dopreg@database/dop-registry
       - DOP_REGISTRY_STORAGEDIR=/storage
     env_file:
+      # env file for oauth credientials (from github and google)
       - ${dopdir}/packages/registry/.env.dev
 
+  # Vue frontend application
+  # accessible on host browser at http://localhost:3000
   frontend:
     depends_on:
       - registry
@@ -66,6 +67,9 @@ services:
         - web_github_clientid=${web_github_clientid}
         - web_google_clientid=${web_google_clientid}
     volumes:
+      # vite.js dev server will watch all files in src and public for hot module reload.
+      # because of node_modules dir mess we don't watch
+      # for changes for the few files at the root
       - ${dopdir}/web/src:/app/src
       - ${dopdir}/web/public:/app/public
     ports:

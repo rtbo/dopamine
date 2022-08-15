@@ -172,7 +172,7 @@ struct DownloadMetadata
 /// The URL of default registry the client connects to.
 enum defaultRegistryUrl = "https://dopamine-pm.herokuapp.com";
 
-version(DopRegistryServesFrontend)
+version (DopRegistryServesFrontend)
     enum apiPrefix = "/api";
 else
     enum apiPrefix = "";
@@ -377,7 +377,7 @@ string requestResource(ReqT)(auto ref const ReqT req)
 {
     import std.array : split;
     import std.conv : to;
-    import std.traits : getUDAs, getSymbolsByUDA, Unqual;
+    import std.traits : getUDAs, getSymbolsByUDA, hasUDA, Unqual;
     import std.uri : encodeComponent;
 
     enum reqAttr = RequestAttr!ReqT;
@@ -469,12 +469,19 @@ string requestResource(ReqT)(auto ref const ReqT req)
                 if (value !is null)
                 {
                     resource ~= sep ~ paramName ~ "=" ~ encodeComponent(value);
+                    sep = "&";
                 }
             }
             else
             {
-                resource ~= sep ~ paramName ~ "=" ~ encodeComponent(value.to!string);
-                sep = "&";
+                enum omitIfInit = hasUDA!(sym, OmitIfInit);
+                const omitted = omitIfInit && value == (typeof(value).init);
+
+                if (!omitted)
+                {
+                    resource ~= sep ~ paramName ~ "=" ~ encodeComponent(value.to!string);
+                    sep = "&";
+                }
             }
         }}
         // dfmt on
@@ -673,12 +680,15 @@ unittest
     requestResource(GetPackage("pkga"))
         .shouldEqual(apiPrefix ~ "/v1/packages/pkga");
 
-    requestResource(GetLatestRecipeRevision("pkga", "1.0.0"))
+    requestResource(GetPackageLatestRecipe("pkga", "1.0.0"))
         .shouldEqual(apiPrefix ~ "/v1/packages/pkga/1.0.0/latest");
 
-    requestResource(GetRecipeRevision("pkga", "1.0.0", "somerev"))
+    requestResource(GetPackageRecipe("pkga", "1.0.0", "somerev"))
         .shouldEqual(apiPrefix ~ "/v1/packages/pkga/1.0.0/somerev");
 
-    requestResource(GetRecipeRevision("pkga", "1.0.0", null))
+    requestResource(GetPackageRecipe("pkga", "1.0.0", null))
         .shouldThrow();
+
+    requestResource(SearchPackages("pat", false, true, false, true, true, 12))
+        .shouldEqual(apiPrefix ~ "/v1/packages?q=pat&cs&extended&latestOnly&limit=12");
 }

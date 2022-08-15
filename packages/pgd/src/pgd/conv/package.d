@@ -6,7 +6,6 @@ import pgd.conv.nullable;
 import pgd.conv.time;
 
 import std.algorithm;
-import std.array;
 import std.bitmanip;
 import std.conv;
 import std.datetime;
@@ -123,7 +122,7 @@ private struct NotSomeRow
     bool b;
     byte[] blob;
     string text;
-    SomeRow row;
+    SomeRow notScalar;
 }
 
 static assert(isRow!SomeRow);
@@ -149,13 +148,12 @@ package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @syst
         else
         {
             const name = fromStringz(PQfname(res, colInd)).idup;
-            throw new NullValueException("Unexpected null value for column " ~ name);
+            throw new NullValueException("Unexpected nullable field for column " ~ name);
         }
     }
 
     if (text)
     {
-        // FIXME: probably not suited to all conversions (e.g. bin encoding)
         static if (is(typeof(val.to!T)))
             return val.to!T;
         else
@@ -163,7 +161,7 @@ package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @syst
     }
     else
     {
-        const binVal = BinValue(cast(const(ubyte)[]) val, PQftype(res, colInd));
+        const binVal = BinValue(cast(const(ubyte)[]) val, res, colInd);
         binVal.checkType(pgTypeOf!T, T.stringof);
         static if (sizeKnownAtCt!T)
             binVal.checkSize(scalarBinSizeCt!T, T.stringof);
@@ -192,76 +190,84 @@ package(pgd) R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res) @sys
 private struct BinValue
 {
     const(ubyte)[] val;
-    TypeOid type;
+    const(PGresult)* res;
+    int colInd;
 
-    void checkType(PgType expectedType, string typename) const @safe
+    @property TypeOid type() const @trusted
     {
-        import std.string : toLower;
+        return PQftype(res, colInd);
+    }
+
+    void checkType(PgType expectedType, string typename) const @trusted
+    {
+        import std.string : fromStringz, toLower;
 
         enforce(
             type == cast(TypeOid) expectedType,
             format(
-                "Expected PostgreSQL type %s to build a %s but received %s",
-                expectedType, typename, toLower(type.to!string))
+                "Expected PostgreSQL type %s to build a %s but received %s for field %s",
+                expectedType, typename, toLower(type.to!string), PQfname(res, colInd).fromStringz)
         );
 
     }
 
-    void checkSize(size_t expectedSize, string typename) const @safe
+    void checkSize(size_t expectedSize, string typename) const @trusted
     {
+        import std.string : fromStringz;
+
         enforce(
             val.length == expectedSize,
             format(
-                "Expected a size of %s to build a %s but received %s",
-                expectedSize, typename, val.length)
+                "Expected a size of %s to build a %s but received %s for field %s",
+                expectedSize, typename, val.length, PQfname(res, colInd).fromStringz)
         );
     }
 }
 
-private bool toScalar(T)(BinValue val) @safe if (is(T == bool))
+package(pgd) bool toScalar(T)(BinValue val) @safe if (is(T == bool))
 {
     return val.val[0] != 0;
 }
 
-private T toScalar(T)(BinValue val) @safe if (isNumeric!T)
+package(pgd) T toScalar(T)(BinValue val) @safe if (isNumeric!T)
 {
     const ubyte[T.sizeof] be = val.val[0 .. T.sizeof];
     return bigEndianToNative!T(be);
 }
 
 // UTF-8 is not checked, hence @system
-private T toScalar(T)(BinValue val) @system if (isString!T)
+package(pgd) T toScalar(T)(BinValue val) @system if (isString!T)
 {
     if (val.val.length == 0)
         return null;
     return (cast(const(char)[]) val.val).idup;
 }
 
-private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isStaticArray!T)
+package(pgd) T toScalar(T)(BinValue val) @safe if (isByteArray!T && isStaticArray!T)
 {
     T arr = (cast(const(ElType!T)[]) val.val)[0 .. T.length];
     return arr;
 }
 
-private T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
+package(pgd) T toScalar(T)(BinValue val) @safe if (isByteArray!T && isDynamicArray!T)
 {
     if (val.val.length == 0)
         return null;
     return cast(ElType!T[]) val.val.dup;
 }
 
-private T toScalar(T)(BinValue val) @safe if (is(T == Date))
+package(pgd) T toScalar(T)(BinValue val) @safe if (is(T == Date))
 {
     return pgToDate(bigEndianToNative!uint(val.val[0 .. 4]));
 }
 
-private T toScalar(T)(BinValue val) @safe if (is(T == SysTime))
+package(pgd) T toScalar(T)(BinValue val) @safe if (is(T == SysTime))
 {
     const stdTime = pgToStdTime(bigEndianToNative!long(val.val[0 .. 8]));
     return SysTime(stdTime);
 }
 
-private T toScalar(T)(BinValue val) @safe
+package(pgd) T toScalar(T)(BinValue val) @safe
         if (isNullable!T)
 {
     if (val.val.length == 0)
@@ -283,7 +289,7 @@ private T toScalar(T)(BinValue val) @safe
     }
 }
 
-private template pgTypeOf(TT)
+package(pgd) template pgTypeOf(TT)
 {
     alias T = Unqual!TT;
 
@@ -313,7 +319,7 @@ private template pgTypeOf(TT)
         static assert(false, "unsupported scalar type: " ~ T.stringof);
 }
 
-private template sizeKnownAtCt(TT) if (isScalar!TT)
+package(pgd) template sizeKnownAtCt(TT) if (isScalar!TT)
 {
     alias T = Unqual!TT;
 
@@ -324,7 +330,7 @@ private template sizeKnownAtCt(TT) if (isScalar!TT)
         is(T == SysTime);
 }
 
-private template scalarBinSizeCt(TT) if (isScalar!TT)
+package(pgd) template scalarBinSizeCt(TT) if (isScalar!TT)
 {
     alias T = Unqual!TT;
 
@@ -342,7 +348,7 @@ private template scalarBinSizeCt(TT) if (isScalar!TT)
         static assert(false, "unknown compile-time size");
 }
 
-private size_t scalarBinSize(T)(T val) @safe if (isScalar!T)
+package(pgd) size_t scalarBinSize(T)(T val) @safe if (isScalar!T)
 {
     static if (sizeKnownAtCt!T)
         return scalarBinSizeCt!T;
@@ -357,7 +363,7 @@ private size_t scalarBinSize(T)(T val) @safe if (isScalar!T)
 }
 
 /// write binary representation in array and return offset advance
-private size_t emplaceScalar(T)(T val, scope ubyte[] buf) @safe
+package(pgd) size_t emplaceScalar(T)(T val, scope ubyte[] buf) @safe
 {
     assert(buf.length >= scalarBinSize(val));
 
@@ -397,80 +403,4 @@ private size_t emplaceScalar(T)(T val, scope ubyte[] buf) @safe
     {
         static assert(false, "unimplemented");
     }
-}
-
-/// Bind query args to parameters to PQexecParams or similar
-package(pgd) struct PgQueryParams
-{
-    Oid[] oids;
-    const(char)*[] values;
-    int[] lengths;
-    int[] formats;
-
-    static PgQueryParams uninitialized(size_t num) @system
-    {
-        auto oids = uninitializedArray!(Oid[])(num);
-        auto values = uninitializedArray!(const(char)*[])(num);
-        auto lf = uninitializedArray!(int[])(2 * num);
-        auto lengths = lf[0 .. num];
-        auto formats = lf[num .. $];
-
-        return PgQueryParams(oids, values, lengths, formats);
-    }
-
-    @property int num() @safe
-    {
-        assert(values.length == oids.length);
-        assert(values.length == lengths.length);
-        assert(values.length == formats.length);
-        return cast(int) values.length;
-    }
-}
-
-/// ditto
-package(pgd) PgQueryParams pgQueryParams(Args...)(Args args) @trusted
-{
-    auto params = PgQueryParams.uninitialized(Args.length);
-
-    // all values are written to the same array
-    size_t valuesSize;
-
-    // dfmt off
-    static foreach (i, arg; args)
-    {{
-        alias T = Unqual!(typeof(arg));
-        static assert(isScalar!T, T(arg).stringof ~ " is not a supported scalar type");
-
-        static if (sizeKnownAtCt!T)
-            enum thisSz = scalarBinSizeCt!T;
-        else
-            const thisSz = scalarBinSize(arg);
-
-        params.oids[i] = cast(Oid)pgTypeOf!T;
-        params.lengths[i] = cast(int)thisSz;
-        params.formats[i] = 1; // binary
-        valuesSize += thisSz;
-    }}
-
-    auto valuesBuf = new ubyte[valuesSize];
-    size_t offset;
-
-    static foreach (i, arg; args)
-    {{
-        const sz = emplaceScalar(arg, valuesBuf[offset .. $]);
-        if (sz > 0 || !isNullable!(Args[i]))
-        {
-            params.values[i] = cast(const(char)*)&valuesBuf[offset];
-            offset += sz;
-        }
-        else
-        {
-            params.values[i] = null;
-        }
-    }}
-    // dfmt on
-
-    assert(offset == valuesBuf.length);
-
-    return params;
 }

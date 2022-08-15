@@ -27,6 +27,7 @@ if get_option('enable_admin') or get_option('enable_test') or get_option('enable
 endif
 
 if get_option('enable_admin') or get_option('enable_test')
+    dop_migrations_imp = include_directories('registry/migrations')
     subdir('crypto')
     subdir('admin')
 endif

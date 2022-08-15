@@ -258,12 +258,12 @@ final class DopRegistryDepSource : DepSource
     {
         if (revision)
         {
-            auto req = GetRecipeRevision(name, ver.toString(), revision);
+            auto req = GetPackageRecipe(name, ver.toString(), revision);
             auto resp = _registry.sendRequest(req);
             return resp.code < 400;
         }
         else {
-            auto req = GetLatestRecipeRevision(name, ver.toString());
+            auto req = GetPackageLatestRecipe(name, ver.toString());
             auto resp = _registry.sendRequest(req);
             return resp.code < 400;
         }

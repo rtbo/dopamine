@@ -2,7 +2,7 @@ module pgd.conn;
 
 import pgd.libpq;
 import pgd.conv;
-import pgd.result;
+import pgd.param;
 
 import std.array;
 import std.conv;
@@ -13,6 +13,11 @@ import std.traits;
 import std.typecons;
 import std.stdio : File;
 import core.exception;
+
+version(unittest)
+{
+    import pgd.test;
+}
 
 // exporting a few Postgresql enums
 alias ConnStatus = pgd.libpq.ConnStatus;
@@ -82,6 +87,7 @@ class PgConn
     private PGconn* conn;
     private bool inTransac;
     private int transacSavePoint;
+    private string lastSql;
     // A provision of counters for results.
     private int[64] refCounts;
 
@@ -178,7 +184,7 @@ class PgConn
     /// Wait for result by polling on the socket.
     /// Default impl does nothing, which has the effect that
     /// exec, execScalar etc. will block the current thread while waiting.
-    protected void pollResult() @safe
+    void pollResult() @safe
     {
     }
 
@@ -232,38 +238,90 @@ class PgConn
         }
     }
 
-    /// Execute a SQL statement expecting no result.
-    void exec(Args...)(string sql, Args args) @trusted
+    /// Send a SQL statement with params but do not wait for completion.
+    /// Use the get method family to wait for completion.
+    /// Multiple SQL statements are not allowed.
+    void send(Args...)(string sql, Args args) @trusted
     {
-        sendPriv!false(sql, args);
+        sendPriv!true(sql, args);
+    }
 
-        pollResult();
+    /// Send a SQL statement with dynamic params but do not wait for completion.
+    /// Use the get method family to wait for completion.
+    /// Multiple SQL statements are not allowed.
+    void sendDyn(string sql, PgParam[] params) @trusted
+    {
+        lastSql = sql;
 
+        int res;
+
+        debug
+        {
+            validateSqlParams(sql, params.length);
+        }
+
+        if (params.length)
+        {
+            auto pgParams = pgQueryDynParams(params);
+
+            res = PQsendQueryParams(conn, sql.toStringz(),
+                cast(int) pgParams.num,
+                &pgParams.oids[0],
+                &pgParams.values[0],
+                &pgParams.lengths[0],
+                &pgParams.formats[0],
+                1
+            );
+        }
+        else
+        {
+            res = PQsendQueryParams(conn, sql.toStringz(),
+                0, null, null, null, null, 1
+            );
+        }
+
+        if (res != 1)
+            badConnection(conn, sql);
+    }
+
+    void enableRowByRow() @trusted
+    {
+        int res = PQsetSingleRowMode(conn);
+        if (!res)
+            badConnection(conn);
+    }
+
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting no result
+    void getNone() @trusted
+    {
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (status != ExecStatus.COMMAND_OK)
             badResultLayout("Expected an empty result", res);
     }
 
-    T execScalar(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting a single scalar result
+    T getScalar(T)() @trusted if (isScalar!T)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (PQnfields(res) != 1)
             badResultLayout("Expected a single column", res);
@@ -275,19 +333,19 @@ class PgConn
         return convScalar!T(0, 0, res);
     }
 
-    T[] execScalars(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting multiple single scalar results (one scalar per row)
+    T[] getScalars(T)() @trusted if (isScalar!T)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (PQnfields(res) != 1)
             badResultLayout("Expected a single column", res);
@@ -303,54 +361,57 @@ class PgConn
         return scalars;
     }
 
-    /// Execute a SQL statement expecting a single row result.
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting a single row result.
     /// Result row is converted to the provided struct type.
-    R execRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    R getRow(R)() @trusted if (isRow!R)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         if (PQntuples(res) == 0)
             notFound();
         if (PQntuples(res) > 1)
             badResultLayout("Expected a single row", res);
 
-        auto colInds = getColIndices!R(res);
+        mixin(generateColIndexStruct!R());
+        _ColIndices colInds = void;
+        fillColIndices!R(res, colInds);
+
         auto row = convRow!R(colInds, 0, res);
 
         return row;
     }
 
-    /// Execute a SQL statement expecting a zero or many row result.
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting zero or many rows result.
     /// Result rows are converted to the provided struct type.
-    R[] execRows(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    R[] getRows(R)() @trusted if (isRow!R)
     {
-        sendPriv!true(sql, args);
-
-        pollResult();
-
         auto res = getLastResult();
         scope (exit)
             PQclear(res);
+        scope (exit)
+            lastSql = null;
 
         const status = PQresultStatus(res);
         if (status.isError)
-            badExecution(res, sql, args);
+            badExecution(res, lastSql);
 
         const nrows = PQntuples(res);
         if (!nrows)
             return [];
 
-        auto colInds = getColIndices!R(res);
+        mixin(generateColIndexStruct!R());
+        _ColIndices colInds = void;
+        fillColIndices!R(res, colInds);
 
         R[] rows = uninitializedArray!(R[])(nrows);
         foreach (ri; 0 .. nrows)
@@ -361,12 +422,210 @@ class PgConn
         return rows;
     }
 
+    auto getRowByRow(R)() @trusted if (isRow!R)
+    {
+        scope(exit)
+            lastSql = null;
+
+        PGresult* res1 = PQgetResult(conn);
+
+        mixin(generateColIndexStruct!R());
+        _ColIndices colInds;
+
+        if (res1)
+        {
+            const status = PQresultStatus(res1);
+            if (status.isError)
+                badExecution(res1, lastSql);
+            if (status != ExecStatus.SINGLE_TUPLE && status != ExecStatus.TUPLES_OK)
+            {
+                throw new Exception("RowByRow mode was not enabled");
+            }
+            if (status != ExecStatus.TUPLES_OK)
+            {
+                fillColIndices!R(res1, colInds);
+            }
+            else
+            {
+                while (res1)
+                {
+                    PQclear(res1);
+                    res1 = PQgetResult(conn);
+                }
+            }
+        }
+
+        static struct RowRange
+        {
+            PGconn* conn;
+            PGresult* res;
+            _ColIndices colInds;
+            string lastSql;
+
+            @property R front() @trusted
+            {
+                return convRow!R(colInds, 0, res);
+            }
+
+            @property bool empty() @safe
+            {
+                return res is null;
+            }
+
+            void popFront() @trusted
+            {
+                if (res)
+                    PQclear(res);
+
+                res = PQgetResult(conn);
+                if (!res)
+                    return;
+
+                const status = PQresultStatus(res);
+                // if error, we drain then throw
+                if (status.isError)
+                {
+                    const msg = formatExecErrorMsg(res, lastSql);
+                    while (res)
+                    {
+                        PQclear(res);
+                        res = PQgetResult(conn);
+                    }
+                    throw new ExecutionException(msg);
+                }
+                // if last, we drain the last results (should be the last one)
+                if (status == ExecStatus.TUPLES_OK)
+                {
+                    while (res)
+                    {
+                        PQclear(res);
+                        res = PQgetResult(conn);
+                    }
+                }
+            }
+        }
+
+        return RowRange(conn, res1, colInds, lastSql);
+    }
+
+    @("getRowByRow")
+    unittest
+    {
+        auto db = new PgConn(dbConnString());
+        scope(exit)
+            db.finish();
+
+        db.exec(`
+            CREATE TABLE row_by_row (
+                id integer PRIMARY KEY,
+                t1 text,
+                t2 text,
+                i1 integer,
+                oddid boolean
+            )
+        `);
+        scope (exit)
+            db.exec("DROP TABLE row_by_row");
+
+        for (int id=1; id<=1000; ++id)
+        {
+            db.exec(`
+                INSERT INTO row_by_row (
+                    id, t1, t2, i1, oddid
+                ) VALUES (
+                    $1, $2, $3, 3 * $1, mod($1, 2) <> 0
+                )
+            `, id, "Some text", "Another text for t2");
+        }
+
+        static struct R
+        {
+            int id;
+            string t1;
+            string t2;
+            int i1;
+            bool oddid;
+        }
+
+        auto rows = db.execRowByRow!R(`
+            SELECT id, t1, t2, i1, oddid FROM row_by_row
+        `);
+
+        int id = 1;
+        foreach (row; rows)
+        {
+            assert(row.id == id);
+            assert(row.t1 == "Some text");
+            assert(row.t2 == "Another text for t2");
+            assert(row.i1 == id * 3);
+            assert(row.oddid == ((id % 2) != 0));
+            id++;
+        }
+        assert(id == 1001);
+    }
+
+    /// Execute a SQL statement expecting no result.
+    /// It is possible to submit multiple statements separated with ';'
+    void exec(Args...)(string sql, Args args) @trusted
+    {
+        sendPriv!false(sql, args);
+        pollResult();
+        getNone();
+    }
+
+    T execScalar(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getScalar!T();
+    }
+
+    T[] execScalars(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getScalars!T();
+    }
+
+    /// Execute a SQL statement expecting a single row result.
+    /// Result row is converted to the provided struct type.
+    R execRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getRow!R();
+    }
+
+    /// Execute a SQL statement expecting a zero or many row result.
+    /// Result rows are converted to the provided struct type.
+    R[] execRows(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getRows!R();
+    }
+
+    auto execRowByRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    {
+        sendPriv!true(sql, args);
+        enableRowByRow();
+        pollResult();
+        return getRowByRow!R();
+    }
+
     private void sendPriv(bool withResults, Args...)(string sql, Args args) @trusted
     {
         // PQsendQueryParams is needed to specify that we need results in binary format
         // The downside is that it does not allow to send multiple sql commands at once
         // (; separated in the same string)
         // so when no result is expected and no param is needed we use PQsendQuery
+
+        lastSql = sql;
+
+        debug
+        {
+            validateSqlParams(sql, args.length);
+        }
 
         static if (Args.length > 0)
         {
@@ -410,25 +669,6 @@ class PgConn
         return last;
     }
 
-    /// Get the (untyped) result for the current query
-    /// if result casts to false, it means there is no more result
-    Result getResult() @trusted
-    {
-        auto res = PQgetResult(conn);
-        // FIXME: check for error
-        return Result(res, findRefCount());
-    }
-
-    private int* findRefCount()
-    {
-        for (size_t i = 0; i < refCounts.length; ++i)
-        {
-            if (refCounts[i] == 0)
-                return &refCounts[i];
-        }
-        return null;
-    }
-
     string escapeIdentifier(string ident) @trusted
     {
         auto res = PQescapeIdentifier(conn, ident.ptr, ident.length);
@@ -437,6 +677,26 @@ class PgConn
 
         return res.fromStringz.idup;
     }
+}
+
+void validateSqlParams(string sql, size_t paramCount)
+{
+    import std.regex;
+
+    int maxNum;
+    auto params = matchAll(sql, `\$(\d+)`);
+    foreach (c; params)
+    {
+        const num = c[1].to!int;
+        enforce(num <= paramCount, format!"Missing parameter for %s in sql query:\n%s"(
+            c[0], sql
+        ));
+        if (num > maxNum)
+            maxNum = num;
+    }
+    enforce(maxNum == paramCount, format!"Following SQL query received %s parameters but was expecting %s:\n%s"(
+        paramCount, maxNum, sql
+    ));
 }
 
 private:
@@ -457,15 +717,19 @@ private:
 
 @system:
 
-noreturn badConnection(PGconn* conn)
+noreturn badConnection(PGconn* conn, string sendSql=null)
 {
-    const msg = PQerrorMessage(conn).fromStringz.idup;
+    string msg = PQerrorMessage(conn).fromStringz.idup;
+    if (!msg.length)
+    {
+        msg = "PostgreSQL error while sending SQL:\n" ~ sendSql;
+    }
     throw new ConnectionException(msg);
 }
 
-noreturn badExecution(Args...)(PGresult* res, string sql, Args args)
+noreturn badExecution(Args...)(PGresult* res, string sql)
 {
-    const msg = formatExecErrorMsg(res, sql, args);
+    const msg = formatExecErrorMsg(res, sql);
     throw new ExecutionException(msg);
 }
 
@@ -475,9 +739,8 @@ noreturn badResultLayout(string expectation, PGresult* res)
     const rowPlural = rowCount > 1 ? "s" : "";
     const colCount = PQnfields(res);
     const colPlural = colCount > 1 ? "s" : "";
-    const msg = expectation ~ format(
-        " - received a result with %s row%s and %s column%s",
-        rowCount, rowPlural, colCount, colPlural
+    const msg = format!"%s - received a result with %s row%s and %s column%s"(
+        expectation, rowCount, rowPlural, colCount, colPlural
     );
     throw new ResultLayoutException(msg);
 }
@@ -487,16 +750,10 @@ noreturn notFound()
     throw new ResourceNotFoundException("The expected resource could not be found");
 }
 
-string formatExecErrorMsg(Args...)(PGresult* res, string sql, Args args) @system
+string formatExecErrorMsg(PGresult* res, string sql) @system
 {
     string msg = "Error during query execution.\n";
     msg ~= "SQL:\n" ~ sql ~ "\n";
-    if (args.length)
-    {
-        msg ~= "Params:\n";
-        static foreach (i, arg; args)
-            msg ~= format("  $%s = %s\n", i + 1, arg);
-    }
     const pgMsg = PQresultErrorMessage(res).fromStringz;
     msg ~= "PostgreSQL message: " ~ pgMsg;
     return msg ~ "\n";
@@ -534,9 +791,8 @@ string generateColNameStruct(R)() if (isRow!R)
     return res;
 }
 
-auto getColIndices(R)(const(PGresult)* res)
+void fillColIndices(R, CI)(const(PGresult)* res, ref CI inds)
 {
-    mixin(generateColIndexStruct!R());
     mixin(generateColNameStruct!R());
 
     enum expectedCount = (Fields!R).length;
@@ -544,8 +800,6 @@ auto getColIndices(R)(const(PGresult)* res)
 
     enforce(colCount == expectedCount, format!"Expected %s columns, but result has %s"(
             expectedCount, colCount));
-
-    _ColIndices inds = void;
 
     static if (hasUDA!(R, OrderedCols))
     {
@@ -587,6 +841,4 @@ auto getColIndices(R)(const(PGresult)* res)
         }}
         // dfmt on
     }
-
-    return inds;
 }

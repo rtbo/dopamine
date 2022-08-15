@@ -4,141 +4,70 @@ import dopamine.registry.archive;
 import dopamine.registry.auth;
 import dopamine.registry.db;
 import dopamine.registry.utils;
+import dopamine.registry.v1.packages;
 
-import dopamine.api.attrs;
 import dopamine.api.v1;
 import dopamine.semver;
 
 import pgd.conn;
 
-import squiz_box;
-
-import vibe.http.common;
 import vibe.http.router;
-import vibe.http.server;
 
-import std.base64;
-import std.conv;
-import std.datetime.systime;
-import std.digest.sha;
-import std.exception;
+import std.datetime;
 import std.format;
-import std.range;
 
 class RecipesApi
 {
     DbClient client;
     ArchiveManager archiveMgr;
+    PackagesApi packages;
 
-
-    this(DbClient client, ArchiveManager archiveMgr)
+    this(DbClient client, ArchiveManager archiveMgr, PackagesApi packages)
     {
         this.client = client;
         this.archiveMgr = archiveMgr;
+        this.packages = packages;
     }
 
     void setupRoutes(URLRouter router)
     {
-        setupRoute!GetPackage(router, &getPackage);
-        setupRoute!PostRecipe(router, &postRecipe);
-        setupRoute!GetLatestRecipeRevision(router, &getLatestRecipeRevision);
-        setupRoute!GetRecipeRevision(router, &getRecipeRevision);
         setupRoute!GetRecipe(router, &getRecipe);
+        setupRoute!PostRecipe(router, &postRecipe);
     }
 
     @OrderedCols
-    static struct PackRow
-    {
-        string name;
-        int maintainerId;
-        SysTime created;
-
-        PackageResource toResource(string[] versions) const @safe
-        {
-            return PackageResource(name, maintainerId, created.toUTC(), versions);
-        }
-    }
-
-    PackageResource getPackage(GetPackage req) @safe
-    {
-        return client.connect((scope DbConn db) @safe {
-            const row = db.execRow!PackRow(
-                `SELECT "name", "maintainer_id", "created" FROM "package" WHERE "name" = $1`,
-                req.name
-            );
-            auto vers = db.execScalars!string(
-                `SELECT DISTINCT "version" FROM "recipe" WHERE "package_name" = $1`,
-                row.name,
-            );
-            // sorting descending order (latest versions first)
-            import std.algorithm : sort;
-
-            vers.sort!((a, b) => Semver(a) > Semver(b));
-            return row.toResource(vers);
-        });
-    }
-
-    @OrderedCols
-    static struct RecipeRow
+    struct Row
     {
         int id;
-        int maintainerId;
+        string name;
+        int createdBy;
         SysTime created;
         string ver;
         string revision;
         string archiveName;
+        string description;
+        string upstreamUrl;
+        string license;
+        string recipe;
+        string readmeMt;
+        string readme;
 
         RecipeResource toResource() const @safe
         {
             return RecipeResource(
-                id, ver, revision, maintainerId, created.toUTC(), archiveName
+                id, name, createdBy, created, ver, revision, archiveName,
+                description, upstreamUrl, license, recipe, readmeMt, readme,
             );
         }
-    }
-
-    RecipeResource getLatestRecipeRevision(GetLatestRecipeRevision req) @safe
-    {
-        return client.connect((scope DbConn db) {
-            const row = db.execRow!RecipeRow(
-                `
-                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
-                    FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
-                    WHERE
-                        r.package_name = $1 AND
-                        r.version = $2
-                    ORDER BY r.created DESC
-                    LIMIT 1
-                `,
-                req.name, req.ver,
-            );
-            return row.toResource();
-        });
-    }
-
-    RecipeResource getRecipeRevision(GetRecipeRevision req) @safe
-    {
-        return client.connect((scope DbConn db) {
-            const row = db.execRow!RecipeRow(
-                `
-                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
-                    FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
-                    WHERE
-                        r.package_name = $1 AND
-                        r.version = $2 AND
-                        r.revision = $3
-                `,
-                req.name, req.ver, req.revision,
-            );
-            return row.toResource();
-        });
     }
 
     RecipeResource getRecipe(GetRecipe req) @safe
     {
         return client.connect((scope DbConn db) {
-            const row = db.execRow!RecipeRow(
+            const row = db.execRow!Row(
                 `
-                    SELECT r.id, r.maintainer_id, r.created, r.version, r.revision, a.name
+                    SELECT r.id, r.package_name, r.created_by, r.created, r.version, r.revision, a.name,
+                            r.description, r.upstream_url, r.license, r.recipe, r.readme_mt, r.readme
                     FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
                     WHERE r.id = $1
                 `,
@@ -146,36 +75,6 @@ class RecipesApi
             );
             return row.toResource();
         });
-    }
-
-    PackageResource createPackageIfNotExist(scope DbConn db, int userId, string packName, out bool newPkg) @safe
-    {
-        auto prows = db.execRows!PackRow(
-            `SELECT name, maintainer_id, created FROM package WHERE name = $1`, packName
-        );
-        string[] vers;
-        newPkg = prows.length == 0;
-        if (prows.length == 0)
-        {
-            prows = db.execRows!PackRow(
-                `
-                    INSERT INTO package (name, maintainer_id, created)
-                    VALUES ($1, $2, CURRENT_TIMESTAMP)
-                    RETURNING name, maintainer_id, created
-                `,
-                packName, userId
-            );
-        }
-        else
-        {
-            import std.algorithm : sort;
-
-            vers = db.execScalars!string(
-                `SELECT version FROM recipe WHERE package_name = $1`, packName
-            );
-            vers.sort!((a, b) => Semver(a) > Semver(b));
-        }
-        return prows[0].toResource(vers);
     }
 
     NewRecipeResp postRecipe(UserInfo user, PostRecipe req) @safe
@@ -189,8 +88,8 @@ class RecipesApi
         );
 
         return client.transac((scope db) @safe {
-            bool newPkg;
-            auto pkg = createPackageIfNotExist(db, user.id, req.name, newPkg);
+            string new_;
+            auto pkg = packages.createIfNotExist(db, req.name, req.description, new_);
             const recExists = db.execScalar!bool(
                 `
                     SELECT count(id) <> 0 FROM recipe
@@ -203,35 +102,58 @@ class RecipesApi
                 format!"recipe %s/%s/%s already exists!"(req.name, req.ver, req.revision)
             );
 
+            if (!new_)
+            {
+                const verExists = db.execScalar!bool(
+                    `
+                        SELECT count(id) <> 0 FROM recipe
+                        WHERE package_name = $1 AND version = $2
+                    `,
+                    req.name, req.ver
+                );
+                if (!verExists)
+                    new_ = "version";
+            }
+
             const archiveName = format!"%s-%s-%s.tar.xz"(req.name, req.ver, req.revision);
 
             const uploadReq = archiveMgr.requestUpload(db, user.id, archiveName);
 
-            auto recipeRow = db.execRow!RecipeRow(
+            auto recipeRow = db.execRow!Row(
                 `
                     INSERT INTO recipe (
                         package_name,
-                        maintainer_id,
+                        created_by,
                         created,
                         version,
                         revision,
-                        archive_id
+                        archive_id,
+                        description,
+                        upstream_url,
+                        license
                     ) VALUES (
-                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5
+                        $1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8
                     )
                     RETURNING
                         id,
-                        maintainer_id,
+                        package_name,
+                        created_by,
                         created,
                         version,
                         revision,
-                        ''
-                `, req.name, user.id, req.ver, req.revision, uploadReq.archiveId
+                        '',
+                        description,
+                        upstream_url,
+                        license,
+                        '', '', '' -- recipe and readme not known at this point
+                `,
+                req.name, user.id, req.ver, req.revision, uploadReq.archiveId,
+                req.description, req.upstreamUrl, req.license,
             );
             recipeRow.archiveName = archiveName;
 
             return NewRecipeResp(
-                newPkg, pkg, recipeRow.toResource(), uploadReq.bearerToken,
+                new_, pkg, recipeRow.toResource(), uploadReq.bearerToken,
             );
         });
     }

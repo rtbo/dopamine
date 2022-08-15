@@ -40,6 +40,7 @@ e2e_tests = [
     'stage-lib2',
 
     'publish-lib1',
+    'publish-missingfields',
 ]
 
 foreach e2e_test : e2e_tests
