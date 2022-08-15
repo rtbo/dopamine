@@ -154,7 +154,6 @@ package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @syst
 
     if (text)
     {
-        // FIXME: probably not suited to all conversions (e.g. bin encoding)
         static if (is(typeof(val.to!T)))
             return val.to!T;
         else
@@ -162,7 +161,7 @@ package(pgd) T convScalar(T)(int rowInd, int colInd, const(PGresult)* res) @syst
     }
     else
     {
-        const binVal = BinValue(cast(const(ubyte)[]) val, PQftype(res, colInd));
+        const binVal = BinValue(cast(const(ubyte)[]) val, res, colInd);
         binVal.checkType(pgTypeOf!T, T.stringof);
         static if (sizeKnownAtCt!T)
             binVal.checkSize(scalarBinSizeCt!T, T.stringof);
@@ -191,28 +190,36 @@ package(pgd) R convRow(R, CI)(CI colInds, int rowInd, const(PGresult)* res) @sys
 private struct BinValue
 {
     const(ubyte)[] val;
-    TypeOid type;
+    const(PGresult)* res;
+    int colInd;
 
-    void checkType(PgType expectedType, string typename) const @safe
+    @property TypeOid type() const @trusted
     {
-        import std.string : toLower;
+        return PQftype(res, colInd);
+    }
+
+    void checkType(PgType expectedType, string typename) const @trusted
+    {
+        import std.string : fromStringz, toLower;
 
         enforce(
             type == cast(TypeOid) expectedType,
             format(
-                "Expected PostgreSQL type %s to build a %s but received %s",
-                expectedType, typename, toLower(type.to!string))
+                "Expected PostgreSQL type %s to build a %s but received %s for field %s",
+                expectedType, typename, toLower(type.to!string), PQfname(res, colInd).fromStringz)
         );
 
     }
 
-    void checkSize(size_t expectedSize, string typename) const @safe
+    void checkSize(size_t expectedSize, string typename) const @trusted
     {
+        import std.string : fromStringz;
+
         enforce(
             val.length == expectedSize,
             format(
-                "Expected a size of %s to build a %s but received %s",
-                expectedSize, typename, val.length)
+                "Expected a size of %s to build a %s but received %s for field %s",
+                expectedSize, typename, val.length, PQfname(res, colInd).fromStringz)
         );
     }
 }
