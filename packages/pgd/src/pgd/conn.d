@@ -253,19 +253,35 @@ class PgConn
     {
         lastSql = sql;
 
-        auto pgParams = pgQueryDynParams(params);
+        int res;
 
-        auto res = PQsendQueryParams(conn, sql.toStringz(),
-            cast(int) pgParams.num,
-            &pgParams.oids[0],
-            &pgParams.values[0],
-            &pgParams.lengths[0],
-            &pgParams.formats[0],
-            1
-        );
+        debug
+        {
+            validateSqlParams(sql, params.length);
+        }
+
+        if (params.length)
+        {
+            auto pgParams = pgQueryDynParams(params);
+
+            res = PQsendQueryParams(conn, sql.toStringz(),
+                cast(int) pgParams.num,
+                &pgParams.oids[0],
+                &pgParams.values[0],
+                &pgParams.lengths[0],
+                &pgParams.formats[0],
+                1
+            );
+        }
+        else
+        {
+            res = PQsendQueryParams(conn, sql.toStringz(),
+                0, null, null, null, null, 1
+            );
+        }
 
         if (res != 1)
-            badConnection(conn);
+            badConnection(conn, sql);
     }
 
     void enableRowByRow() @trusted
@@ -606,6 +622,11 @@ class PgConn
 
         lastSql = sql;
 
+        debug
+        {
+            validateSqlParams(sql, args.length);
+        }
+
         static if (Args.length > 0)
         {
             // TODO: debug check that maximum index in sql is not greater than args.length
@@ -658,6 +679,26 @@ class PgConn
     }
 }
 
+void validateSqlParams(string sql, size_t paramCount)
+{
+    import std.regex;
+
+    int maxNum;
+    auto params = matchAll(sql, `\$(\d+)`);
+    foreach (c; params)
+    {
+        const num = c[1].to!int;
+        enforce(num <= paramCount, format!"Missing parameter for %s in sql query:\n%s"(
+            c[0], sql
+        ));
+        if (num > maxNum)
+            maxNum = num;
+    }
+    enforce(maxNum == paramCount, format!"Following SQL query received %s parameters but was expecting %s:\n%s"(
+        paramCount, maxNum, sql
+    ));
+}
+
 private:
 
 @property bool isError(ExecStatus status)
@@ -676,9 +717,13 @@ private:
 
 @system:
 
-noreturn badConnection(PGconn* conn)
+noreturn badConnection(PGconn* conn, string sendSql=null)
 {
-    const msg = PQerrorMessage(conn).fromStringz.idup;
+    string msg = PQerrorMessage(conn).fromStringz.idup;
+    if (!msg.length)
+    {
+        msg = "PostgreSQL error while sending SQL:\n" ~ sendSql;
+    }
     throw new ConnectionException(msg);
 }
 
@@ -694,9 +739,8 @@ noreturn badResultLayout(string expectation, PGresult* res)
     const rowPlural = rowCount > 1 ? "s" : "";
     const colCount = PQnfields(res);
     const colPlural = colCount > 1 ? "s" : "";
-    const msg = expectation ~ format(
-        " - received a result with %s row%s and %s column%s",
-        rowCount, rowPlural, colCount, colPlural
+    const msg = format!"%s - received a result with %s row%s and %s column%s"(
+        expectation, rowCount, rowPlural, colCount, colPlural
     );
     throw new ResultLayoutException(msg);
 }
