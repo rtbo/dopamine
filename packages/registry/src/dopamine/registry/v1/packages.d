@@ -48,20 +48,19 @@ class PackagesApi
 
     PackageResource get(GetPackage req) @safe
     {
-        import std.algorithm : sort;
-
         return client.connect((scope DbConn db) @safe {
             const row = db.execRow!Row(
                 `SELECT name, description FROM package WHERE name = $1`,
                 req.name
             );
             auto vers = db.execScalars!string(
-                `SELECT DISTINCT version FROM recipe WHERE package_name = $1`,
+                `
+                    SELECT version FROM recipe WHERE package_name = $1
+                    GROUP BY version
+                    ORDER BY semver_order_str(version)
+                `,
                 row.name,
             );
-
-            // sorting descending order (latest versions first)
-            vers.sort!((a, b) => Semver(a) > Semver(b));
             return row.toResource(vers);
         });
     }
@@ -142,14 +141,15 @@ class PackagesApi
         }
         else
         {
-            import std.algorithm : sort;
-
             assert(prows.length == 1);
 
             vers = db.execScalars!string(
-                `SELECT version FROM recipe WHERE package_name = $1`, name
+                `
+                    SELECT version FROM recipe WHERE package_name = $1
+                    GROUP BY version
+                    ORDER BY semver_order_str(version)
+                `, name
             );
-            vers.sort!((a, b) => Semver(a) > Semver(b));
         }
         return prows[0].toResource(vers);
     }
