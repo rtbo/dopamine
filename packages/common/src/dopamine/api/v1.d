@@ -28,10 +28,10 @@ struct PackageSearchEntry
 {
     string name;
     string description;
+    // numVersions and numRecipes are useful with `latestOnly` search option
+    uint numVersions;
+    uint numRecipes;
     PkgVersionSearchEntry[] versions;
-    // the following are useful with `latestOnly` search option
-    uint totalVersions;
-    uint totalRecipes;
 }
 
 struct PkgVersionSearchEntry
@@ -44,7 +44,7 @@ struct PkgVersionSearchEntry
 struct PkgRecipeSearchEntry
 {
     string revision;
-    string description;
+    @Optional
     string createdBy;
     SysTime created;
 }
