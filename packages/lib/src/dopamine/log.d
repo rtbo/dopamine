@@ -113,7 +113,7 @@ auto warning(T)(T val) @safe if (is(typeof(val.to!string)))
 
 /// Format the text in bright red, suitable to highlight errors.
 /// See_Also: [color]
-auto error(T)(T val) @safe if(is(typeof(val.to!string)))
+auto error(T)(T val) @safe if (is(typeof(val.to!string)))
 {
     return ColorizedText(Color.red | Color.bright, val.to!string);
 }
@@ -190,7 +190,7 @@ class FormatLogException : Exception
 {
     LogLevel level = LogLevel.error;
     string fmt;
-    Object[] values;
+    DynLogValue[] values;
 
     this(Args...)(string fmt, Args args)
     {
@@ -231,10 +231,7 @@ class FormatLogException : Exception
         if (level < _minLogLevel)
             return;
 
-        logging = logOutput(level);
-
-        scope (exit)
-            logging = null;
+        auto output = logOutput(level);
 
         size_t valI;
         auto f = fmt;
@@ -246,7 +243,7 @@ class FormatLogException : Exception
                 enforce(f.length > 1, "Invalid log format string: \"" ~ fmt ~ "\"");
                 if (f[1] == '%')
                 {
-                    logging.put("%");
+                    output.put("%");
                     f = f[2 .. $];
                     continue;
                 }
@@ -259,7 +256,7 @@ class FormatLogException : Exception
                 enforce(valI < values.length, "Orphean log format specifier");
                 auto val = cast(DynLogValue) values[valI];
                 const spec = singleSpec(f[0 .. len + 1]);
-                val.formatVal(spec);
+                val.formatVal(output, spec);
                 f = f[len + 1 .. $];
                 valI++;
             }
@@ -268,13 +265,13 @@ class FormatLogException : Exception
                 size_t len = 1;
                 while (f.length > len && f[len] != '%')
                     len++;
-                logging.put(f[0 .. len]);
+                output.put(f[0 .. len]);
                 f = f[len .. $];
             }
         }
         enforce(valI == values.length, "Orphean log format value");
-        logging.put("\n");
-        logging.flush();
+        output.put("\n");
+        output.flush();
     }
 }
 
@@ -444,10 +441,6 @@ LogOutput[levelCount] logOutputs;
 
 LogOutput debugOutput;
 
-// set when currently logging because ColorizedText
-// need a reference to the currently logging output.
-LogOutput logging;
-
 LogOutput logOutput(LogLevel level)
 in (level < LogLevel.silent)
 {
@@ -478,15 +471,9 @@ static ~this()
 
 void doLog(Args...)(LogOutput output, string msgf, Args args)
 {
-    logging = output;
-    scope (exit)
-    {
-        logging = null;
-    }
-
-    formattedWrite(logging, msgf, args);
-    logging.put("\n");
-    logging.flush();
+    formattedWrite(output, msgf, args);
+    output.put("\n");
+    output.flush();
 }
 
 struct ColorizedText
@@ -494,25 +481,24 @@ struct ColorizedText
     Color color;
     const(char)[] text;
 
-    void toString(scope void delegate(const(char)[]) sink) const
+    void toString(Writer, Char)(ref Writer w, const ref FormatSpec!Char fmt)
     {
-        if (logging)
-        {
-            logging.color(color);
-            logging.put(text);
-            logging.reset();
-        }
-        else
-        {
-            sink(text);
-        }
+        enum isLogOutput = is (Writer : LogOutput);
+
+        static if (isLogOutput)
+            w.setColor(color);
+
+        formatValue(w, text, fmt);
+
+        static if (isLogOutput)
+            w.resetColor();
     }
 }
 
 interface LogOutput
 {
-    void color(Color col);
-    void reset();
+    void setColor(Color col);
+    void resetColor();
     void put(const(char)[] text);
     void flush();
     void dispose();
@@ -539,11 +525,11 @@ class FlatLogOutput : LogOutput
         this.output = output;
     }
 
-    override void color(Color col)
+    override void setColor(Color col)
     {
     }
 
-    override void reset()
+    override void resetColor()
     {
     }
 
@@ -587,7 +573,7 @@ class TerminalLogOutput : LogOutput
         }
     }
 
-    override void color(Color col)
+    override void setColor(Color col)
     {
         version (Windows)
         {
@@ -601,7 +587,7 @@ class TerminalLogOutput : LogOutput
         }
     }
 
-    override void reset()
+    override void resetColor()
     {
         version (Windows)
         {
@@ -639,14 +625,14 @@ version (unittest)
 
         Appender!string output;
 
-        override void color(Color col)
+        override void setColor(Color col)
         {
             import std.conv : to;
 
             output.put("[" ~ col.to!string ~ "]");
         }
 
-        override void reset()
+        override void resetColor()
         {
             output.put("[reset]");
         }
@@ -669,7 +655,7 @@ version (unittest)
 
 abstract class DynLogValue
 {
-    abstract void formatVal(scope const ref FormatSpec!char spec);
+    abstract void formatVal(LogOutput output, scope const ref FormatSpec!char spec);
 }
 
 class TDynLogValue(T) : DynLogValue
@@ -681,8 +667,8 @@ class TDynLogValue(T) : DynLogValue
         this.value = value;
     }
 
-    override void formatVal(scope const ref FormatSpec!char spec)
+    override void formatVal(LogOutput output, scope const ref FormatSpec!char spec)
     {
-        formatValue(logging, value, spec);
+        formatValue(output, value, spec);
     }
 }
