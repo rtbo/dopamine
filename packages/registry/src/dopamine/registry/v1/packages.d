@@ -4,7 +4,6 @@ import dopamine.registry.db;
 import dopamine.registry.utils;
 
 import dopamine.api.v1;
-import dopamine.semver;
 
 import pgd.maybe;
 import pgd.conn;
@@ -346,16 +345,16 @@ unittest
         db.finish();
 
     db.execScalar!string(`SELECT semver_order_str('0.1.0')`)
-        .shouldEqual("000000000100000zzzzzzzzzz");
+        .shouldEqual("000000000100000zzzzzzzzzzzz");
 
     db.execScalar!string(`SELECT semver_order_str('12.1.5')`)
-        .shouldEqual("000120000100005zzzzzzzzzz");
+        .shouldEqual("000120000100005zzzzzzzzzzzz");
 
     db.execScalar!string(`SELECT semver_order_str('12.1.5-alpha.2')`)
-        .shouldEqual("000120000100005alpha.2zzz");
+        .shouldEqual("000120000100005alpha.2zzzzz");
 
     db.execScalar!string(`SELECT semver_order_str('12.1.5-alpha.2+buildmeta')`)
-        .shouldEqual("000120000100005alpha.2zzz");
+        .shouldEqual("000120000100005alpha.2zzzzz");
 }
 
 @("ORDER BY semver_order_str")
