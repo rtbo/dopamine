@@ -7,7 +7,6 @@ import dopamine.registry.utils;
 import dopamine.registry.v1.packages;
 
 import dopamine.api.v1;
-import dopamine.semver;
 
 import pgd.conn;
 
@@ -80,9 +79,9 @@ class RecipesApi
     NewRecipeResp postRecipe(UserInfo user, PostRecipe req) @safe
     {
         // FIXME: package name rules
-        enforceStatus(
-            Semver.isValid(req.ver), 400, "Invalid package version (not Semver compliant)"
-        );
+
+        validateSemver(req.ver);
+
         enforceStatus(
             req.revision.length, 400, "Invalid package revision"
         );
