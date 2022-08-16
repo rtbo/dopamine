@@ -1,0 +1,10 @@
+
+RECIPE=notarecipe
+REGISTRY=base
+
+CMD=$DOP search --all
+EXPECT_MATCH=pkga\s+Description of pkga
+EXPECT_MATCH=2 versions\s+2 recipe revisions
+EXPECT_MATCH=1.0.0\s+1
+EXPECT_MATCH=2.0.0\s+1
+EXPECT_MATCH=pkgb\s+Description of pkgb

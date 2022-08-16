@@ -41,6 +41,8 @@ e2e_tests = [
 
     'publish-lib1',
     'publish-missingfields',
+
+    'search',
 ]
 
 foreach e2e_test : e2e_tests

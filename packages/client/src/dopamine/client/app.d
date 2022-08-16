@@ -6,6 +6,7 @@ import dopamine.client.profile;
 import dopamine.client.publish;
 import dopamine.client.resolve;
 import dopamine.client.revision;
+import dopamine.client.search;
 import dopamine.client.source;
 import dopamine.client.stage;
 
@@ -33,6 +34,7 @@ int main(string[] args)
     import std.format : format;
 
     const commands = [
+        Command("search", &searchMain, "Search for packages on the registry"),
         Command("login", &loginMain, "Register login credientials"),
         Command("profile", &profileMain, "Manage compilation profile"),
         Command("resolve", &resolveMain, "Resolve and lock dependencies versions"),
