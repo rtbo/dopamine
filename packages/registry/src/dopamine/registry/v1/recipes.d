@@ -158,3 +158,51 @@ class RecipesApi
         });
     }
 }
+
+void validateSemver(string ver) @safe
+{
+    import std.regex;
+
+    enum semverRegex = `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)` ~
+        `(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`;
+    static re = regex(semverRegex);
+
+    auto m = enforceStatus(matchAll(ver, re), 400, format!`"%s" is not a valid Semantic Version`(ver));
+
+    string major = m.front[1];
+    string minor = m.front[2];
+    string patch = m.front[3];
+    string prerelease = m.front[4];
+
+    enforceStatus(
+        major.length <= 5,
+        400,
+        format!`"%s" is not an accepted version: major should not be more than 5 characters`(ver)
+    );
+    enforceStatus(
+        minor.length <= 5,
+        400,
+        format!`"%s" is not an accepted version: minor should not be more than 5 characters`(ver)
+    );
+    enforceStatus(
+        patch.length <= 5,
+        400,
+        format!`"%s" is not an accepted version: patch should not be more than 5 characters`(ver)
+    );
+    enforceStatus(
+        prerelease.length <= 12,
+        400,
+        format!`"%s" is not an accepted version: patch should not be more than 10 characters`(ver)
+    );
+}
+
+@("validateSemver")
+unittest
+{
+    import unit_threaded.assertions;
+
+    validateSemver("1.2.3-prerelease+meta");
+    validateSemver("1.02.3-prerelease+meta").shouldThrow();
+    validateSemver("111111.2.3-prerelease+meta").shouldThrow();
+    validateSemver("1.2.3-prereleaseistoolong+meta").shouldThrow();
+}
