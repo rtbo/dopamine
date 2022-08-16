@@ -34,9 +34,9 @@ struct Semver
 {
     private
     {
-        int _major;
-        int _minor;
-        int _patch;
+        uint _major;
+        uint _minor;
+        uint _patch;
         string _prerelease;
         string _metadata;
         bool _not_init; // hidden flag to differentiate Semver("0.0.0") from Semver.init
@@ -75,60 +75,70 @@ struct Semver
     /// Initialize from string representation
     this(string semver) pure
     {
-        import std.algorithm : min, canFind;
-        import std.conv : ConvException, to;
-        import std.format : format;
-        import std.exception : assumeUnique, enforce;
-        import std.string : split;
+        import std.algorithm : countUntil, min;
+        import std.exception : enforce;
 
         _not_init = true;
 
-        const hyp = indexOrLast(semver, '-');
-        const plus = indexOrLast(semver, '+');
+        auto input = cast(ByteStr) semver;
 
-        enforce(hyp == semver.length || hyp <= plus,
-            new InvalidSemverException(semver, "metadata MUST come last"));
+        enforce(input.length, new InvalidSemverException(semver, "empty version"));
 
-        const main = semver[0 .. min(hyp, plus)].split('.');
+        auto pos = countUntil(input, '.');
+        enforce(pos != -1, new InvalidSemverException(semver, "could not identify major number"));
+        auto num = input[0 .. pos];
+        input = input[pos + 1 .. $];
+        _major = parseNumericIdentifier(num, "major", semver);
 
-        enforce(main.length == 3, new InvalidSemverException(semver,
-                "Expected 3 parts in main section"));
-        try
+        pos = countUntil(input, '.');
+        enforce(pos != -1, new InvalidSemverException(semver, "could not identify minor number"));
+        num = input[0 .. pos];
+        input = input[pos + 1 .. $];
+        _minor = parseNumericIdentifier(num, "minor", semver);
+
+        auto dash = countUntil(input, '-');
+        if (dash == -1)
+            dash = ptrdiff_t.max;
+        auto plus = countUntil(input, '+');
+        if (plus == -1)
+            plus = ptrdiff_t.max;
+
+        num = input[0 .. min($, dash, plus)];
+        _patch = parseNumericIdentifier(num, "patch", semver);
+
+        if (dash < plus)
         {
-            _major = main[0].to!int;
-            _minor = main[1].to!int;
-            _patch = main[2].to!int;
+            _prerelease = validatePrerelease(input[dash + 1 .. min($, plus)], semver);
         }
-        catch (ConvException ex)
+        if (plus < input.length)
         {
-            throw new InvalidSemverException(semver, ex.msg);
-        }
-
-        if (hyp < semver.length)
-        {
-            _prerelease = semver[hyp + 1 .. plus];
-            enforce(_prerelease.length > 0, new InvalidSemverException(semver,
-                    "Pre-release section may not be empty"));
-            enforce(!_prerelease.canFind(".."), new InvalidSemverException(semver,
-                    "Pre-release subsection may not be empty"));
-            enforce(allValidChars(_prerelease, true), new InvalidSemverException(semver,
-                    "Pre-release section contain invalid character"));
-        }
-
-        if (plus < semver.length)
-        {
-            _metadata = semver[plus + 1 .. $];
-            enforce(_metadata.length > 0, new InvalidSemverException(semver,
-                    "Build-metadata section may not be empty"));
-            enforce(!_metadata.canFind(".."), new InvalidSemverException(semver,
-                    "Bulid-metadata subsection may not be empty"));
-            enforce(allValidChars(_metadata, true), new InvalidSemverException(semver,
-                    "Build-metadata section contain invalid character"));
+            _metadata = validateMetadata(input[plus + 1 .. $], semver);
         }
     }
 
     /// Initialize from fields
-    this(int major, int minor, int patch, string[] prerelease = null, string[] metadata = null) pure
+    this(int major, int minor, int patch, string prerelease = null, string metadata = null) pure
+    {
+        import std.exception : enforce;
+
+        _not_init = true;
+
+        enforce(
+            major >= 0 && minor >= 0 && patch >= 0,
+            new InvalidSemverException(null, "Major, minor and patch numbers must all be positive")
+        );
+
+        _major = major;
+        _minor = minor;
+        _patch = patch;
+        if (prerelease)
+            _prerelease = validatePrerelease(cast(ByteStr)prerelease, null);
+        if (metadata)
+            _metadata = validateMetadata(cast(ByteStr)metadata, null);
+    }
+
+    /// ditto
+    this(int major, int minor, int patch, string[] prerelease, string[] metadata = null) pure
     {
         import std.array : join;
         import std.exception : enforce;
@@ -143,22 +153,15 @@ struct Semver
         _major = major;
         _minor = minor;
         _patch = patch;
-        _prerelease = prerelease.join('.');
-        _metadata = metadata.join('.');
+        if (prerelease)
+            _prerelease = validatePrerelease(cast(ByteStr)(prerelease.join('.')), null);
+        if (metadata)
+            _metadata = validateMetadata(cast(ByteStr)(metadata.join('.')), null);
     }
 
-    invariant ()
-    {
-        import std.algorithm : all, canFind;
-
-        assert(_major >= 0, "major must be positive");
-        assert(_minor >= 0, "minor must be positive");
-        assert(_patch >= 0, "patch must be positive");
-        assert(allValidChars(_prerelease, true), "prerelease contain invalid characters");
-        assert(!_prerelease.canFind(".."), "prerelease contain empty subsection");
-        assert(allValidChars(_metadata, true), "metadata contain invalid characters");
-        assert(!_metadata.canFind(".."), "metadata contain empty subsection");
-    }
+    /// Semver validation and field matching regular expression recommanded by [semver.org](https://semver.org)
+    enum regex = `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)` ~
+        `(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`;
 
     static bool isValid(string ver) @safe
     {
@@ -215,7 +218,7 @@ struct Semver
 
     int opCmp(const Semver rhs) const pure @safe
     {
-        import std.algorithm : min;
+        import std.algorithm : all, min;
         import std.array : split;
         import std.conv : to;
 
@@ -239,21 +242,23 @@ struct Semver
         const len = min(lpr.length, rpr.length);
         for (size_t i; i < len; i++)
         {
-            const l = lpr[i];
-            const r = rpr[i];
+            const ls = lpr[i];
+            const rs = rpr[i];
+            const lb = cast(ByteStr)ls;
+            const rb = cast(ByteStr)rs;
 
-            if (l == r)
+            if (lb == rb)
                 continue;
 
-            const lAllNum = allNum(l);
-            const rAllNum = allNum(r);
+            const lAllNum = all!isDigit(lb);
+            const rAllNum = all!isDigit(rb);
 
             // §11.4.1
             if (lAllNum && rAllNum)
             {
                 try
                 {
-                    return l.to!int < r.to!int ? -1 : 1;
+                    return ls.to!int < rs.to!int ? -1 : 1;
                 }
                 catch (Exception)
                 {
@@ -263,7 +268,7 @@ struct Semver
             // §11.4.2
             else if (lAllNum == rAllNum) // both false
             {
-                return l < r ? -1 : 1;
+                return ls < rs ? -1 : 1;
             }
             // §11.4.3
             return lAllNum ? -1 : 1;
@@ -285,6 +290,132 @@ struct Semver
     {
         return _not_init;
     }
+}
+
+private alias ByteStr = immutable(ubyte)[];
+
+private uint parseNumericIdentifier(ByteStr num, string field, string semver) pure
+{
+    import std.algorithm : all;
+    import std.conv : to;
+    import std.exception : enforce;
+
+    enforce(num.length, new InvalidSemverException(semver, field ~ " is empty"));
+
+    bool leadingZero;
+
+    if (isNumIdent(num, leadingZero))
+        return (cast(string) num).to!uint;
+
+    if (leadingZero)
+        throw new InvalidSemverException(semver, field ~ " has leading zero");
+
+    throw new InvalidSemverException(semver, field ~ " has non digit character");
+}
+
+private string validatePrerelease(ByteStr input, string semver) pure
+{
+    import std.algorithm : splitter;
+    import std.exception : enforce;
+
+    foreach (ident; input.splitter('.'))
+    {
+        enforce(ident.length, new InvalidSemverException(semver, "prerelease has empty identifier"));
+
+        if (isAlphaNumIdent(ident))
+            continue;
+
+        bool leadingZero;
+        if (isNumIdent(ident, leadingZero))
+            continue;
+
+        if (leadingZero)
+            throw new InvalidSemverException(semver, "invalid prerelease (has leading zero)");
+
+        throw new InvalidSemverException(semver, "invalid prerelease");
+    }
+
+    return cast(string) input;
+}
+
+private string validateMetadata(ByteStr input, string semver) pure
+{
+    import std.algorithm : all, splitter;
+    import std.exception : enforce;
+
+    foreach (ident; input.splitter('.'))
+    {
+        enforce(ident.length, new InvalidSemverException(semver, "build metadata has empty identifier"));
+
+        if (isAlphaNumIdent(ident))
+            continue;
+
+        if (all!isDigit(ident))
+            continue;
+
+        throw new InvalidSemverException(semver, "invalid build metadata");
+    }
+
+    return cast(string) input;
+}
+
+private bool isAlphaNumIdent(ByteStr input) pure
+in (input.length > 0)
+{
+    import std.algorithm : all, any;
+
+    if (isNonDigit(input[0]) && input.length == 1)
+        return true;
+
+    if (!all!isIdentChar(input))
+        return false;
+
+    return any!isNonDigit(input);
+}
+
+private bool isNumIdent(ByteStr input, out bool leadingZero) pure
+in (input.length > 0)
+{
+    import std.algorithm : all;
+
+    if (!all!isDigit(input))
+        return false;
+
+    if (input[0] == '0' && input.length > 1)
+    {
+        leadingZero = true;
+        return false;
+    }
+
+    return true;
+}
+
+private bool isDigit(ubyte c) pure
+{
+    pragma(inline, true);
+
+    return c >= '0' && c <= '9';
+}
+
+private bool isLetter(ubyte c) pure
+{
+    pragma(inline, true);
+
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+private bool isNonDigit(ubyte c) pure
+{
+    pragma(inline, true);
+
+    return c == '-' || isLetter(c);
+}
+
+private bool isIdentChar(ubyte c) pure
+{
+    pragma(inline, true);
+
+    return isDigit(c) || isNonDigit(c);
 }
 
 ///
@@ -325,7 +456,6 @@ unittest
     assertThrown!InvalidSemverException(Semver("1.2.3.4"));
     assertThrown!InvalidSemverException(Semver("1.2a.3"));
     assertThrown!InvalidSemverException(Semver("1.a2.3"));
-    assertThrown!InvalidSemverException(Semver("1.2.3+meta-prerel"));
     assertThrown!InvalidSemverException(Semver("1.2.3-prerel[]"));
     assertThrown!InvalidSemverException(Semver("1.2.3r+meta(bla)"));
     assertThrown!InvalidSemverException(Semver(-1, 2, 3));
@@ -388,36 +518,91 @@ unittest
     assert(!Semver.init);
 }
 
-private:
-
-bool allValidChars(string s, bool allowDot = false) pure
+@("compliant to semver.org valid/invalid versions")
+unittest
 {
-    foreach (c; s)
-    {
-        if (c >= 'a' && c <= 'z')
-            continue;
-        if (c >= 'A' && c <= 'Z')
-            continue;
-        if (c >= '0' && c <= '9')
-            continue;
-        if (c == '-')
-            continue;
-        if (allowDot && c == '.')
-            continue;
+    const validVersions = [
+        "0.0.4",
+        "1.2.3",
+        "10.20.30",
+        "1.1.2-prerelease+meta",
+        "1.1.2+meta",
+        "1.1.2+meta-valid",
+        "1.0.0-alpha",
+        "1.0.0-beta",
+        "1.0.0-alpha.beta",
+        "1.0.0-alpha.beta.1",
+        "1.0.0-alpha.1",
+        "1.0.0-alpha0.valid",
+        "1.0.0-alpha.0valid",
+        "1.0.0-alpha-a.b-c-somethinglong+build.1-aef.1-its-okay",
+        "1.0.0-rc.1+build.1",
+        "2.0.0-rc.1+build.123",
+        "1.2.3-beta",
+        "10.2.3-DEV-SNAPSHOT",
+        "1.2.3-SNAPSHOT-123",
+        "1.0.0",
+        "2.0.0",
+        "1.1.7",
+        "2.0.0+build.1848",
+        "2.0.1-alpha.1227",
+        "1.0.0-alpha+beta",
+        "1.2.3----RC-SNAPSHOT.12.9.1--.12+788",
+        "1.2.3----R-S.12.9.1--.12+meta",
+        "1.2.3----RC-SNAPSHOT.12.9.1--.12",
+        "1.0.0+0.build.1-rc.10000aaa-kk-0.1",
+        // reduced vs semver.org to avoid uint overflow
+        "99999999.99999999.99999999",
+        "1.0.0-0A.is.legal",
+    ];
 
-        return false;
-    }
+    const invalidVersions = [
+        "1",
+        "1.2",
+        "1.2.3-0123",
+        "1.2.3-0123.0123",
+        "1.1.2+.123",
+        "+invalid",
+        "-invalid",
+        "-invalid+invalid",
+        "-invalid.01",
+        "alpha",
+        "alpha.beta",
+        "alpha.beta.1",
+        "alpha.1",
+        "alpha+beta",
+        "alpha_beta",
+        "alpha.",
+        "alpha..",
+        "beta",
+        "1.0.0-alpha_beta",
+        "-alpha.",
+        "1.0.0-alpha..",
+        "1.0.0-alpha..1",
+        "1.0.0-alpha...1",
+        "1.0.0-alpha....1",
+        "1.0.0-alpha.....1",
+        "1.0.0-alpha......1",
+        "1.0.0-alpha.......1",
+        "01.1.1",
+        "1.01.1",
+        "1.1.01",
+        "1.2",
+        "1.2.3.DEV",
+        "1.2-SNAPSHOT",
+        "1.2.31.2.3----RC-SNAPSHOT.12.09.1--..12+788",
+        "1.2-RC-SNAPSHOT",
+        "-1.0.3-gamma+b7718",
+        "+justmeta",
+        "9.8.7+meta+meta",
+        "9.8.7-whatever+meta+meta",
+        // reduced vs semver.org to avoid uint overflow
+        "99999999.99999999.99999999----RC-SNAPSHOT.12.09.1-----------------------------..12",
+    ];
 
-    return true;
-}
+    foreach (ver; validVersions)
+        assert(Semver.isValid(ver), ver ~ " should be valid");
 
-bool allNum(string s) pure nothrow
-{
-    foreach (c; s)
-    {
-        const ascii = cast(int) c;
-        if (ascii < cast(int) '0' || ascii > cast(int) '9')
-            return false;
-    }
-    return true;
+    foreach (ver; invalidVersions)
+        assert(!Semver.isValid(ver), ver ~ " should not be valid");
 }
