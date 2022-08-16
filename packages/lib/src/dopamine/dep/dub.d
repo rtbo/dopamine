@@ -1,7 +1,7 @@
 /// Module with utilities to fetch and cache Dub dependencies
 module dopamine.dep.dub;
 
-import dopamine.cache_dirs;
+import dopamine.cache;
 import dopamine.log;
 import dopamine.recipe;
 import dopamine.semver;
