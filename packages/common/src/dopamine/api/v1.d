@@ -77,7 +77,7 @@ struct GetPackageRecipe
 
 /// Search packages and package recipes according a pattern and options
 @Request(Method.GET, "/v1/packages")
-@Response!(PackageRecipeResource[])
+@Response!(PackageSearchEntry[])
 struct SearchPackages
 {
     /// Pattern to search for.
