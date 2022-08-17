@@ -1,7 +1,7 @@
 module dopamine.admin.app;
 
 import dopamine.admin.config;
-import dopamine.cache_dirs;
+import dopamine.cache;
 import pgd.conn;
 import pgd.connstring;
 import squiz_box;

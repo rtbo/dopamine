@@ -59,6 +59,6 @@ BEGIN
     patch := semver_patch(ver);
     prerelease := coalesce(semver_prerelease(ver), '');
 
-    RETURN lpad(major, 5, '0') || lpad(minor, 5, '0') || lpad(patch, 5, '0') || rpad(prerelease, 10, 'z');
+    RETURN lpad(major, 5, '0') || lpad(minor, 5, '0') || lpad(patch, 5, '0') || rpad(prerelease, 12, 'z');
 END
 $$;

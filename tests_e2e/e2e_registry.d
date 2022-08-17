@@ -58,11 +58,19 @@ final class Registry
 
         const cmd = [exes.registry];
         pid = spawnProcess(cmd, stdin, outFile, errFile, this.env, Config.none, regPath);
+
+        // ensure that server is correctly booted
+        import core.thread : Thread;
+        import core.time : msecs;
+        Thread.sleep(500.msecs);
+
+        auto res = pid.tryWait();
+        if (res.terminated)
+            throw new Exception(format!"registry crashed at startup with code %s"(res.status));
     }
 
     int stop()
     {
-        import core.time : msecs;
         import vibe.http.client : HTTPClientSettings, HTTPMethod, requestHTTP;
 
         // check if still running (otherwise it probably crashed)
