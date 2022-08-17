@@ -21,8 +21,7 @@ int searchMain(string[] args)
         "case|c", "Activates case-sensitve search", &search.caseSensitive,
         "name-only|N", "Seach only in package names", &search.nameOnly,
         "extended|E", "Search also in extended fields (other than name and description)", &search.extended,
-        "latest-only|L", "Only display the latest and greatest version and recipe revision", &search.latestOnly,
-        "limit|l", "Limit the number of recipes returned (implies --latest-only)", &search.recLimit,
+        "limit|l", "Limit the number of recipes returned", &search.limit,
         "all|A", "If set, an empty search returns all packages", &all,
     );
     // dfmt on
@@ -46,52 +45,35 @@ int searchMain(string[] args)
             "Can't supply %s and %s in the same search.", info("--name-only"), info("--extended")
     ));
 
-    if (search.recLimit > 0)
-        search.latestOnly = true;
-
     auto registry = new Registry();
 
     auto pkgEntries = registry.sendRequest(search).payload;
 
-    bool first = true;
-    foreach (pkg; pkgEntries)
+    foreach (entry; pkgEntries)
     {
-        if (!first)
-            logInfo("");
-        first = false;
+        enum maxWidth = 80;
+        enum nameWidth = 18;
+        enum verWidth = 14;
+        enum descWidth = maxWidth - nameWidth - verWidth - 2;
 
-        auto desc = breakLines(pkg.description, 60);
+        auto desc = breakLines(entry.description, descWidth);
         if (desc.length == 0)
             desc = ["(no description)"];
 
-        logInfo("%-18s %s", color(Color.cyan | Color.bright, pkg.name), desc[0]);
-        foreach (d; desc[1 .. $])
-            logInfo("%18s %s", "", d);
-
         logInfo(
-            "     %-12s     %s",
-            color(Color.white, format!"%s versions"(pkg.numVersions)),
-            color(Color.white, format!"%s recipe revisions"(pkg.numRecipes))
+            "%*s/%*s %s",
+            nameWidth, color(Color.cyan | Color.bright, entry.name),
+            -verWidth, color(Color.green, entry.lastVersion),
+            desc[0]
         );
 
-        foreach (vers; pkg.versions)
-        {
-            string ver = vers.ver; // shown only for first recipe
-            foreach (rec; vers.recipes)
-            {
-                const created = rec.created.toLocalTime();
-                const date = Date(created.year, created.month, created.day);
-
-                logInfo(
-                    "     %-14s %10s    %s %-20s on %s",
-                    color(Color.green, ver), rec.revision, rec.createdBy ? "by" : "  ",
-                    info(rec.createdBy), date.toSimpleString()
-                );
-
-                // only show version for first recipe
-                ver = null;
-            }
-        }
+        foreach (d; desc[1 .. $])
+            logInfo(
+                "%*s %*s %s",
+                nameWidth, "",
+                -verWidth, "",
+                d
+            );
     }
 
     return 0;

@@ -28,26 +28,26 @@ struct PackageSearchEntry
 {
     string name;
     string description;
-    // numVersions and numRecipes are useful with `latestOnly` search option
+    string lastVersion;
+    string lastRecipeRev;
     uint numVersions;
     uint numRecipes;
-    PkgVersionSearchEntry[] versions;
 }
 
-struct PkgVersionSearchEntry
-{
-    @Name("version")
-    string ver;
-    PkgRecipeSearchEntry[] recipes;
-}
+// struct PkgVersionSearchEntry
+// {
+//     @Name("version")
+//     string ver;
+//     PkgRecipeSearchEntry[] recipes;
+// }
 
-struct PkgRecipeSearchEntry
-{
-    string revision;
-    @Optional
-    string createdBy;
-    SysTime created;
-}
+// struct PkgRecipeSearchEntry
+// {
+//     string revision;
+//     @Optional
+//     string createdBy;
+//     SysTime created;
+// }
 
 @Request(Method.GET, "/v1/packages/:name")
 @Response!PackageResource
@@ -75,7 +75,8 @@ struct GetPackageRecipe
     string revision;
 }
 
-/// Search packages and package recipes according a pattern and options
+/// Search packages and package recipes according a pattern and options.
+/// The packages are returned in the order of the most downloaded first.
 @Request(Method.GET, "/v1/packages")
 @Response!(PackageSearchEntry[])
 struct SearchPackages
@@ -106,18 +107,18 @@ struct SearchPackages
     @Query
     bool extended;
 
-    /// if defined, a single version and revision is returned per package
-    /// (the latest revision of the highest version)
-    @Query
-    bool latestOnly;
+    // offset and limit allows basic server-side pagination
+    // this is not perfect as the query result or package order
+    // may change between two invocations.
+    // If not acceptable, client side pagination should be performed
 
-    /// limit the number of distinct packages returned
+    /// offset of the returned packages returned
+    @Query @OmitIfInit
+    int offset;
+
+    /// limit the number of packages returned
     @Query @OmitIfInit
     int limit;
-
-    /// limit the total number of recipe entries returned.
-    @Query @OmitIfInit
-    int recLimit;
 }
 
 /+ recipes API +/

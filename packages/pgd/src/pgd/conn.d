@@ -422,7 +422,11 @@ class PgConn
         return rows;
     }
 
-    auto getRowByRow(R)() @trusted if (isRow!R)
+    /// Returns a D range of `R`, each element being a row
+    /// fetched in the single row mode of PostgreSQL.
+    /// A reference to the connection is in the returned object,
+    /// which should not leave the scope of `this`.
+    auto getRowByRow(R)() return scope @trusted if (isRow!R)
     {
         scope(exit)
             lastSql = null;
