@@ -41,8 +41,9 @@ struct Options
     bool createDb;
     string[] migrationsToRun;
     uint genCryptoPassword;
-    bool testCreateUsers;
-    string testPopulateFrom;
+
+    string[] testCreateUser;
+    string testPopulateRegistry;
 
     static Options parse(string[] args)
     {
@@ -50,13 +51,17 @@ struct Options
 
         // dfmt off
         auto res = getopt(args,
-            "trace",                &opts.trace,
-            "create-user",          &opts.createUser,
-            "create-db",            &opts.createDb,
-            "run-migration|r",      &opts.migrationsToRun,
-            "test-populate-from",   &opts.testPopulateFrom,
-            "test-create-users",    &opts.testCreateUsers,
-            "gen-crypto-password",  &opts.genCryptoPassword,
+            "trace",                &   opts.trace,
+
+            // admin tasks
+            "create-user",              &opts.createUser,
+            "create-db",                &opts.createDb,
+            "run-migration|r",          &opts.migrationsToRun,
+            "gen-crypto-password",      &opts.genCryptoPassword,
+
+            // testing tasks
+            "test-create-user",         &opts.testCreateUser,
+            "test-populate-registry",   &opts.testPopulateRegistry,
         );
         // dfmt on
 
@@ -79,8 +84,8 @@ struct Options
         return !createUser &&
             !createDb &&
             !migrationsToRun.length &&
-            !testCreateUsers &&
-            !testPopulateFrom &&
+            !testPopulateRegistry &&
+            !testCreateUser &&
             !genCryptoPassword;
     }
 
@@ -96,9 +101,9 @@ struct Options
                 errs += 1;
             }
         }
-        if (testPopulateFrom && !isDir(testPopulateFrom))
+        if (testPopulateRegistry && !isDir(testPopulateRegistry))
         {
-            stderr.writefln("%s: No such directory", testPopulateFrom);
+            stderr.writefln("%s: No such directory", testPopulateRegistry);
             errs += 1;
         }
         return errs;
@@ -112,6 +117,9 @@ version (DopAdminMain) int main(string[] args)
     if (opts.help)
         return opts.printHelp();
 
+    if (int errs = opts.checkErrors())
+        return errs;
+
     if (opts.noop())
     {
         writeln("Nothing to do!");
@@ -122,9 +130,6 @@ version (DopAdminMain) int main(string[] args)
     {
         genCryptoPassword(opts.genCryptoPassword);
     }
-
-    if (int errs = opts.checkErrors())
-        return errs;
 
     auto conf = Config.get;
 
@@ -161,7 +166,7 @@ version (DopAdminMain) int main(string[] args)
             ));
     }
 
-    if (!opts.migrationsToRun && !opts.testCreateUsers && !opts.testPopulateFrom)
+    if (!opts.migrationsToRun && !opts.testCreateUser && !opts.testPopulateRegistry)
         return 0;
 
     auto db = new PgConn(conf.dbConnString);
@@ -178,14 +183,11 @@ version (DopAdminMain) int main(string[] args)
         db.exec(migrations[mig]);
     }
 
-    if (opts.testCreateUsers)
-    {
-        createUserIfNotExist(db, "user1", Yes.withTestToken);
-        createUserIfNotExist(db, "user2", Yes.withTestToken);
-    }
+    foreach (usr; opts.testCreateUser)
+        createTestUserIfNotExist(db, usr, Yes.withTestToken);
 
-    if (opts.testPopulateFrom)
-        populateRegistry(db, opts.testPopulateFrom);
+    if (opts.testPopulateRegistry)
+        populateTestRegistry(db, opts.testPopulateRegistry);
 
     return 0;
 }
@@ -231,17 +233,7 @@ void createDatabase(PgConn db, const(string[string]) connInfo)
     db.exec("CREATE DATABASE " ~ ident);
 }
 
-struct User
-{
-    string id;
-
-    string email;
-
-    @ColName("avatar_url")
-    string avatarUrl;
-}
-
-int createUserIfNotExist(PgConn db, string pseudo, Flag!"withTestToken" tok = No.withTestToken)
+int createTestUserIfNotExist(PgConn db, string pseudo, Flag!"withTestToken" tok = No.withTestToken)
 {
     auto ids = db.execScalars!int(
         `SELECT "id" FROM "user" WHERE "pseudo" = $1`,
@@ -271,9 +263,9 @@ int createUserIfNotExist(PgConn db, string pseudo, Flag!"withTestToken" tok = No
     return userId;
 }
 
-void populateRegistry(PgConn db, string regDir)
+void populateTestRegistry(PgConn db, string regDir)
 {
-    const adminId = createUserIfNotExist(db, "admin-tool");
+    const adminId = createTestUserIfNotExist(db, "admin-tool");
 
     foreach (packDir; dirEntries(regDir, SpanMode.shallow).filter!(e => e.isDir))
     {

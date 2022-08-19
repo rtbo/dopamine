@@ -43,8 +43,9 @@ final class Registry
         const adminCmd = [
             exes.admin,
             "--create-db",
-            "--test-create-users",
-            "--test-populate-from", regPath,
+            "--test-create-user", "user1",
+            "--test-create-user", "user2",
+            "--test-populate-registry", regPath,
         ];
         auto adminEnv = this.env.dup;
         adminEnv["DOP_ADMIN_CONNSTRING"] = pgConnString("postgres");
