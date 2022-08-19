@@ -180,8 +180,8 @@ version (DopAdminMain) int main(string[] args)
 
     if (opts.testCreateUsers)
     {
-        createUserIfNotExist(db, "user1@dop.test", Yes.withTestToken);
-        createUserIfNotExist(db, "user2@dop.test", Yes.withTestToken);
+        createUserIfNotExist(db, "user1", Yes.withTestToken);
+        createUserIfNotExist(db, "user2", Yes.withTestToken);
     }
 
     if (opts.testPopulateFrom)
@@ -241,21 +241,23 @@ struct User
     string avatarUrl;
 }
 
-int createUserIfNotExist(PgConn db, string email, Flag!"withTestToken" tok = No.withTestToken)
+int createUserIfNotExist(PgConn db, string pseudo, Flag!"withTestToken" tok = No.withTestToken)
 {
     auto ids = db.execScalars!int(
-        `SELECT "id" FROM "user" WHERE "email" = $1`,
-        email
+        `SELECT "id" FROM "user" WHERE "pseudo" = $1`,
+        pseudo
     );
     if (ids.length)
         return ids[0];
 
+    const email = format!"%s@dop.test"(pseudo);
+
     const userId = db.execScalar!int(
         `
-            INSERT INTO "user"("email") VALUES($1)
+            INSERT INTO "user"("email", pseudo) VALUES($1, $2)
             RETURNING "id"
         `,
-        email
+        email, pseudo
     );
     writefln("Created user %s (%s)", email, userId);
     if (tok)
@@ -271,7 +273,7 @@ int createUserIfNotExist(PgConn db, string email, Flag!"withTestToken" tok = No.
 
 void populateRegistry(PgConn db, string regDir)
 {
-    const adminId = createUserIfNotExist(db, "admin-tool@dopamine.org");
+    const adminId = createUserIfNotExist(db, "admin-tool");
 
     foreach (packDir; dirEntries(regDir, SpanMode.shallow).filter!(e => e.isDir))
     {

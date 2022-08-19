@@ -68,6 +68,7 @@ version (unittest)
     {
         int id;
         string email;
+        string pseudo;
         string name;
     }
 
@@ -299,9 +300,9 @@ version (unittest)
                                 const name = format!`User %s`(rev.createdBy.capitalize());
                                 this.users[rev.createdBy] = db.execRow!TestUser(
                                     `
-                                    INSERT INTO "user"(email, name) VALUES($1, $2)
-                                    RETURNING id, email, name
-                                `, email, name
+                                    INSERT INTO "user"(email, pseudo, name) VALUES($1, $2, $3)
+                                    RETURNING id, email, pseudo, name
+                                `, email, rev.createdBy, name
                                 );
                             }
 

@@ -157,16 +157,38 @@ class AuthApi
         const refreshTokenExp = Clock.currTime + refreshTokenDuration;
 
         const row = client.transac((scope DbConn db) {
-            const userRow = db.execRow!UserRow(`
-                INSERT INTO "user" (email, name, avatar_url)
-                VALUES ($1, $2, $3)
-                ON CONFLICT(email) DO
-                UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
-                WHERE "user".email = EXCLUDED.email
-                RETURNING id, email, name, avatar_url
-            `, userResp.email, userResp.name, userResp.avatarUrl);
 
-            refreshToken = db.execScalar!string(`
+            // get a unique pseudo if already used by another user
+            string pseudoBase = userResp.pseudo;
+            int pseudoN = 2;
+            while(true)
+            {
+                const exists = db.execScalar!bool(
+                    `
+                        SELECT count(pseudo) <> 0 FROM "user"
+                        WHERE email <> $1 AND pseudo = $2
+                    `,
+                    userResp.email, userResp.pseudo
+                );
+                if (exists)
+                    userResp.pseudo = format!"%s%s"(pseudoBase, pseudoN++);
+                else
+                    break;
+            }
+
+            const userRow = db.execRow!UserRow(
+                `
+                    INSERT INTO "user" (email, pseudo, name, avatar_url)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT(email) DO
+                    UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
+                    WHERE "user".email = EXCLUDED.email
+                    RETURNING id, email, pseudo, name, avatar_url
+                `, userResp.email, userResp.pseudo, userResp.name, userResp.avatarUrl
+            );
+
+            refreshToken = db.execScalar!string(
+                `
                     INSERT INTO refresh_token (token, user_id, expiration, cli)
                     VALUES (GEN_RANDOM_BYTES($1), $2, $3, FALSE)
                     RETURNING ENCODE(token, 'base64')
@@ -465,6 +487,7 @@ private Json idPayload(UserRow row)
 private struct UserResp
 {
     string email;
+    string pseudo;
     string name;
     string avatarUrl;
 }
@@ -472,6 +495,7 @@ private struct UserResp
 private struct GithubUserResp
 {
     string email;
+    string login;
     string name;
     @Name("avatar_url") string avatarUrl;
 }
@@ -492,12 +516,14 @@ private UserResp getGithubUser(string accessToken)
                 resp.statusCode < 400, 403,
                 "Could not access user from github API"
             );
-            deserializeJson(ghUser, resp.readJson());
+            auto json = resp.readJson();
+            logInfo("%s", json.toPrettyString());
+            deserializeJson(ghUser, json);
         }
     );
     // dfmt on
 
-    return UserResp(ghUser.email, ghUser.name, ghUser.avatarUrl);
+    return UserResp(ghUser.email, ghUser.login, ghUser.name, ghUser.avatarUrl);
 }
 
 private struct GoogleUserPayload
@@ -513,7 +539,11 @@ private UserResp getGoogleUser(string idToken)
     GoogleUserPayload payload;
     deserializeJson(payload, jwt.payload);
 
-    return UserResp(payload.email, payload.name, payload.picture);
+    const at = payload.email.indexOf('@');
+    enforceStatus(at > 0, 400, "invalid email address: " ~ payload.email);
+    string pseudo = payload.email[0 .. at];
+
+    return UserResp(payload.email, pseudo, payload.name, payload.picture);
 }
 
 private Provider toProvider(string provider)
