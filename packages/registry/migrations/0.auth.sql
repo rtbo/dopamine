@@ -4,13 +4,13 @@ CREATE EXTENSION "pgcrypto";
 
 CREATE TABLE "user" (
     "id"            serial PRIMARY KEY,
-    "email"         text NOT NULL,
     "pseudo"        text NOT NULL,
+    "email"         text NOT NULL,
     "name"          text,
     "avatar_url"    text,
 
-    UNIQUE("email"),
-    UNIQUE("pseudo")
+    UNIQUE("pseudo"),
+    UNIQUE("email")
 );
 
 CREATE INDEX "idx_user_email" ON "user" ("email");

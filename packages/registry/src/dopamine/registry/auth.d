@@ -176,15 +176,16 @@ class AuthApi
                     break;
             }
 
+            // insert new user, or update it if email exists in database
             const userRow = db.execRow!UserRow(
                 `
-                    INSERT INTO "user" (email, pseudo, name, avatar_url)
+                    INSERT INTO "user" (pseudo, email, name, avatar_url)
                     VALUES ($1, $2, $3, $4)
                     ON CONFLICT(email) DO
                     UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
                     WHERE "user".email = EXCLUDED.email
-                    RETURNING id, email, pseudo, name, avatar_url
-                `, userResp.email, userResp.pseudo, userResp.name, userResp.avatarUrl
+                    RETURNING id, email, name, avatar_url
+                `, userResp.pseudo, userResp.email, userResp.name, userResp.avatarUrl
             );
 
             refreshToken = db.execScalar!string(

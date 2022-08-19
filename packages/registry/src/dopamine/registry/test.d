@@ -67,8 +67,8 @@ version (unittest)
     struct TestUser
     {
         int id;
-        string email;
         string pseudo;
+        string email;
         string name;
     }
 
@@ -300,9 +300,9 @@ version (unittest)
                                 const name = format!`User %s`(rev.createdBy.capitalize());
                                 this.users[rev.createdBy] = db.execRow!TestUser(
                                     `
-                                    INSERT INTO "user"(email, pseudo, name) VALUES($1, $2, $3)
-                                    RETURNING id, email, pseudo, name
-                                `, email, rev.createdBy, name
+                                    INSERT INTO "user"(pseudo, email, name) VALUES($1, $2, $3)
+                                    RETURNING id, pseudo, email, name
+                                `, rev.createdBy, email, name
                                 );
                             }
 

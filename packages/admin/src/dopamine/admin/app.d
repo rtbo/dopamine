@@ -254,12 +254,12 @@ int createUserIfNotExist(PgConn db, string pseudo, Flag!"withTestToken" tok = No
 
     const userId = db.execScalar!int(
         `
-            INSERT INTO "user"("email", pseudo) VALUES($1, $2)
+            INSERT INTO "user"(pseudo, email) VALUES($1, $2)
             RETURNING "id"
         `,
-        email, pseudo
+        pseudo, email
     );
-    writefln("Created user %s (%s)", email, userId);
+    writefln("Created user @%s <%s> (%s)", pseudo, email, userId);
     if (tok)
     {
         const token = cast(const(ubyte)[]) email;
