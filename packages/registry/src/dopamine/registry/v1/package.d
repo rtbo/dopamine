@@ -21,9 +21,8 @@ struct V1Api
 
 V1Api v1Api(DbClient client, ArchiveManager archiveMgr)
 {
-    auto pkg = new PackagesApi(client);
     return V1Api(
-        pkg,
-        new RecipesApi(client, archiveMgr, pkg),
+        new PackagesApi(client),
+        new RecipesApi(client, archiveMgr),
     );
 }

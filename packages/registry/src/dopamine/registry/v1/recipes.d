@@ -19,13 +19,11 @@ class RecipesApi
 {
     DbClient client;
     ArchiveManager archiveMgr;
-    PackagesApi packages;
 
-    this(DbClient client, ArchiveManager archiveMgr, PackagesApi packages)
+    this(DbClient client, ArchiveManager archiveMgr)
     {
         this.client = client;
         this.archiveMgr = archiveMgr;
-        this.packages = packages;
     }
 
     void setupRoutes(URLRouter router)
@@ -87,8 +85,6 @@ class RecipesApi
         );
 
         return client.transac((scope db) @safe {
-            string new_;
-            auto pkg = packages.createIfNotExist(db, req.name, req.description, new_);
             const recExists = db.execScalar!bool(
                 `
                     SELECT count(id) <> 0 FROM recipe
@@ -101,7 +97,21 @@ class RecipesApi
                 format!"recipe %s/%s/%s already exists!"(req.name, req.ver, req.revision)
             );
 
-            if (!new_)
+            const pkgExists = db.execScalar!bool(
+                `SELECT count(name) <> 0 FROM package WHERE name = $1`, req.name
+            );
+
+            string new_;
+
+            if (!pkgExists)
+            {
+                db.exec(
+                    `INSERT INTO package (name, description) VALUES ($1, $2)`,
+                    req.name, req.description
+                );
+                new_ = "package";
+            }
+            else
             {
                 const verExists = db.execScalar!bool(
                     `
@@ -152,7 +162,7 @@ class RecipesApi
             recipeRow.archiveName = archiveName;
 
             return NewRecipeResp(
-                new_, pkg, recipeRow.toResource(), uploadReq.bearerToken,
+                new_, recipeRow.toResource(), uploadReq.bearerToken,
             );
         });
     }

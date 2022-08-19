@@ -52,9 +52,7 @@ class PackageCache
         string revision = null) @trusted
     out (res; res.exists)
     {
-        import std.algorithm : canFind, each, map;
-        import std.conv : to;
-        import std.format : format;
+        import std.algorithm : each, find;
         import std.stdio : File;
 
         if (revision)
@@ -74,34 +72,18 @@ class PackageCache
                     ver));
         }
 
-        Response!PackageRecipeResource resp;
-        if (revision)
-            resp = registry.sendRequest(GetPackageRecipe(pack.name, ver, revision));
-        else
-            resp = registry.sendRequest(GetPackageLatestRecipe(pack.name, ver));
+        auto packVer = pack.versions.find!(v => v.ver == ver);
+        assert(packVer.length, "Package.cacheRecipe: no such version: " ~ ver);
 
-        enforce(resp.code < 400, new ErrorLogException(
-                "Could not fetch %s/%s%s%s: registry returned %s",
-                info(pack.name), info(ver), revision ? "/" : "", info(revision ? revision : ""),
-                error(resp.code.to!string)
-        ));
-
-        const res = resp.payload;
-
-        enforce(res.ver == ver, new Exception(
-                "Registry returned a package version that do not match request:\n" ~
-                format("  - requested %s/%s\n", pack.name, ver) ~
-                format("  - obtained %s/%s", pack.name, res.ver)
-        ));
+        const(PackageRecipeResource)[] rec = packVer[0].recipes;
+        assert(rec.length, "Package.cacheRecipe: empty version: " ~ ver);
 
         if (revision)
-            enforce(res.revision == revision, new Exception(
-                    "Registry returned a revision that do not match request"
-            ));
-        else
-            revision = res.revision;
+            rec = rec.find!(r => r.revision == revision);
 
-        const archiveName = res.archiveName;
+        assert(rec.length, "Package.cacheRecipe: no such revision: " ~ revision);
+
+        const archiveName = rec[0].archiveName;
         const filename = buildPath(tempDir(), archiveName);
         registry.downloadArchive(archiveName, filename);
 
@@ -109,8 +91,8 @@ class PackageCache
             remove(filename);
 
         auto revDir = packageDir(pack.name)
-            .versionDir(res.ver)
-            .dopRevisionDir(res.revision);
+            .versionDir(packVer[0].ver)
+            .dopRevisionDir(rec[0].revision);
 
         mkdirRecurse(revDir.versionDir.dir);
 
