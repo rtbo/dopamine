@@ -28,129 +28,67 @@ class PackagesApi
     void setupRoutes(URLRouter router)
     {
         setupRoute!GetPackage(router, &get);
-        setupRoute!GetPackageLatestRecipe(router, &getLatestRecipe);
-        setupRoute!GetPackageRecipe(router, &getRecipe);
         router.get("/v1/packages", genericHandler(&search));
-    }
-
-    @OrderedCols
-    static struct Row
-    {
-        string name;
-        string description;
-
-        PackageResource toResource(string[] versions) const @safe
-        {
-            return PackageResource(name, description, versions);
-        }
     }
 
     PackageResource get(GetPackage req) @safe
     {
-        return client.connect((scope DbConn db) @safe {
-            const row = db.execRow!Row(
-                `SELECT name, description FROM package WHERE name = $1`,
-                req.name
-            );
-            auto vers = db.execScalars!string(
-                `
-                    SELECT version FROM recipe WHERE package_name = $1
-                    GROUP BY version
-                    ORDER BY semver_order_str(version)
-                `,
-                row.name,
-            );
-            return row.toResource(vers);
-        });
-    }
-
-    @OrderedCols
-    static struct PkgRecipeRow
-    {
-        int recipeId;
-        string name;
-        string ver;
-        string revision;
-        string archiveName;
-        string description;
-
-        PackageRecipeResource toResource() const @safe
+        @OrderedCols
+        static struct PkgR
         {
-            return PackageRecipeResource(
-                name, ver, revision, recipeId, archiveName, description,
-            );
+            string name;
+            string description;
         }
-    }
 
-    PackageRecipeResource getLatestRecipe(GetPackageLatestRecipe req) @safe
-    {
-        return client.connect((scope DbConn db) {
-            const row = db.execRow!PkgRecipeRow(
-                `
-                    SELECT r.id, r.package_name, r.version, r.revision, a.name, r.description
-                    FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
-                    WHERE
-                        r.package_name = $1 AND
-                        r.version = $2
-                    ORDER BY r.created DESC
-                    LIMIT 1
-                `,
-                req.name, req.ver,
-            );
-            return row.toResource();
-        });
-    }
-
-    PackageRecipeResource getRecipe(GetPackageRecipe req) @safe
-    {
-        return client.connect((scope DbConn db) {
-            const row = db.execRow!PkgRecipeRow(
-                `
-                    SELECT r.id, r.package_name, r.version, r.revision, a.name, r.description
-                    FROM recipe AS r JOIN archive AS a ON a.id = r.archive_id
-                    WHERE
-                        r.package_name = $1 AND
-                        r.version = $2 AND
-                        r.revision = $3
-                `,
-                req.name, req.ver, req.revision,
-            );
-            return row.toResource();
-        });
-    }
-
-    PackageResource createIfNotExist(scope DbConn db, string name, string description, out string new_) @safe
-    {
-        auto prows = db.execRows!Row(
-            `SELECT name, description FROM package WHERE name = $1`, name
-        );
-        string[] vers;
-        if (prows.length == 0)
+        @OrderedCols
+        static struct RecR
         {
-            new_ = "package";
-
-            prows = db.execRows!Row(
-                `
-                    INSERT INTO package (name, description)
-                    VALUES ($1, $2)
-                    RETURNING name, description
-                `,
-                name, description
-            );
+            int id;
+            string ver;
+            string rev;
+            string archiveName;
         }
-        else
-        {
-            assert(prows.length == 1);
 
-            vers = db.execScalars!string(
+        return client.transac((scope DbConn db) {
+            // getting first the recipes, then the package because
+            // we can perform little work while the second request is flying.
+            // TODO: add pipeline mode in PGD to send both requests at once
+            const recRows = db.execRows!RecR(
                 `
-                    SELECT version FROM recipe WHERE package_name = $1
-                    GROUP BY version
-                    ORDER BY semver_order_str(version)
-                `, name
+                    SELECT r.id, r.version, r.revision, a.name
+                    FROM recipe r LEFT OUTER JOIN archive a ON r.archive_id = a.id
+                    WHERE package_name = $1
+                    ORDER BY semver_order_str(r.version) DESC, r.created DESC
+                `, req.name,
             );
-        }
-        return prows[0].toResource(vers);
+            db.send(
+                `SELECT name, description FROM package WHERE name = $1`, req.name
+            );
+
+            PackageVersionResource[] versions;
+            PackageRecipeResource[] recipes;
+            string lastVer;
+            foreach (rr; recRows)
+            {
+                if (lastVer && rr.ver != lastVer)
+                {
+                    versions ~= PackageVersionResource(lastVer, recipes);
+                    recipes = null;
+                }
+
+                recipes ~= PackageRecipeResource(
+                    rr.id, rr.rev, rr.archiveName,
+                );
+                lastVer = rr.ver;
+            }
+
+            if (recipes.length)
+                versions ~= PackageVersionResource(lastVer, recipes);
+
+            db.pollResult();
+            const pkgRow = db.getRow!PkgR();
+            return PackageResource(pkgRow.name, pkgRow.description, versions);
+        });
     }
 
     void search(scope HTTPServerRequest httpReq, scope HTTPServerResponse resp) @safe
@@ -250,10 +188,11 @@ class PackagesApi
         void writePkg(const ref R row)
         {
             output.write(
-                format!(`{"name":"%s","description":"%s","lastVersion":"%s","lastRecipeRev":"%s",`~
-                        `"numVersions":%s,"numRecipes":%s}`)(
-                    row.name, row.description, row.ver, row.revision, row.numVersions, row.numRecipes
-                )
+                format!(`{"name":"%s","description":"%s","lastVersion":"%s","lastRecipeRev":"%s",` ~
+                    `"numVersions":%s,"numRecipes":%s}`)(
+                    row.name, row.description, row.ver, row.revision, row.numVersions, row
+                    .numRecipes
+            )
             );
         }
 
@@ -363,6 +302,27 @@ version (unittest)
     }
 }
 
+@("/v1/packages/:name")
+unittest
+{
+    auto client = new DbClient(dbConnString(), 1);
+    scope (exit)
+        client.finish();
+
+    auto registry = TestRegistry(client);
+
+    auto api = buildTestPackagesApi(client);
+
+    auto res = api.get(GetPackage("libcurl"));
+    const expected1st = registry.recipes["libcurl/7.84.0/654321"];
+    res.name.should == "libcurl";
+    res.description.should == "The ubiquitous networking library";
+    res.versions.map!(v => v.ver).should == ["7.84.0", "7.68.0"];
+    res.versions[0].recipes.map!(r => r.revision).should == ["654321", "123456"];
+    res.versions[0].recipes[0].recipeId.should == expected1st.id;
+    res.versions[0].recipes[0].archiveName.should == "libcurl-7.84.0-654321.tar.xz";
+}
+
 @("/v1/packages (search)")
 unittest
 {
@@ -375,9 +335,7 @@ unittest
     scope (exit)
         client.finish();
 
-    auto registry = populateTestRegistry(client);
-    scope (success)
-        cleanTestRegistry(client);
+    auto registry = TestRegistry(client);
 
     auto api = buildTestPackagesApi(client);
 

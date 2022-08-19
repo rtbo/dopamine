@@ -7,6 +7,7 @@ version (unittest)
     import pgd.conn;
     import pgd.connstring;
 
+    import core.sync.mutex;
     import std.datetime;
     import std.format;
     import std.process;
@@ -21,6 +22,8 @@ version (unittest)
     {
         return environment.get("PGD_TEST_DB", "postgres:///dop-registry-test");
     }
+
+    shared Mutex registryMutex;
 
     shared static this()
     {
@@ -57,6 +60,8 @@ version (unittest)
             db.exec(import("2.semver.sql"));
             db.exec(import("v1.sql"));
         }
+
+        registryMutex = new shared Mutex();
     }
 
     struct TestUser
@@ -97,228 +102,228 @@ version (unittest)
         string license;
     }
 
+    struct RevInsert
+    {
+        string rev;
+        string createdBy;
+        Date created;
+        uint counter;
+    }
+
+    struct VerInsert
+    {
+        string ver;
+        RevInsert[] revs;
+    }
+
+    struct PkgInsert
+    {
+        string name;
+        string description;
+        string license;
+        VerInsert[] versions;
+    }
+
+    const registryInserts = [
+        PkgInsert(
+            "pkga", "The Package A", "MIT", [
+                VerInsert(
+                    "0.1.0", [
+                        RevInsert("123456", "one", Date(2020, 2, 12), 1250),
+                    ]
+                ),
+                VerInsert(
+                    "0.2.0", [
+                        RevInsert("123456", "one", Date(2020, 4, 12), 123),
+                        RevInsert("654321", "two", Date(2021, 3, 1), 1520),
+                    ]
+                ),
+            ]
+        ),
+        PkgInsert(
+            "libincredible", "An incredible library", "Boost", [
+                VerInsert(
+                    "1.0.0", [
+                        RevInsert("123456", "one", Date(2021, 2, 12), 50_210),
+                        RevInsert("654321", "one", Date(2022, 5, 18), 1203),
+                    ]
+                ),
+                VerInsert(
+                    "1.2.0-beta.0", [
+                        RevInsert("123456", "one", Date(2022, 3, 12), 123),
+                    ]
+                ),
+                VerInsert(
+                    "1.2.0-beta.1", [
+                        RevInsert("123456", "one", Date(2022, 3, 18), 1233),
+                    ]
+                ),
+                VerInsert(
+                    "1.2.0", [
+                        RevInsert("123456", "one", Date(2022, 4, 12), 798),
+                        RevInsert("654321", "one", Date(2022, 5, 1), 12_450),
+                    ]
+                ),
+            ]
+        ),
+        PkgInsert(
+            "uselesslib", "A useless library", "Boost", [
+                VerInsert(
+                    "0.0.1", [
+                        RevInsert("123456", "three", Date(2021, 2, 12), 12),
+                        RevInsert("654321", "three", Date(2022, 5, 18), 21),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2-beta.1", [
+                        RevInsert("123456", "three", Date(2022, 3, 12), 13),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2-beta.2", [
+                        RevInsert("123456", "three", Date(2022, 3, 18), 2),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2-beta.3", [
+                        RevInsert("123456", "three", Date(2022, 3, 18), 3),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2", [
+                        RevInsert("abcdef", "three", Date(2022, 3, 18), 2),
+                        RevInsert("123456", "three", Date(2022, 3, 19), 3),
+                        RevInsert("654321", "three", Date(2022, 3, 20), 1),
+                        RevInsert("fedcba", "three", Date(2022, 3, 21), 21),
+                    ]
+                ),
+            ]
+        ),
+        PkgInsert(
+            "pkgb", "The Package B", "MIT", [
+                VerInsert(
+                    "0.1.0", [
+                        RevInsert("123456", "one", Date(2020, 2, 12), 450),
+                    ]
+                ),
+                VerInsert(
+                    "0.2.0", [
+                        RevInsert("123456", "one", Date(2020, 4, 12), 38),
+                        RevInsert("654321", "two", Date(2021, 3, 1), 512),
+                    ]
+                ),
+            ]
+        ),
+        PkgInsert(
+            "http-over-ftp", "The nonsense networking library", "Boost", [
+                VerInsert(
+                    "0.0.1", [
+                        RevInsert("123456", "three", Date(2021, 2, 12), 0),
+                        RevInsert("654321", "three", Date(2022, 5, 18), 1),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2-beta.1", [
+                        RevInsert("123456", "three", Date(2022, 3, 12), 2),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2-beta.2", [
+                        RevInsert("123456", "three", Date(2022, 3, 18), 1),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2-beta.3", [
+                        RevInsert("123456", "three", Date(2022, 3, 18), 1),
+                    ]
+                ),
+                VerInsert(
+                    "0.0.2", [
+                        RevInsert("abcdef", "three", Date(2022, 3, 18), 1),
+                        RevInsert("123456", "three", Date(2022, 3, 19), 0),
+                        RevInsert("654321", "three", Date(2022, 3, 20), 0),
+                        RevInsert("fedcba", "three", Date(2022, 3, 21), 5),
+                    ]
+                ),
+            ]
+        ),
+        PkgInsert(
+            "libcurl", "The ubiquitous networking library", "Boost", [
+                VerInsert(
+                    "7.68.0", [
+                        RevInsert("123456", "one", Date(2021, 2, 12), 798),
+                        RevInsert("654321", "one", Date(2021, 5, 18), 1212),
+                    ]
+                ),
+                VerInsert(
+                    "7.84.0", [
+                        RevInsert("123456", "one", Date(2022, 3, 12), 109),
+                        RevInsert("654321", "two", Date(2022, 5, 18), 12_493),
+                    ]
+                ),
+            ]
+        ),
+    ];
+
     struct TestRegistry
     {
+        DbClient client;
         TestUser[string] users;
         TestPkg[string] pkgs;
         TestArchive[string] archives;
         TestRecipe[string] recipes;
-    }
 
-    TestRegistry populateTestRegistry(DbClient client)
-    {
-        static struct RevInsert
+        this(DbClient client)
         {
-            string rev;
-            string createdBy;
-            Date created;
-            uint counter;
-        }
+            this.client = client;
+            registryMutex.lock();
 
-        static struct VerInsert
-        {
-            string ver;
-            RevInsert[] revs;
-        }
-
-        static struct PkgInsert
-        {
-            string name;
-            string description;
-            string license;
-            VerInsert[] versions;
-        }
-
-        const inserts = [
-            PkgInsert(
-                "pkga", "The Package A", "MIT", [
-                    VerInsert(
-                        "0.1.0", [
-                            RevInsert("123456", "one", Date(2020, 2, 12), 1250),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.2.0", [
-                            RevInsert("123456", "one", Date(2020, 4, 12), 123),
-                            RevInsert("654321", "two", Date(2021, 3, 1), 1520),
-                        ]
-                    ),
-                ]
-            ),
-            PkgInsert(
-                "libincredible", "An incredible library", "Boost", [
-                    VerInsert(
-                        "1.0.0", [
-                            RevInsert("123456", "one", Date(2021, 2, 12), 50_210),
-                            RevInsert("654321", "one", Date(2022, 5, 18), 1203),
-                        ]
-                    ),
-                    VerInsert(
-                        "1.2.0-beta.0", [
-                            RevInsert("123456", "one", Date(2022, 3, 12), 123),
-                        ]
-                    ),
-                    VerInsert(
-                        "1.2.0-beta.1", [
-                            RevInsert("123456", "one", Date(2022, 3, 18), 1233),
-                        ]
-                    ),
-                    VerInsert(
-                        "1.2.0", [
-                            RevInsert("123456", "one", Date(2022, 4, 12), 798),
-                            RevInsert("654321", "one", Date(2022, 5, 1), 12_450),
-                        ]
-                    ),
-                ]
-            ),
-            PkgInsert(
-                "uselesslib", "A useless library", "Boost", [
-                    VerInsert(
-                        "0.0.1", [
-                            RevInsert("123456", "three", Date(2021, 2, 12), 12),
-                            RevInsert("654321", "three", Date(2022, 5, 18), 21),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2-beta.1", [
-                            RevInsert("123456", "three", Date(2022, 3, 12), 13),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2-beta.2", [
-                            RevInsert("123456", "three", Date(2022, 3, 18), 2),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2-beta.3", [
-                            RevInsert("123456", "three", Date(2022, 3, 18), 3),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2", [
-                            RevInsert("abcdef", "three", Date(2022, 3, 18), 2),
-                            RevInsert("123456", "three", Date(2022, 3, 19), 3),
-                            RevInsert("654321", "three", Date(2022, 3, 20), 1),
-                            RevInsert("fedcba", "three", Date(2022, 3, 21), 21),
-                        ]
-                    ),
-                ]
-            ),
-            PkgInsert(
-                "pkgb", "The Package B", "MIT", [
-                    VerInsert(
-                        "0.1.0", [
-                            RevInsert("123456", "one", Date(2020, 2, 12), 450),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.2.0", [
-                            RevInsert("123456", "one", Date(2020, 4, 12), 38),
-                            RevInsert("654321", "two", Date(2021, 3, 1), 512),
-                        ]
-                    ),
-                ]
-            ),
-            PkgInsert(
-                "http-over-ftp", "The nonsense networking library", "Boost", [
-                    VerInsert(
-                        "0.0.1", [
-                            RevInsert("123456", "three", Date(2021, 2, 12), 0),
-                            RevInsert("654321", "three", Date(2022, 5, 18), 1),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2-beta.1", [
-                            RevInsert("123456", "three", Date(2022, 3, 12), 2),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2-beta.2", [
-                            RevInsert("123456", "three", Date(2022, 3, 18), 1),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2-beta.3", [
-                            RevInsert("123456", "three", Date(2022, 3, 18), 1),
-                        ]
-                    ),
-                    VerInsert(
-                        "0.0.2", [
-                            RevInsert("abcdef", "three", Date(2022, 3, 18), 1),
-                            RevInsert("123456", "three", Date(2022, 3, 19), 0),
-                            RevInsert("654321", "three", Date(2022, 3, 20), 0),
-                            RevInsert("fedcba", "three", Date(2022, 3, 21), 5),
-                        ]
-                    ),
-                ]
-            ),
-            PkgInsert(
-                "libcurl", "The ubiquitous networking library", "Boost", [
-                    VerInsert(
-                        "7.68.0", [
-                            RevInsert("123456", "one", Date(2021, 2, 12), 798),
-                            RevInsert("654321", "one", Date(2021, 5, 18), 1212),
-                        ]
-                    ),
-                    VerInsert(
-                        "7.84.0", [
-                            RevInsert("123456", "one", Date(2022, 3, 12), 109),
-                            RevInsert("654321", "two", Date(2022, 5, 18), 12_493),
-                        ]
-                    ),
-                ]
-            ),
-        ];
-
-        return client.transac((scope db) {
-
-            TestRegistry registry;
-
-            foreach (pkg; inserts)
-            {
-                registry.pkgs[pkg.name] = db.execRow!TestPkg(
-                    `
-                        INSERT INTO package (name, description) VALUES ($1, $2)
-                        RETURNING name, description
-                    `,
-                    pkg.name, pkg.description
-                );
-
-                foreach (ver; pkg.versions)
+            client.transac((scope db) {
+                foreach (pkg; registryInserts)
                 {
-                    foreach (rev; ver.revs)
+                    this.pkgs[pkg.name] = db.execRow!TestPkg(
+                        `
+                            INSERT INTO package (name, description) VALUES ($1, $2)
+                            RETURNING name, description
+                        `,
+                        pkg.name, pkg.description
+                    );
+
+                    foreach (ver; pkg.versions)
                     {
-                        if (!(rev.createdBy in registry.users))
+                        foreach (rev; ver.revs)
                         {
-                            const email = format!`user.%s@dop.test`(rev.createdBy);
-                            const name = format!`User %s`(rev.createdBy.capitalize());
-                            registry.users[rev.createdBy] = db.execRow!TestUser(
-                                `
+                            if (!(rev.createdBy in this.users))
+                            {
+                                const email = format!`user.%s@dop.test`(rev.createdBy);
+                                const name = format!`User %s`(rev.createdBy.capitalize());
+                                this.users[rev.createdBy] = db.execRow!TestUser(
+                                    `
                                     INSERT INTO "user"(email, name) VALUES($1, $2)
                                     RETURNING id, email, name
                                 `, email, name
-                            );
-                        }
+                                );
+                            }
 
-                        const key = format!"%s/%s/%s"(pkg.name, ver.ver, rev.rev);
-                        const createdBy = registry.users[rev.createdBy].id;
-                        const created = SysTime(rev.created, UTC());
-                        const upstreamUrl = format!"https://%s.test"(pkg.name);
-                        const archiveName = format!"%s-%s-%s.tar.xz"(pkg.name, ver.ver, rev.rev);
-                        const archiveData = cast(immutable(ubyte)[]) archiveName;
+                            const key = format!"%s/%s/%s"(pkg.name, ver.ver, rev.rev);
+                            const createdBy = this.users[rev.createdBy].id;
+                            const created = SysTime(rev.created, UTC());
+                            const upstreamUrl = format!"https://%s.test"(pkg.name);
+                            const archiveName = format!"%s-%s-%s.tar.xz"(pkg.name, ver.ver, rev.rev);
+                            const archiveData = cast(immutable(ubyte)[]) archiveName;
 
-                        registry.archives[archiveName] = db.execRow!TestArchive(
-                            `
+                            this.archives[archiveName] = db.execRow!TestArchive(
+                                `
                                 INSERT INTO archive (name, created, created_by, counter, upload_done, data)
                                 VALUES($1, $2, $3, $4, TRUE, $5)
                                 RETURNING id, name, created, created_by, data
                             `, archiveName, created, createdBy, rev.counter, archiveData
-                        );
+                            );
 
-                        const archiveId = registry.archives[archiveName].id;
+                            const archiveId = this.archives[archiveName].id;
 
-                        registry.recipes[key] = db.execRow!TestRecipe(
-                            `
+                            this.recipes[key] = db.execRow!TestRecipe(
+                                `
                                 INSERT INTO recipe (
                                     package_name, created_by, created, version, revision, archive_id,
                                     description, upstream_url, license
@@ -329,22 +334,24 @@ version (unittest)
                                     package_name, created_by, created, version, revision, archive_id,
                                     description, upstream_url, license
                             `, pkg.name, createdBy, created, ver.ver, rev.rev, archiveId, pkg.description,
-                            upstreamUrl, pkg.license
-                        );
+                                upstreamUrl, pkg.license
+                            );
+                        }
                     }
                 }
-            }
-            return registry;
-        });
-    }
+            });
+        }
 
-    void cleanTestRegistry(DbClient client)
-    {
-        client.transac((scope db) {
-            db.exec(`DELETE FROM "recipe"`);
-            db.exec(`DELETE FROM "package"`);
-            db.exec(`DELETE FROM "archive"`);
-            db.exec(`DELETE FROM "user"`);
-        });
+        ~this()
+        {
+            client.transac((scope db) {
+                db.exec(`DELETE FROM "recipe"`);
+                db.exec(`DELETE FROM "package"`);
+                db.exec(`DELETE FROM "archive"`);
+                db.exec(`DELETE FROM "user"`);
+            });
+
+            registryMutex.unlock();
+        }
     }
 }

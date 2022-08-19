@@ -236,20 +236,19 @@ int publishMain(string[] args)
 
     NewRecipeResp newRecResp = resp.payload;
 
-    const pkg = newRecResp.pkg;
     const rec = newRecResp.recipe;
     const sha256 = Base64.encode(dig.finish()[]).idup;
 
     switch (newRecResp.new_)
     {
         case "package":
-            logInfo("Publish: New package - %s/%s", info(pkg.name), info(rec.ver));
+            logInfo("Publish: New package - %s/%s", info(rec.name), info(rec.ver));
             break;
         case "version":
-            logInfo("Publish: Adding version %s to package %s", info(rec.ver), info(pkg.name));
+            logInfo("Publish: Adding version %s to package %s", info(rec.ver), info(rec.name));
             break;
         case "":
-            logInfo("Publish: Adding new revision to %s/%s", info(pkg.name), info(rec.ver));
+            logInfo("Publish: Adding new revision to %s/%s", info(rec.name), info(rec.ver));
             break;
         default:
             debug assert(false, "unknown new_ field value");
@@ -259,7 +258,7 @@ int publishMain(string[] args)
     logInfo("Uploading archive and checking archive...");
     registry.uploadArchive(newRecResp.uploadBearerToken, archivePath, sha256);
 
-    logInfo("Publish: %s - %s/%s/%s", success("OK"), info(pkg.name), info(rec.ver), rec
+    logInfo("Publish: %s - %s/%s/%s", success("OK"), info(rec.name), info(rec.ver), rec
             .revision);
     return 0;
 }

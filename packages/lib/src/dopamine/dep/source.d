@@ -251,22 +251,20 @@ final class DopRegistryDepSource : DepSource
     Semver[] depAvailVersions(string name) @safe
     {
         auto pack = packagePayload(name);
-        return pack.versions.map!(v => Semver(v)).array;
+        return pack.versions.map!(v => Semver(v.ver)).array;
     }
 
     bool hasPackage(string name, Semver ver, string revision) @safe
     {
+        auto pack = packagePayload(name);
+        auto packVer = pack.versions.find!(v => v.ver == ver.toString());
+        if (!packVer.length)
+            return false;
+
         if (revision)
-        {
-            auto req = GetPackageRecipe(name, ver.toString(), revision);
-            auto resp = _registry.sendRequest(req);
-            return resp.code < 400;
-        }
-        else {
-            auto req = GetPackageLatestRecipe(name, ver.toString());
-            auto resp = _registry.sendRequest(req);
-            return resp.code < 400;
-        }
+            return (packVer[0].recipes.find!(r => r.revision == revision)).length != 0;
+        else
+            return true;
     }
 
     RecipeDir depRecipe(string name, Semver ver, string revision = null) @system

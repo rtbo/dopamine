@@ -680,15 +680,6 @@ unittest
     requestResource(GetPackage("pkga"))
         .shouldEqual(apiPrefix ~ "/v1/packages/pkga");
 
-    requestResource(GetPackageLatestRecipe("pkga", "1.0.0"))
-        .shouldEqual(apiPrefix ~ "/v1/packages/pkga/1.0.0/latest");
-
-    requestResource(GetPackageRecipe("pkga", "1.0.0", "somerev"))
-        .shouldEqual(apiPrefix ~ "/v1/packages/pkga/1.0.0/somerev");
-
-    requestResource(GetPackageRecipe("pkga", "1.0.0", null))
-        .shouldThrow();
-
-    requestResource(SearchPackages("pat", false, true, false, true, true, 12))
-        .shouldEqual(apiPrefix ~ "/v1/packages?q=pat&cs&extended&latestOnly&limit=12");
+    requestResource(SearchPackages("pat", false, true, false, true, 0, 12))
+        .shouldEqual(apiPrefix ~ "/v1/packages?q=pat&cs&extended&limit=12");
 }
