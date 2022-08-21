@@ -5,14 +5,11 @@ import { Provider, OAuthResult } from "./oauth";
 
 const hostUrl = import.meta.env.VITE_API_HOST;
 
-function apiPrefix(): string
-{
+function apiPrefix(): string {
     const port = window.location.port;
-    const thisUrl = `${window.location.protocol}//${window.location.hostname}${port ? ':' : ''}${port}`
-    if (thisUrl === hostUrl)
-        return '/api'
-    else
-        return ''
+    const thisUrl = `${window.location.protocol}//${window.location.hostname}${port ? ":" : ""}${port}`;
+    if (thisUrl === hostUrl) return "/api";
+    else return "";
 }
 
 const prefix = apiPrefix();
@@ -61,6 +58,9 @@ export interface AuthResponse {
     idToken: string;
     refreshToken: string;
     refreshTokenExpJs: number;
+    email: string;
+    name?: string;
+    avatarUrl?: string;
 }
 
 export function postAuthToken(data: { refreshToken: string }): Promise<AuthResponse> {
@@ -114,4 +114,20 @@ export function delAuthCliTokens(idToken: string, tokenId: number): Promise<Elid
 
 export function useAuthCliTokens(idToken: MaybeRef<string>): UseFetchReturn<ElidedCliToken[]> {
     return useAuthApiReq<ElidedCliToken[]>("auth/cli-tokens", idToken);
+}
+
+interface User {
+    pseudo: string;
+    email?: string;
+    name?: string;
+    avatarUrl?: string;
+}
+
+export function getUser(idToken: string | null, pseudo: string) : Promise<User> {
+    const headers = idToken ? authHeader(idToken) : {}
+    return api
+        .get(`auth/cli-tokens`, {
+            headers,
+        })
+        .then((resp) => resp.data);
 }

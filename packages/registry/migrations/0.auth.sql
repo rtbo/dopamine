@@ -9,6 +9,9 @@ CREATE TABLE "user" (
     "name"          text,
     "avatar_url"    text,
 
+    -- privacy flags: 1: email private, 2: name private, 4: avatar_url private
+    "privacy_flags" smallint NOT NULL DEFAULT 3,
+
     UNIQUE("pseudo"),
     UNIQUE("email")
 );

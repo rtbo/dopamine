@@ -7,8 +7,12 @@ import std.traits : hasUDA, getUDAs;
 /// HTTP method for API requests
 enum Method
 {
+    /// GET method. Request members compose the resource URL.
     GET,
+    /// POST method. Request members compose the request body, and the URL is static
     POST,
+    /// PATCH method. Request 'patch' member is the JSON body and other members compose the resource URL.
+    PATCH,
 }
 
 /// Decorator for a HTTP request type
@@ -18,8 +22,13 @@ struct Request
     string resource;
 }
 
-/// Decorator for a request type that requires authentification
+/// Decorator for a request type that requires authentication (403 is replied otherwise)
 enum RequiresAuth;
+
+/// Decorator for a request type that need authentication
+/// A partial response can be supplied if no authentication is supplied
+/// (e.g. user information, recipe posted by user etc.)
+enum UsesAuth;
 
 /// Decorator for request query parameter fields.
 /// Query parameters are stated in the URL after a '?'.
@@ -39,6 +48,9 @@ alias Name = vibe.data.serialization.name;
 
 /// A Decorator to make a field optional during deserialization
 alias Optional = vibe.data.serialization.optional;
+
+/// A Decorator to make a field optional during deserialization
+alias EmbedNullable = vibe.data.serialization.embedNullable;
 
 /// Decorator to specify the type of response expected by a request.
 /// The response is encoded in Json.

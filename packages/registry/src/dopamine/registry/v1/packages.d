@@ -289,20 +289,7 @@ unittest
     reversed.shouldEqual(retro(versions));
 }
 
-version (unittest)
-{
-    PackagesApi buildTestPackagesApi(DbClient client)
-    {
-        import vibe.http.router;
-
-        auto router = new URLRouter();
-        auto api = new PackagesApi(client);
-        api.setupRoutes(router);
-        return api;
-    }
-}
-
-@("/v1/packages/:name")
+@("GET /v1/packages/:name")
 unittest
 {
     auto client = new DbClient(dbConnString(), 1);
@@ -311,7 +298,7 @@ unittest
 
     auto registry = TestRegistry(client);
 
-    auto api = buildTestPackagesApi(client);
+    auto api = new PackagesApi(client);
 
     auto res = api.get(GetPackage("libcurl"));
     const expected1st = registry.recipes["libcurl/7.84.0/654321"];
@@ -323,7 +310,7 @@ unittest
     res.versions[0].recipes[0].archiveName.should == "libcurl-7.84.0-654321.tar.xz";
 }
 
-@("/v1/packages (search)")
+@("GET /v1/packages (search)")
 unittest
 {
     import vibe.data.json;
@@ -337,7 +324,7 @@ unittest
 
     auto registry = TestRegistry(client);
 
-    auto api = buildTestPackagesApi(client);
+    auto api = new PackagesApi(client);
 
     PackageSearchEntry[] performSearch(string query)
     {
