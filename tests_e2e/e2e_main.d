@@ -62,10 +62,8 @@ int main(string[] args)
         stderr.writeln(ex.msg);
         if (environment.get("E2E_STACKTRACE"))
         {
-            stderr.writeln(
-                "Driver stack trace:");
-            stderr.writeln(
-                ex.info);
+            stderr.writeln("Driver stack trace:");
+            stderr.writeln(ex.info);
         }
         return 1;
     }
