@@ -473,6 +473,36 @@ unittest
     assert(arr1Bis.valid && arr1Bis.value == "HELLO");
 }
 
+@("mayBe with range and string and std.range.primitives")
+unittest
+{
+    import std.algorithm;
+    import std.string;
+    import std.range.primitives;
+
+    MayBeText mb;
+    MayBeText mbs = "hello";
+    string[] arr0 = [];
+    string[] arr1 = ["hello"];
+    string[] arr2 = ["hello", "hollo"];
+
+    MayBeText mbBis = mb.map!(s => s.toUpper())
+        .mayBeText();
+    MayBeText mbsBis = mbs.map!(s => s.toUpper())
+        .mayBeText();
+    MayBeText arr0Bis = arr0.map!(s => s.toUpper())
+        .mayBeText();
+    MayBeText arr1Bis = arr1.map!(s => s.toUpper())
+        .mayBeText();
+    assertThrown(arr2.map!(s => s.toUpper())
+            .mayBeText());
+
+    assert(!mbBis.valid);
+    assert(mbsBis.valid && mbsBis.value == "HELLO");
+    assert(!arr0Bis.valid);
+    assert(arr1Bis.valid && arr1Bis.value == "HELLO");
+}
+
 /// Type suitable to map to Postgres nullable text column
 alias MayBeText = MayBe!(string, null);
 
