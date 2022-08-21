@@ -47,6 +47,10 @@ dop_lib = library('dopamine', dop_conf, dop_src,
     d_import_dirs: dop_imp,
 )
 
+install_data('src/dopamine/lua/dop.lua',
+    install_dir: 'share/dopamine',
+)
+
 dop_dep = declare_dependency(
     include_directories: dop_inc,
     dependencies: dop_deps,
