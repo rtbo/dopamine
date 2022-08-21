@@ -30,25 +30,28 @@ import std.traits;
 
 alias Name = vibe.data.serialization.name;
 
-@OrderedCols
 struct UserInfo
 {
     int id;
-    string email;
-    MayBeText name;
-    MayBeText avatarUrl;
+    string pseudo;
 }
 
-private alias UserRow = UserInfo;
+@OrderedCols
+    struct UserRow
+    {
+        int id;
+        string pseudo;
+        string email;
+        MayBeText name;
+        MayBeText avatarUrl;
+    }
 
 struct JwtPayload
 {
     string iss;
     int sub;
     long exp;
-    string email;
-    string name;
-    string avatarUrl;
+    string pseudo;
 }
 
 enum Provider
@@ -157,16 +160,37 @@ class AuthApi
         const refreshTokenExp = Clock.currTime + refreshTokenDuration;
 
         const row = client.transac((scope DbConn db) {
-            const userRow = db.execRow!UserRow(`
-                INSERT INTO "user" (email, name, avatar_url)
-                VALUES ($1, $2, $3)
-                ON CONFLICT(email) DO
-                UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
-                WHERE "user".email = EXCLUDED.email
-                RETURNING id, email, name, avatar_url
-            `, userResp.email, userResp.name, userResp.avatarUrl);
 
-            refreshToken = db.execScalar!string(`
+            // get a unique pseudo if already used by another user
+            string pseudoBase = userResp.pseudo;
+            int pseudoN = 2;
+            while(true)
+            {
+                const exists = db.execScalar!bool(
+                    `
+                        SELECT count(pseudo) <> 0 FROM "user"
+                        WHERE email <> $1 AND pseudo = $2
+                    `,
+                    userResp.email, userResp.pseudo
+                );
+                if (exists)
+                    userResp.pseudo = format!"%s%s"(pseudoBase, pseudoN++);
+                else
+                    break;
+            }
+
+            // insert new user if email is not in database
+            const userRow = db.execRow!UserRow(
+                `
+                    INSERT INTO "user" (pseudo, email, name, avatar_url)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT(email) DO NOTHING
+                    RETURNING id, pseudo, email, name, avatar_url
+                `, userResp.pseudo, userResp.email, userResp.name, userResp.avatarUrl
+            );
+
+            refreshToken = db.execScalar!string(
+                `
                     INSERT INTO refresh_token (token, user_id, expiration, cli)
                     VALUES (GEN_RANDOM_BYTES($1), $2, $3, FALSE)
                     RETURNING ENCODE(token, 'base64')
@@ -181,8 +205,14 @@ class AuthApi
         auto json = Json([
             "idToken": Json(idToken.toString()),
             "refreshToken": Json(refreshToken),
-            "refreshTokenExpJs": Json(refreshTokenExp.toUnixTime() * 1000)
+            "refreshTokenExpJs": Json(refreshTokenExp.toUnixTime() * 1000),
+            "email": Json(row.email),
         ]);
+        if (row.name.valid)
+            json["name"] = row.name.value;
+        if (row.avatarUrl.valid)
+            json["avatarUrl"] = row.avatarUrl.value;
+
         resp.writeJsonBody(json);
     }
 
@@ -311,7 +341,7 @@ class AuthApi
             // FIXME: should we here re-authenticate to provider?
 
             const userRow = db.execRow!UserRow(
-                `SELECT id, email, name, avatar_url FROM "user" WHERE id = $1`,
+                `SELECT id, pseudo, email, name, avatar_url FROM "user" WHERE id = $1`,
                 row.userId
             );
 
@@ -331,11 +361,15 @@ class AuthApi
             auto json = Json([
                 "idToken": Json(idToken.toString()),
                 "refreshToken": Json(newToken),
+                "email": Json(userRow.email),
             ]);
 
-            refreshTokenExp.each!((exp) {
-                json["refreshTokenExpJs"] = exp.toUnixTime() * 1000;
-            });
+            if (refreshTokenExp.valid)
+                json["refreshTokenExpJs"] = refreshTokenExp.value.toUnixTime() * 1000;
+            if (userRow.name.valid)
+                json["name"] = userRow.name.value;
+            if (userRow.avatarUrl.valid)
+                json["avatarUrl"] = userRow.avatarUrl.value;
 
             resp.writeJsonBody(json);
         });
@@ -455,9 +489,7 @@ private Json idPayload(UserRow row)
         Config.get.registryHostname,
         row.id,
         toJwtTime(Clock.currTime + idTokenDuration),
-        row.email,
-        row.name.valueOr(null),
-        row.avatarUrl.valueOr(null),
+        row.pseudo,
     );
     return serializeToJson(payload);
 }
@@ -465,6 +497,7 @@ private Json idPayload(UserRow row)
 private struct UserResp
 {
     string email;
+    string pseudo;
     string name;
     string avatarUrl;
 }
@@ -472,6 +505,7 @@ private struct UserResp
 private struct GithubUserResp
 {
     string email;
+    string login;
     string name;
     @Name("avatar_url") string avatarUrl;
 }
@@ -492,12 +526,13 @@ private UserResp getGithubUser(string accessToken)
                 resp.statusCode < 400, 403,
                 "Could not access user from github API"
             );
-            deserializeJson(ghUser, resp.readJson());
+            auto json = resp.readJson();
+            deserializeJson(ghUser, json);
         }
     );
     // dfmt on
 
-    return UserResp(ghUser.email, ghUser.name, ghUser.avatarUrl);
+    return UserResp(ghUser.email, ghUser.login, ghUser.name, ghUser.avatarUrl);
 }
 
 private struct GoogleUserPayload
@@ -513,7 +548,11 @@ private UserResp getGoogleUser(string idToken)
     GoogleUserPayload payload;
     deserializeJson(payload, jwt.payload);
 
-    return UserResp(payload.email, payload.name, payload.picture);
+    const at = payload.email.indexOf('@');
+    enforceStatus(at > 0, 400, "invalid email address: " ~ payload.email);
+    string pseudo = payload.email[0 .. at];
+
+    return UserResp(payload.email, pseudo, payload.name, payload.picture);
 }
 
 private Provider toProvider(string provider)
@@ -535,8 +574,16 @@ UserInfo enforceUserAuth(scope HTTPServerRequest req) @safe
 
     return UserInfo(
         payload["sub"].get!int,
-        payload["email"].get!string,
-        payload["name"].opt!string.mayBeText(),
-        payload["avatarUrl"].opt!string.mayBeText(),
+        payload["pseudo"].get!string,
     );
+}
+
+MayBe!UserInfo checkUserAuth(scope HTTPServerRequest req) @safe
+{
+    auto payload = checkAuth(req);
+
+    return payload.map!(p => UserInfo(
+        p["sub"].get!int,
+        p["pseudo"].get!string,
+    )).mayBe();
 }

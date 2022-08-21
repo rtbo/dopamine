@@ -1,18 +1,17 @@
 import { defineStore } from "pinia";
 import jwtDecode from "jwt-decode";
 import { OAuthResult } from "../model/oauth";
-import { postAuthToken, postOAuth } from "../model/api";
+import { getUser, postAuthToken, postOAuth } from "../model/api";
 
 interface JwtPayload {
     iss: string;
     sub: number;
     exp: number;
-    email: string;
-    name: string;
-    avatarUrl: string;
+    pseudo: string;
 }
 
 interface PersistentAuthState {
+    pseudo: string;
     email: string;
     name: string;
     avatarUrl: string;
@@ -23,6 +22,7 @@ interface PersistentAuthState {
 export const useAuthStore = defineStore("auth", {
     state: () => {
         return {
+            pseudo: "",
             email: "",
             name: "",
             avatarUrl: "",
@@ -50,12 +50,13 @@ export const useAuthStore = defineStore("auth", {
         async connect(oauth: OAuthResult) {
             try {
                 this.loading = true;
-                const { idToken, refreshToken, refreshTokenExpJs } = await postOAuth(oauth);
+                const { idToken, refreshToken, refreshTokenExpJs, email, name, avatarUrl } = await postOAuth(oauth);
                 const idPayload = jwtDecode<JwtPayload>(idToken);
                 const persistentState = {
-                    email: idPayload.email,
-                    name: idPayload.name,
-                    avatarUrl: idPayload.avatarUrl,
+                    pseudo: idPayload.pseudo,
+                    email,
+                    name: name || "",
+                    avatarUrl: avatarUrl || "",
                     refreshToken,
                     refreshTokenExp: refreshTokenExpJs,
                 };
@@ -92,15 +93,15 @@ export const useAuthStore = defineStore("auth", {
             }
             try {
                 this.loading = true;
-                const { idToken, refreshToken, refreshTokenExpJs } = await postAuthToken({
+                const { idToken, refreshToken, refreshTokenExpJs, email, name, avatarUrl } = await postAuthToken({
                     refreshToken: this.refreshToken,
                 });
-
                 const idPayload = jwtDecode<JwtPayload>(idToken);
                 const persistentState = {
-                    email: idPayload.email,
-                    name: idPayload.name,
-                    avatarUrl: idPayload.avatarUrl,
+                    pseudo: idPayload.pseudo,
+                    email,
+                    name: name || "",
+                    avatarUrl: avatarUrl || "",
                     refreshToken,
                     refreshTokenExp: refreshTokenExpJs,
                 };

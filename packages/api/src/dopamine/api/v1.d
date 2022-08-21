@@ -2,7 +2,91 @@ module dopamine.api.v1;
 
 import dopamine.api.attrs;
 
+import vibe.data.json;
+
 import std.datetime.systime;
+import std.typecons;
+
+@safe:
+
+/+ users API +/
+
+struct UserResource
+{
+    /// User pseudo
+    string pseudo;
+
+    /// User private info.
+    /// Only returned if allowed by the user privacy settings.
+    @Optional string email;
+    /// ditto
+    @Optional string name;
+    /// ditto
+    @Optional string avatarUrl;
+
+    /// Privacy flags only returned for the authenticated user
+    @Optional PrivacyFlags privacyFlags;
+}
+
+enum PrivacyFlags
+{
+    none = 0,
+    email = 1,
+    name = 2,
+    avatarUrl = 4,
+}
+
+@property bool emailPrivate(PrivacyFlags pf)
+{
+    return (pf & PrivacyFlags.email) == PrivacyFlags.email;
+}
+
+@property bool namePrivate(PrivacyFlags pf)
+{
+    return (pf & PrivacyFlags.name) == PrivacyFlags.name;
+}
+
+@property bool avatarUrlPrivate(PrivacyFlags pf)
+{
+    return (pf & PrivacyFlags.avatarUrl) == PrivacyFlags.avatarUrl;
+}
+
+struct UserPatch
+{
+    @EmbedNullable
+    Nullable!string pseudo;
+
+    @EmbedNullable
+    Nullable!string name;
+
+    @EmbedNullable
+    Nullable!string avatarUrl;
+
+    @EmbedNullable
+    Nullable!PrivacyFlags privacyFlags;
+}
+
+/// Get user information.
+/// If authentication is supplied, a user can retrieve its own private info.
+/// Otherwise, returned private info depends on the user privacy settings
+@Request(Method.GET, "/v1/users/:pseudo")
+@UsesAuth
+@Response!UserResource
+struct GetUser
+{
+    string pseudo;
+}
+
+/// Change user info
+@Request(Method.PATCH, "/v1/users/:pseudo")
+@RequiresAuth
+@Response!UserResource
+struct PatchUser
+{
+    string pseudo;
+    UserPatch patch;
+}
+
 
 /+ packages API +/
 

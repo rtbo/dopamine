@@ -3,6 +3,7 @@ module dopamine.registry.test;
 version (unittest)
 {
     import dopamine.registry.db;
+    import dopamine.api.v1;
 
     import pgd.conn;
     import pgd.connstring;
@@ -64,11 +65,14 @@ version (unittest)
         registryMutex = new shared Mutex();
     }
 
+    @OrderedCols
     struct TestUser
     {
         int id;
+        string pseudo;
         string email;
         string name;
+        short privacyFlags;
     }
 
     struct TestPkg
@@ -276,7 +280,10 @@ version (unittest)
         this(DbClient client)
         {
             this.client = client;
+
             registryMutex.lock();
+            scope (failure)
+                registryMutex.unlock();
 
             client.transac((scope db) {
                 foreach (pkg; registryInserts)
@@ -299,9 +306,9 @@ version (unittest)
                                 const name = format!`User %s`(rev.createdBy.capitalize());
                                 this.users[rev.createdBy] = db.execRow!TestUser(
                                     `
-                                    INSERT INTO "user"(email, name) VALUES($1, $2)
-                                    RETURNING id, email, name
-                                `, email, name
+                                    INSERT INTO "user"(pseudo, email, name) VALUES($1, $2, $3)
+                                    RETURNING id, pseudo, email, name, privacy_flags
+                                `, rev.createdBy, email, name
                                 );
                             }
 
@@ -342,16 +349,38 @@ version (unittest)
             });
         }
 
+        @disable this(this);
+
         ~this()
         {
+            scope (exit)
+                registryMutex.unlock();
+
             client.transac((scope db) {
                 db.exec(`DELETE FROM "recipe"`);
                 db.exec(`DELETE FROM "package"`);
                 db.exec(`DELETE FROM "archive"`);
                 db.exec(`DELETE FROM "user"`);
             });
+        }
 
-            registryMutex.unlock();
+        string authTokenFor(string pseudo)
+        {
+            import dopamine.registry.auth;
+            import dopamine.registry.config;
+            import jwt;
+            import vibe.data.json;
+            import std.datetime;
+
+            const config = Config.get;
+            const payload = JwtPayload(
+                config.registryHostname,
+                users[pseudo].id,
+                toJwtTime(Clock.currTime + 30.seconds),
+                pseudo,
+            );
+            auto json = serializeToJson(payload);
+            return Jwt.sign(json, config.registryJwtSecret).toString();
         }
     }
 }

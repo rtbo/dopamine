@@ -80,6 +80,8 @@ jobs:
       - name: Run tests
         run: meson test
         working-directory: build
+        env:
+          DOP_REGISTRY_STORAGEDIR: 'C:\Dopamine'
 
       - name: Print test log
         if: ${{ always() }}

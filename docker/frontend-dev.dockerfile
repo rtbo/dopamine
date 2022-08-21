@@ -10,8 +10,6 @@ ENV VITE_API_HOST=${web_api_host}
 ENV VITE_GITHUB_CLIENTID=${web_github_clientid}
 ENV VITE_GOOGLE_CLIENTID=${web_google_clientid}
 
-RUN echo "Registry URL at ${web_api_host}"
-
 # copy source code
 # this build context must be the web directory
 COPY *.html *.json *.js *.ts /app/

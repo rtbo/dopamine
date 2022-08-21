@@ -4,12 +4,20 @@ CREATE EXTENSION "pgcrypto";
 
 CREATE TABLE "user" (
     "id"            serial PRIMARY KEY,
+    "pseudo"        text NOT NULL,
     "email"         text NOT NULL,
     "name"          text,
     "avatar_url"    text,
 
+    -- privacy flags: 1: email private, 2: name private, 4: avatar_url private
+    "privacy_flags" smallint NOT NULL DEFAULT 3,
+
+    UNIQUE("pseudo"),
     UNIQUE("email")
 );
+
+CREATE INDEX "idx_user_email" ON "user" ("email");
+CREATE INDEX "idx_user_pseudo" ON "user" ("pseudo");
 
 CREATE TABLE "refresh_token" (
     "id"            serial PRIMARY KEY,

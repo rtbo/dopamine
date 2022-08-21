@@ -8,6 +8,7 @@ import dopamine.api.attrs;
 import jwt;
 
 import pgd.conn;
+import pgd.maybe;
 
 import vibe.core.log;
 import vibe.data.json;
@@ -372,6 +373,22 @@ Json enforceAuth(scope HTTPServerRequest req) @safe
     const head = enforceStatus(
         req.headers.get("authorization"), 401, "Authorization required"
     );
+
+    return extractAuth(head);
+}
+
+MayBe!Json checkAuth(scope HTTPServerRequest req) @safe
+{
+    const head = req.headers.get("authorization");
+
+    if (!head)
+        return mayBe!Json();
+
+    return mayBe(extractAuth(head));
+}
+
+private Json extractAuth(string head) @safe
+{
     const bearer = "bearer ";
     enforceStatus(
         head.length > bearer.length && head[0 .. bearer.length].toLower() == bearer,

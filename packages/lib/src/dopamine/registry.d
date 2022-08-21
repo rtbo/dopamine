@@ -227,7 +227,7 @@ class Registry
         const payload = ClientJwt(_idToken).payload;
         _idTokenExp = fromJwtTime(payload["exp"].get!long);
 
-        logInfo("Authenticated on %s - %s", info(registry), info(payload["email"]));
+        logInfo("Authenticated on %s - %s <%s>", info(registry), info(payload["pseudo"]), resp.email);
     }
 
     Response!(ResponseType!ReqT) sendRequest(ReqT)(auto ref const ReqT req) @safe
@@ -239,21 +239,32 @@ class Registry
         enum reqAttr = RequestAttr!ReqT;
         enum method = reqAttr.method;
         enum requiresAuth = hasUDA!(ReqT, RequiresAuth);
+        enum usesAuth = hasUDA!(ReqT, UsesAuth);
 
         RawRequest raw;
         raw.method = method.toCurl();
         raw.resource = requestResource(req);
         raw.host = host;
-        static if (method == Method.POST)
+        static if (method == Method.POST || method == Method.PATCH)
         {
-            auto json = serializeToJsonString(req);
+            static if (method == Method.POST)
+                auto json = serializeToJsonString(req);
+            else static if (method == Method.PATCH)
+                auto json = serializeToJsonString(req.patch);
+
             raw.body_ = json.representation;
             raw.contentType = "application/json";
         }
+
         static if (requiresAuth)
         {
             enforce(isLoggedIn, new AuthRequiredException(method, reqAttr.resource));
             raw.headers["Authorization"] = format!"Bearer %s"(_idToken);
+        }
+        else static if (usesAuth)
+        {
+            if (isLoggedIn)
+                raw.headers["Authorization"] = format!"Bearer %s"(_idToken);
         }
 
         auto res = perform(raw).asResponse();
@@ -555,6 +566,8 @@ HTTP.Method toCurl(Method method)
         return HTTP.Method.get;
     case Method.POST:
         return HTTP.Method.post;
+    case Method.PATCH:
+        return HTTP.Method.patch;
     }
 }
 
