@@ -41,6 +41,12 @@ option('enable_test',
     description: 'Whether to build the tests',
 )
 
+option('enable_pkgconf',
+    type: 'boolean',
+    value: false,
+    description: 'Whether to build and install pkgconf application',
+)
+
 option('alpine',
     type: 'boolean',
     value: false,

@@ -1,3 +1,6 @@
 [submodule "subprojects/squiz-box"]
 	path = subprojects/squiz-box
 	url = https://github.com/rtbo/squiz-box.git
+[submodule "subprojects/pkgconf"]
+	path = subprojects/pkgconf
+	url = https://github.com/pkgconf/pkgconf.git
