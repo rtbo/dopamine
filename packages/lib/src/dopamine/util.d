@@ -632,6 +632,41 @@ in (exists(src), src ~ " does not exist")
     }
 }
 
+/// Find either `pkgconf` or `pkg-config` in the path and returns it.
+/// Throws if program can't be found.
+string pkgConfigExe()
+{
+    import std.exception : enforce;
+
+    static string exe;
+
+    if (!exe)
+    {
+        debug version (DopHasPkgconf)
+        {
+            import std.path : buildNormalizedPath, dirName;
+
+            // look up pkgconf(.exe) in the build directory
+            exe = thisExePath.dirName().dirName().buildNormalizedPath("subprojects", "pkgconf");
+            version (Windows)
+                exe ~= ".exe";
+            if (!exists(exe))
+                exe = null;
+        }
+        if (!exe)
+            exe = findProgram("pkgconf");
+        if (!exe)
+            exe = findProgram("pkg-config");
+    }
+    return enforce(
+        exe,
+        new ErrorLogException(
+            "Could not find %s or %s in PATH",
+            info("pkgconf"), info("pkg-config"),
+        )
+    );
+}
+
 struct PkgConfig
 {
     struct Var
