@@ -104,11 +104,12 @@ final class SystemDepSource : DepSource
 {
     Semver[] depAvailVersions(string name) @safe
     {
+        import dopamine.util : pkgConfigExe;
         import std.process : execute, ProcessException;
 
         try
         {
-            const cmd = ["pkg-config", "--modversion", name];
+            const cmd = [pkgConfigExe, "--modversion", name];
             const result = execute(cmd);
             if (result.status != 0)
             {
@@ -124,13 +125,14 @@ final class SystemDepSource : DepSource
 
     bool hasPackage(string name, Semver ver, string revision) @safe
     {
+        import dopamine.util : pkgConfigExe;
         import std.process : execute, ProcessException;
 
         assert(!revision, "System dependencies do not have revision");
 
         try
         {
-            const cmd = ["pkg-config", "--modversion", name];
+            const cmd = [pkgConfigExe, "--modversion", name];
             const result = execute(cmd);
             return result.status == 0 && result.output.strip() == ver;
         }

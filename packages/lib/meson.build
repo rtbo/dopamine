@@ -35,6 +35,12 @@ dop_src = files([
 
 lua_d_versions = ['LUA_53', 'BindBC_Static']
 
+dop_lib_versions = lua_d_versions
+
+if get_option('enable_pkgconf')
+    dop_lib_versions += 'DopHasPkgconf'
+endif
+
 dop_inc = include_directories('src')
 dop_deps = [ lua_dep, dop_api_dep, jwt_dep, squiz_dep, vibed_data_dep, dub_dep ]
 dop_imp = include_directories('src/dopamine/lua')
@@ -43,7 +49,7 @@ dop_lib = library('dopamine', dop_conf, dop_src,
     install: true,
     include_directories: dop_inc,
     dependencies: dop_deps,
-    d_module_versions: lua_d_versions,
+    d_module_versions: dop_lib_versions,
     d_import_dirs: dop_imp,
 )
 
