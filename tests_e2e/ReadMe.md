@@ -35,7 +35,7 @@ To communicate with the registry, the test specifies `REGISTRY=[identifier]` whe
 is one of the registry identifiers in `definitions.json`.
 A postgresql database is created and populated with the `dop-admin` tool.
 Environment variables `$PGUSER` and `$PGPSWD` can be defined to set postgresql user and password.
-The `dop-server` application is spawned and setup to connect to this database.
+The `dop-registry` application is spawned and setup to connect to this database.
 The client is spawned with the `$DOP_REGISTRY` environment variable set
 to connect to the right server instance.
 

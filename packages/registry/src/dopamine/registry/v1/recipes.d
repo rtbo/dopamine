@@ -126,7 +126,7 @@ class RecipesApi
 
             const archiveName = format!"%s-%s-%s.tar.xz"(req.name, req.ver, req.revision);
 
-            const uploadReq = archiveMgr.requestUpload(db, user.id, archiveName);
+            const uploadReq = archiveMgr.requestUpload(db, user.id, archiveName, ArchiveKind.recipe);
 
             auto recipeRow = db.execRow!Row(
                 `

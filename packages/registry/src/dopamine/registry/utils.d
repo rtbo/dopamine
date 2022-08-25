@@ -11,6 +11,7 @@ import pgd.conn;
 import pgd.maybe;
 
 import vibe.core.log;
+import vibe.core.stream;
 import vibe.data.json;
 import vibe.http.router;
 import vibe.http.server;
@@ -420,5 +421,50 @@ private Json extractAuth(string head) @safe
         case JwtVerifFailure.signature:
             statusError(403, "Invalid authorization token");
         }
+    }
+}
+
+auto streamByteRange(I)(I input, size_t bufSize) if(isInputStream!I)
+{
+    return StreamByteRange!I(input, bufSize);
+}
+
+struct StreamByteRange(I)
+if (isInputStream!I)
+{
+    private I _input;
+    private ubyte[] _buf;
+    private ubyte[] _chunk;
+
+    this(I input, size_t bufSize)
+    {
+        _buf = new ubyte[bufSize];
+        _input = input;
+        if (!_input.empty)
+            prime();
+    }
+
+    private void prime()
+    {
+        const sz = min(_input.leastSize, _buf.length);
+        _input.read(_buf[0 .. sz]);
+        _chunk = _buf[0 .. sz];
+    }
+
+    @property bool empty()
+    {
+        return _input.empty && _chunk.length == 0;
+    }
+
+    @property const(ubyte)[] front()
+    {
+        return _chunk;
+    }
+
+    void popFront()
+    {
+        _chunk = null;
+        if (!_input.empty)
+            prime();
     }
 }

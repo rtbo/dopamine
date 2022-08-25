@@ -366,7 +366,7 @@ version (DopRegistryFsStorage) int storeArchive(PgConn db, string dir, string ar
         );
         foreach (entry; fileEntries)
             db.exec(
-                `INSERT INTO archive_file (archive_id, name, size) VALUES ($1, $2, $3)`,
+                `INSERT INTO archive_file (archive_id, path, size) VALUES ($1, $2, $3)`,
                 id, entry.path, entry.size,
             );
         return id;
@@ -413,7 +413,7 @@ version (DopRegistryDbStorage) int storeArchive(PgConn db, string dir, string ar
 
         foreach (entry; fileEntries)
             db.exec(
-                `INSERT INTO archive_file (archive_id, name, size) VALUES ($1, $2, $3)`,
+                `INSERT INTO archive_file (archive_id, path, size) VALUES ($1, $2, $3)`,
                 id, entry.path, entry.size,
             );
 
