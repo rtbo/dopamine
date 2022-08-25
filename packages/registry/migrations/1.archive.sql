@@ -21,7 +21,7 @@ ALTER TABLE "archive" ALTER COLUMN "data" SET STORAGE EXTERNAL;
 
 CREATE TABLE "archive_file" (
     "archive_id"    integer,
-    "name"          text,
+    "path"          text,
     "size"          integer NOT NULL,
 
     FOREIGN KEY ("archive_id") REFERENCES "archive"("id") ON DELETE CASCADE

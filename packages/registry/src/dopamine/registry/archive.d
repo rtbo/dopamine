@@ -14,6 +14,7 @@ import vibe.core.stream;
 import vibe.data.json;
 import vibe.http.router;
 import vibe.http.server;
+import vibe.stream.wrapper;
 
 import core.time;
 import std.algorithm;
@@ -31,6 +32,11 @@ struct UploadRequest
 {
     int archiveId;
     string bearerToken;
+}
+
+enum ArchiveKind
+{
+    recipe,
 }
 
 final class ArchiveManager
@@ -57,7 +63,7 @@ final class ArchiveManager
         router.post("/archive", genericHandler(&upload));
     }
 
-    UploadRequest requestUpload(scope DbConn db, int userId, string archiveName) @trusted
+    UploadRequest requestUpload(scope DbConn db, int userId, string archiveName, ArchiveKind kind) @trusted
     {
         const int id = db.execScalar!int(
             `
@@ -77,6 +83,7 @@ final class ArchiveManager
         bearerJson["iss"] = conf.registryHostname;
         bearerJson["name"] = archiveName;
         bearerJson["typ"] = "upload";
+        bearerJson["kind"] = kind.to!string;
         const bearerToken = Jwt.sign(bearerJson, conf.registryJwtSecret);
 
         // if upload is still not done after timeout, we erase the archive,
@@ -104,6 +111,7 @@ final class ArchiveManager
         enforceStatus(payload["typ"].opt!string == "upload", 400, "did not supply an upload token");
         const id = payload["sub"].get!int;
         const name = payload["name"].get!string;
+        const kind = (payload["kind"].get!string).to!ArchiveKind;
 
         string sha256 = req.headers.get("x-digest");
         enforceStatus(
@@ -120,10 +128,59 @@ final class ArchiveManager
 
         try
         {
+            import squiz_box;
+
             const contentLength = req.headers["Content-Length"].to!ulong;
-            enforceStatus(contentLength <= 5 * 1024 * 1024 , 403, name ~ " exceeds the maximum size of 5Mb.\n" ~
+            enforceStatus(contentLength <= 5 * 1024 * 1024, 403, name ~ " exceeds the maximum size of 5Mb.\n" ~
                     "Consider to download the big files with the `source` function");
             storage.storeBlob(id, name, req.bodyReader, contentLength, Base64.decode(sha256));
+
+            bool seenRecipeFile;
+
+            auto blob = storage.getBlob(id, name);
+            auto bytes = streamByteRange(blob, 1024);
+
+            client.transac((scope db) @trusted {
+                import std.stdio;
+                bytes.unboxTarXz()
+                    .each!(entry => writeln(entry.path));
+
+                foreach (entry; bytes.unboxTarXz())
+                {
+                    if (entry.type != EntryType.regular)
+                        continue;
+
+                    db.exec(
+                        `INSERT INTO archive_file (archive_id, path, size) VALUES ($1, $2, $3)`,
+                        id, entry.path, cast(int)entry.size,
+                    );
+
+                    if (kind == ArchiveKind.recipe)
+                    {
+                        if (entry.path == "dopamine.lua")
+                        {
+                            auto data = cast(const(char)[])(entry.byChunk().join());
+                            db.exec(
+                                `UPDATE recipe SET recipe = $1 WHERE archive_id = $2`,
+                                data, id,
+                            );
+                            seenRecipeFile = true;
+                            continue;
+                        }
+                        const lpath = entry.path.toLower();
+                        if (lpath == "readme.txt" || lpath=="readme.md" || lpath == "readme")
+                        {
+                            auto data = cast(const(char)[])(entry.byChunk().join());
+                            db.exec(
+                                `UPDATE recipe SET readme = $1, readme_filename = $2 WHERE archive_id = $3`,
+                                data, entry.path, id,
+                            );
+                        }
+                    }
+                }
+            });
+
+            enforceStatus(kind != ArchiveKind.recipe || seenRecipeFile, 400, "No recipe file in uploaded archive");
         }
         catch (Exception ex)
         {

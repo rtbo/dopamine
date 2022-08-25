@@ -306,6 +306,7 @@ class Registry
         http.addRequestHeader("Content-Type", "application/x-gtar");
         http.addRequestHeader("X-Digest", "sha-256=" ~ sha256);
         http.contentLength = file.size;
+        logInfo("file size = %s", file.size);
 
         http.onSend((void[] data) { data = file.rawRead(data); return data.length; });
         HTTP.StatusLine status;
