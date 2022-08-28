@@ -54,7 +54,7 @@ final class DopRecipe : Recipe
     string _license;
     string _copyright;
     string _upstreamUrl;
-    Lang[] _langs;
+    string[] _tools;
     string[] _included;
 
     DepSpec[] _dependencies;
@@ -94,13 +94,13 @@ final class DopRecipe : Recipe
                 throw new Exception("Invalid 'build' field: expected a function");
             }
         }
-        // langs and dependencies are needed regardless of recipe type
+        // tools and dependencies are needed regardless of recipe type
         {
-            lua_getglobal(L, "langs");
+            lua_getglobal(L, "tools");
             scope (exit)
                 lua_pop(L, 1);
 
-            _langs = luaReadStringArray(L, -1).strToLangs();
+            _tools = luaReadStringArray(L, -1);
         }
         {
             lua_getglobal(L, "dependencies");
@@ -287,9 +287,9 @@ final class DopRecipe : Recipe
         return _upstreamUrl;
     }
 
-    @property const(Lang)[] langs() const @safe
+    @property const(string)[] tools() const @safe
     {
-        return _langs;
+        return _tools;
     }
 
     @property bool hasDependencies() const @safe

@@ -103,10 +103,9 @@ interface Recipe
     /// The upstream URL of the packaged software
     @property string upstreamUrl() const @safe;
 
-    // FIXME: change "langs" to "tools" with possibility of arbitrary tools
-    /// Return languages present in this recipe.
+    /// Return tools needed by this recipe.
     /// This will determine the toolchain needed to build the package.
-    @property const(Lang)[] langs() const @safe;
+    @property const(string)[] tools() const @safe;
 
     /// Whether this recipe has dependencies.
     /// In case dependencies are only needed for some config cases, true is returned.
@@ -161,16 +160,16 @@ version (unittest)  : final class MockRecipe : Recipe
     private RecipeType _type;
     private string _rev;
     private DepSpec[] _deps;
-    private Lang[] _langs;
+    private string[] _tools;
 
-    this(string name, Semver ver, RecipeType type, string rev, DepSpec[] deps, Lang[] langs)
+    this(string name, Semver ver, RecipeType type, string rev, DepSpec[] deps, string[] tools)
     {
         _name = name;
         _ver = ver;
         _type = type;
         _rev = rev;
         _deps = deps;
-        _langs = langs;
+        _tools = tools;
     }
 
     // FIXME: remove filename and rootDir to manage it in RecipeDir
@@ -233,12 +232,9 @@ version (unittest)  : final class MockRecipe : Recipe
         return "";
     }
 
-    // FIXME: change "langs" to "tools" with possibility of arbitrary tools
-    /// Return languages present in this recipe.
-    /// This will determine the toolchain needed to build the package.
-    @property const(Lang)[] langs() const @safe
+    @property const(string)[] tools() const @safe
     {
-        return _langs;
+        return _tools;
     }
 
     /// Whether this recipe has dependencies.

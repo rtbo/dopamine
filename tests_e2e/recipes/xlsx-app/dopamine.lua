@@ -1,6 +1,6 @@
 name = 'xlsx-app'
 version = '1.0.0'
-langs = {'d'}
+tools = {'dc'}
 
 dependencies = {
     ['xlsxreader'] = { version = '~>2.1', dub = true }

@@ -27,13 +27,6 @@ enum OS
     windows,
 }
 
-enum Lang
-{
-    d,
-    cpp,
-    c,
-}
-
 enum BuildType
 {
     release,
@@ -75,19 +68,6 @@ template to(S : string)
             return "Windows";
         }
     }
-
-    S to(A : Lang)(A val)
-    {
-        final switch (val)
-        {
-        case Lang.d:
-            return "D";
-        case Lang.cpp:
-            return "C++";
-        case Lang.c:
-            return "C";
-        }
-    }
 }
 
 /// Translate enums to config file string
@@ -111,20 +91,6 @@ string toConfig(OS val)
         return "linux";
     case OS.windows:
         return "windows";
-    }
-}
-
-/// ditto
-string toConfig(Lang val)
-{
-    final switch (val)
-    {
-    case Lang.d:
-        return "d";
-    case Lang.cpp:
-        return "c++";
-    case Lang.c:
-        return "c";
     }
 }
 
@@ -167,22 +133,6 @@ OS fromConfig(T : OS)(string val)
         return T.windows;
     default:
         throw new Exception(format("cannot convert \"%s\" to OS", val));
-    }
-}
-
-/// ditto
-Lang fromConfig(T : Lang)(string val)
-{
-    switch (val)
-    {
-    case "d":
-        return T.d;
-    case "c++":
-        return T.cpp;
-    case "c":
-        return T.c;
-    default:
-        throw new Exception(format("cannot convert \"%s\" to Lang", val));
     }
 }
 
@@ -245,49 +195,46 @@ struct HostInfo
     }
 }
 
-/// Profile compiler information
-struct Compiler
+/// A tool necessary to build the recipe and for which
+/// the version affects the Build-Id
+struct Tool
 {
-    private Lang _lang;
-    private string _name;
-    private string _ver;
-    private string _path;
+    private string _id; // e.g. "cc", "c++", "dc"
+    private string _name; // e.g. "dmd", "gcc", ...
+    private string _ver; // version
+    private string _path; // executable path
     version (Windows)
     {
+        // only for MSVC compiler
         private VsVcInstall _vsvc;
     }
 
-    this(Lang lang, string name, string ver, string path)
+    this(string id, string name, string ver, string path)
     {
-        _lang = lang;
+        _id = id;
         _name = name;
         _ver = ver;
         _path = path;
     }
 
-    version (Windows) this(Lang lang, VsVcInstall vsvc)
+    version (Windows) this(string id, VsVcInstall vsvc)
     {
-        _lang = lang;
+        // either cc or c++
+        _id = id;
         _name = "MSVC";
         _ver = vsvc.ver.toString();
         _path = vsvc.installPath;
         _vsvc = vsvc;
     }
 
-    static Compiler detect(Lang lang, string compiler = null)
+    static Tool detect(string id)
     {
-        if (compiler)
-        {
-            // choose regex from compiler, or define common regex
-            // `compiler` can be "dmd", or "/usr/bin/dmd"
-            assert(false, "unimplemented");
-        }
-        return detectDefaultCompiler(lang);
+        return detectTool(id);
     }
 
-    @property Lang lang() const
+    @property string id() const
     {
-        return _lang;
+        return _id;
     }
 
     @property string name() const
@@ -338,16 +285,18 @@ struct Compiler
                 return;
             }
         }
-        final switch (_lang)
+        switch (_name)
         {
-        case Lang.d:
+        case "dc":
             env["DC"] = _path;
             break;
-        case Lang.cpp:
+        case "c++":
             env["CXX"] = _path;
             break;
-        case Lang.c:
+        case "cc":
             env["CC"] = _path;
+            break;
+        default:
             break;
         }
     }
@@ -356,7 +305,7 @@ struct Compiler
     if (isOutputRange!(O, char))
     {
         auto ind = indentStr(indent);
-        output.put(format("%s%s Compiler:\n", ind, lang.to!string));
+        output.put(format("%sTool %s:\n", ind, id));
         ind = indentStr(indent + 1);
         output.put(format("%sname:    %s\n", ind, name));
         output.put(format("%sversion: %s\n", ind, ver));
@@ -367,16 +316,16 @@ struct Compiler
     private void feedDigest(D)(ref D digest) const
     if (isDigest!D)
     {
-        feedDigestData(digest, lang);
+        feedDigestData(digest, id);
         feedDigestData(digest, name);
         feedDigestData(digest, ver);
     }
 
     private void writeIniSection(ref Appender!string app) const
     {
-        app.put(format("[compiler.%s]\n", _lang.toConfig()));
+        app.put(format("[tool.%s]\n", _id));
         app.put(format("name=%s\n", _name));
-        app.put(format("ver=%s\n", _ver));
+        app.put(format("version=%s\n", _ver));
         version (Windows)
         {
             app.put(format("path=%s\n", _path.replace("\\", "\\\\")));
@@ -399,24 +348,23 @@ final class Profile
     private string _name;
     private HostInfo _hostInfo;
     private BuildType _buildType;
-    private Compiler[] _compilers;
-    private Lang[] _langs;
+    private Tool[] _tools;
     private string _digestHash;
 
-    this(string basename, HostInfo hostInfo, BuildType buildType, Compiler[] compilers)
+    this(string basename, HostInfo hostInfo, BuildType buildType, Tool[] tools)
     {
         import std.digest.sha : SHA1;
 
         _basename = enforce(basename, "A profile must have a name");
         _hostInfo = hostInfo;
         _buildType = buildType;
-        _compilers = compilers.sort!((a, b) => a.lang < b.lang).array;
-        enforce(_compilers.length, "a Profile must have at least one compiler");
+        _tools = tools.sort!((a, b) => a.id < b.id).array;
+        enforce(_tools.length, "a Profile must have at least one tool");
 
-        _langs = _compilers.map!(c => c.lang).array;
-        enforce(langs.equal(langs.uniq()), "cannot pass twice the same language to a profile");
+        string[] toolIds = tools.map!(t => t.id).array;
+        enforce(toolIds.equal(toolIds.uniq()), "cannot pass twice the same language to a profile");
 
-        _name = _basename ~ "-" ~ _langs.map!(l => l.toConfig()).join('.');
+        _name = _basename ~ "-" ~ toolIds.join('.');
 
         SHA1 digest;
         feedDigest(digest);
@@ -443,25 +391,20 @@ final class Profile
         return _buildType;
     }
 
-    @property const(Lang)[] langs() const
+    @property const(Tool)[] tools() const
     {
-        return _langs;
+        return _tools;
     }
 
-    @property const(Compiler)[] compilers() const
+    const(Tool) toolFor(string id) const
     {
-        return _compilers;
-    }
-
-    const(Compiler) compilerFor(Lang lang) const
-    {
-        foreach (c; _compilers)
+        foreach (t; _tools)
         {
-            if (c.lang == lang)
-                return c;
+            if (t.id == id)
+                return t;
         }
 
-        throw new Exception("No such compiler in profile: " ~ lang.to!string);
+        throw new Exception("No such tool in profile: " ~ id);
     }
 
     @property string digestHash() const
@@ -471,56 +414,56 @@ final class Profile
 
     Profile withBasename(string basename) const
     {
-        return new Profile(basename, this.hostInfo, this.buildType, this.compilers.dup);
+        return new Profile(basename, this.hostInfo, this.buildType, this.tools.dup);
     }
 
     Profile withHostInfo(HostInfo hostInfo) const
     {
-        return new Profile(this.basename, hostInfo, this.buildType, this.compilers.dup);
+        return new Profile(this.basename, hostInfo, this.buildType, this.tools.dup);
     }
 
     Profile withBuildType(BuildType buildType) const
     {
-        return new Profile(this.basename, this.hostInfo, buildType, this.compilers.dup);
+        return new Profile(this.basename, this.hostInfo, buildType, this.tools.dup);
     }
 
-    Profile withCompilers(Compiler[] compilers) const
+    Profile withTools(Tool[] tools) const
     {
-        return new Profile(this.basename, this.hostInfo, this.buildType, compilers);
+        return new Profile(this.basename, this.hostInfo, this.buildType, tools);
     }
 
-    bool hasLang(Lang lang) const @trusted
-    {
-        import std.algorithm : canFind;
-
-        return langs.canFind(lang);
-    }
-
-    bool hasAllLangs(const(Lang)[] langs) const @trusted
+    bool hasTool(string id) const @trusted
     {
         import std.algorithm : canFind;
 
-        return langs.all!(l => this.langs.canFind(l));
+        return tools.map!(t => t.id).canFind(id);
     }
 
-    Profile subset(const(Lang)[] langs) const
-    in (langs.length, "Cannot create a Profile subset without language")
+    bool hasAllTools(const(string)[] ids) const @trusted
     {
-        Compiler[] comps;
-        foreach (l; langs)
+        import std.algorithm : all;
+
+        return ids.all!(id => this.hasTool(id));
+    }
+
+    Profile subset(const(string)[] toolIds) const
+    in (toolIds.length, "Cannot create a Profile subset without tool")
+    {
+        Tool[] tools;
+        foreach (id; toolIds)
         {
-            auto cf = _compilers.find!(c => c.lang == l);
-            enforce(cf.length, format(`Language %s not in Profile %s`, l.to!string, name));
-            comps ~= cf[0];
+            auto tf = _tools.find!(t => t.id == id);
+            enforce(tf.length, format(`Tool %s not in Profile %s`, id, name));
+            tools ~= tf[0];
         }
-        return new Profile(_basename, _hostInfo, _buildType, comps);
+        return new Profile(_basename, _hostInfo, _buildType, tools);
     }
 
     void collectEnvironment(ref string[string] env) const
     {
-        foreach (c; _compilers)
+        foreach (t; _tools)
         {
-            c.collectEnvironment(env, _hostInfo.arch);
+            t.collectEnvironment(env, _hostInfo.arch);
         }
     }
 
@@ -529,9 +472,9 @@ final class Profile
     {
         _hostInfo.feedDigest(digest);
         feedDigestData(digest, _buildType);
-        foreach (ref c; _compilers)
+        foreach (ref t; _tools)
         {
-            c.feedDigest(digest);
+            t.feedDigest(digest);
         }
     }
 
@@ -542,9 +485,9 @@ final class Profile
         _hostInfo.describe(output, 1);
         output.put(format("%sBuild type:   %s\n", indentStr(1), _buildType.toConfig));
 
-        foreach (c; _compilers)
+        foreach (t; _tools)
         {
-            c.describe(output, 1);
+            t.describe(output, 1);
         }
 
         output.put(format("%sDigest hash:  %s\n", indentStr(1), digestHash()));
@@ -570,6 +513,7 @@ final class Profile
         import std.exception : assumeUnique;
         import std.path : baseName, stripExtension;
         import std.stdio : File;
+        import std.file : read;
 
         const nameFromFile = baseName(stripExtension(filename));
 
@@ -591,10 +535,10 @@ final class Profile
         app.put("\n");
         _hostInfo.writeIniSection(app);
 
-        foreach (c; _compilers)
+        foreach (t; _tools)
         {
             app.put("\n");
-            c.writeIniSection(app);
+            t.writeIniSection(app);
         }
 
         return app.data();
@@ -633,24 +577,21 @@ final class Profile
         const os = enforceKey(hostSec, "os").fromConfig!OS();
         auto hostInfo = HostInfo(arch, os);
 
-        Compiler[] compilers;
-        Lang[] langs;
+        Tool[] tools;
         foreach (s; ini.sections)
         {
-            enum prefix = "compiler.";
+            enum prefix = "tool.";
             if (!s.name.startsWith(prefix))
                 continue;
 
-            const langS = s.name[prefix.length .. $];
-            const lang = fromConfig!Lang(langS);
-
-            const cname = enforceKey(s, "name");
-            const ver = enforceKey(s, "ver");
+            const id = s.name[prefix.length .. $];
+            const tname = enforceKey(s, "name");
+            const ver = enforceKey(s, "version");
             const path = enforceKey(s, "path");
 
             version (Windows)
             {
-                if (cname == "MSVC")
+                if (tname == "MSVC")
                 {
                     import dopamine.semver : Semver;
 
@@ -659,24 +600,22 @@ final class Profile
                     install.installPath = path;
                     install.productLineVersion = enforceKey(s, "msvc_ver");
                     install.displayName = enforceKey(s, "msvc_disp");
-                    compilers ~= Compiler(lang, install);
-                    langs ~= lang;
+                    tools ~= Tool(id, install);
                     continue;
                 }
             }
 
-            compilers ~= Compiler(lang, cname, ver, path);
-            langs ~= lang;
+            tools ~= Tool(id, tname, ver, path);
         }
 
-        const suffix = nameSuffix(langs);
+        const suffix = nameSuffix(tools.map!(t => t.id).array);
         if (defaultName.endsWith(suffix))
         {
             defaultName = defaultName[0 .. $ - suffix.length];
         }
         const basename = mainSec.get("basename", defaultName);
 
-        return new Profile(basename, hostInfo, buildType, compilers);
+        return new Profile(basename, hostInfo, buildType, tools);
     }
 }
 
@@ -688,83 +627,56 @@ version (unittest) Profile mockProfileLinux()
         HostInfo(Arch.x86_64, OS.linux),
         BuildType.debug_,
         [
-            Compiler(Lang.d, "DMD", "2.098.1", "/usr/bin/dmd"),
-            Compiler(Lang.cpp, "G++", "11.1.0", "/usr/bin/g++"),
-            Compiler(Lang.c, "GCC", "11.1.0", "/usr/bin/gcc"),
+            Tool("dc", "DMD", "2.098.1", "/usr/bin/dmd"),
+            Tool("c++", "G++", "11.1.0", "/usr/bin/g++"),
+            Tool("cc", "GCC", "11.1.0", "/usr/bin/gcc"),
         ]
     );
 }
 
-private static string nameSuffix(const(Lang)[] langs)
-in (langs.length)
-in (isStrictlyMonotonic(langs))
-in (langs.uniq().equal(langs))
+private string nameSuffix(string[] ids)
+in (ids.length)
+in (isStrictlyMonotonic(ids))
+in (ids.uniq().equal(ids))
 {
-    return "-" ~ langs.map!(l => l.toConfig()).join("-");
+    return "-" ~ ids.join("-");
 }
 
-string profileName(string basename, const(Lang)[] langs)
+string profileName(string basename, const(string)[] toolIds)
 {
-    enforce(!hasDuplicates(langs));
+    string[] ids = toolIds.dup;
+    enforce(!hasDuplicates(ids));
 
-    string suffix;
-    if (!isStrictlyMonotonic(langs))
-    {
-        Lang[] ll = langs.dup;
-        sort(ll);
-        suffix = nameSuffix(ll);
-    }
-    else
-    {
-        suffix = nameSuffix(langs);
-    }
-    return basename ~ suffix;
+    if (!isStrictlyMonotonic(ids))
+        sort(ids);
+
+    return basename ~ nameSuffix(ids);
 }
 
-string profileDefaultName(const(Lang)[] langs)
+string profileDefaultName(const(string)[] toolIds)
 {
-    return profileName("default", langs);
+    return profileName("default", toolIds);
 }
 
-string profileIniName(string basename, const(Lang)[] langs)
+string profileIniName(string basename, const(string)[] toolIds)
 {
-    return profileName(basename, langs) ~ ".ini";
+    return profileName(basename, toolIds) ~ ".ini";
 }
 
-Lang[] strToLangs(const(string)[] langs)
-{
-    return langs.map!(l => l.fromConfig!Lang).array;
-}
-
-Lang strToLang(string lang)
-{
-    return lang.fromConfig!Lang;
-}
-
-string[] strFromLangs(const(Lang)[] langs)
-{
-    return langs.map!(l => l.toConfig()).array;
-}
-
-string strFromLang(Lang lang)
-{
-    return lang.toConfig();
-}
-
-Profile detectDefaultProfile(Lang[] langs, Flag!"allowMissing" allowMissing)
+Profile detectDefaultProfile(string[] toolIds, Flag!"allowMissing" allowMissing)
 {
     auto hostInfo = currentHostInfo();
 
-    enforce(langs.sort().uniq().equal(langs), "cannot build a profile with twice the same language");
+    enforce(toolIds.sort().uniq().equal(toolIds), "cannot build a profile with twice the same tool");
 
-    Compiler[] compilers;
-    foreach (lang; langs)
+    Tool[] tools;
+    foreach (id; toolIds)
     {
         try
         {
-            compilers ~= detectDefaultCompiler(lang);
+            tools ~= detectTool(id);
         }
-        catch (CompilerVersionParseException ex)
+        catch (ToolVersionParseException ex)
         {
             throw ex;
         }
@@ -777,21 +689,21 @@ Profile detectDefaultProfile(Lang[] langs, Flag!"allowMissing" allowMissing)
         }
     }
 
-    if (!compilers.length)
-        throw new Exception("No compiler found, cannot initialize profile");
+    if (!tools.length)
+        throw new Exception("No tool found, cannot initialize profile");
 
-    return new Profile("default", hostInfo, BuildType.debug_, compilers);
+    return new Profile("default", hostInfo, BuildType.debug_, tools);
 }
 
-class CompilerVersionParseException : Exception
+class ToolVersionParseException : Exception
 {
-    this(string clName, string[] cmd, string output, string file = __FILE__, size_t line = __LINE__)
+    this(string name, string[] cmd, string output, string file = __FILE__, size_t line = __LINE__)
     {
         import std.process : escapeShellCommand;
 
         super(format(
                 "Could not parse version of %s from \"%s\" output:\n",
-                clName, escapeShellCommand(cmd), output,
+                name, escapeShellCommand(cmd), output,
         ), file, line);
     }
 }
@@ -831,47 +743,74 @@ HostInfo currentHostInfo()
     return HostInfo(arch, os);
 }
 
-Compiler detectDefaultCompiler(Lang lang)
+Tool detectTool(string id)
 {
-    foreach (detectF; defaultDetectOrder[lang])
+    switch (id)
     {
-        auto comp = detectF();
-        if (comp)
-            return comp;
+        case "cc":
+            return detectCc();
+        case "c++":
+            return detectCpp();
+        case "dc":
+            return detectDc();
+        default:
+            return detectToolGeneric([id, "--version"], genericRe, id, id);
     }
-
-    throw new Exception(format("could not find a compiler for %s language", lang.to!string));
 }
 
-alias CompilerDetectF = Compiler function();
-
-immutable CompilerDetectF[][Lang] defaultDetectOrder;
-
-shared static this() @trusted
+Tool detectCc()
 {
-    CompilerDetectF[][Lang] order;
-
-    order[Lang.d] = [&detectLdc, &detectDmd];
-
     version (OSX)
     {
-        order[Lang.c] = [&detectClang, &detectGcc];
-        order[Lang.cpp] = [&detectClangpp, &detectGpp];
+        auto order = [&detectClang, &detectGcc];
     }
     else version (Posix)
     {
-        order[Lang.c] = [&detectGcc, &detectClang];
-        order[Lang.cpp] = [&detectGpp, &detectClangpp];
+        auto order = [&detectGcc, &detectClang];
     }
     else version (Windows)
     {
-        order[Lang.c] = [&detectMsvcC, &detectGcc, &detectClang];
-        order[Lang.cpp] = [&detectMsvcCpp, &detectGpp, &detectClangpp];
+        auto order = [&detectMsvcC, &detectGcc, &detectClang];
     }
 
-    import std.exception : assumeUnique;
+    return detectInOrder("cc", order);
+}
 
-    defaultDetectOrder = assumeUnique(order);
+Tool detectCpp()
+{
+    version (OSX)
+    {
+        auto order = [&detectClangpp, &detectGpp];
+    }
+    else version (Posix)
+    {
+        auto order = [&detectGpp, &detectClangpp];
+    }
+    else version (Windows)
+    {
+        auto order = [&detectMsvcCpp, &detectGpp, &detectClangpp];
+    }
+
+    return detectInOrder("c++", order);
+}
+
+Tool detectDc()
+{
+    return detectInOrder("dc", [&detectLdc, &detectDmd]);
+}
+
+alias ToolDetectF = Tool function();
+
+Tool detectInOrder(string id, ToolDetectF[] order)
+{
+    foreach (f; order)
+    {
+        Tool t = f();
+        if (t)
+            return t;
+    }
+
+    throw new Exception("Could not find any tool \"" ~ id ~ "\"");
 }
 
 string indentStr(int indent)
@@ -881,29 +820,29 @@ string indentStr(int indent)
 
 version (Windows)
 {
-    Compiler detectMsvcC()
+    Tool detectMsvcC()
     {
-        return detectMsvc(Lang.c);
+        return detectMsvc("cc");
     }
 
-    Compiler detectMsvcCpp()
+    Tool detectMsvcCpp()
     {
-        return detectMsvc(Lang.cpp);
+        return detectMsvc("c++");
     }
 
-    Compiler detectMsvc(Lang lang) @trusted
+    Tool detectMsvc(string id) @trusted
     {
         import dopamine.msvc : VsWhereResult, runVsWhere;
 
         const result = runVsWhere();
         if (!result || !result.installs.length)
-            return Compiler.init;
+            return Tool.init;
 
-        return Compiler(lang, result.installs[0]);
+        return Tool(id, result.installs[0]);
     }
 }
 
-string extractCompilerVersion(string versionOutput, string re)
+string extractToolVersion(string versionOutput, string re)
 {
     import std.exception : enforce;
     import std.regex : matchFirst, regex;
@@ -913,107 +852,120 @@ string extractCompilerVersion(string versionOutput, string re)
     return verMatch[1];
 }
 
-Compiler detectCompiler(string[] command, string re, string name, Lang lang)
+Tool detectToolGeneric(string[] command, string re, string id, string name)
 in (command.length >= 1)
 {
     import std.process : execute, Config;
 
     command[0] = findProgram(command[0]);
     if (!command[0])
-        return Compiler.init;
+        return Tool.init;
 
     auto result = execute(command, null, Config.suppressConsole);
     if (result.status != 0)
-        return Compiler.init;
+        return Tool.init;
 
     const path = command[0];
 
     try
     {
-        const ver = extractCompilerVersion(result.output, re);
-        return Compiler(lang, name, ver, path);
+        const ver = extractToolVersion(result.output, re);
+        return Tool(id, name, ver, path);
     }
     catch (Exception ex)
     {
-        throw new CompilerVersionParseException(
+        throw new ToolVersionParseException(
             name, command, result.output
         );
     }
 }
 
+enum genericRe = `(\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
 enum ldcVersionRe = `^LDC.*\((\d+\.\d+\.\d+[A-Za-z0-9.+-]*)\):$`;
 enum dmdVersionRe = `^DMD.*v(\d+\.\d+\.\d+[A-Za-z0-9.+-]*)$`;
 enum gccVersionRe = `^gcc.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
 enum gppVersionRe = `^g\+\+.* (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)( .*)?$`;
 enum clangVersionRe = `clang version (\d+\.\d+\.\d+[A-Za-z0-9.+-]*)`;
 
-Compiler detectLdc()
+Tool detectLdc()
 {
-    auto comp = detectCompiler(["ldc", "--version"], ldcVersionRe, "LDC", Lang.d);
+    auto comp = detectToolGeneric(["ldc", "--version"], ldcVersionRe, "dc", "LDC");
     if (!comp)
-        comp = detectCompiler(["ldc2", "--version"], ldcVersionRe, "LDC", Lang.d);
+        comp = detectToolGeneric(["ldc2", "--version"], ldcVersionRe, "dc", "LDC");
 
     return comp;
 }
 
-Compiler detectDmd()
+Tool detectDmd()
 {
-    return detectCompiler(["dmd", "--version"], dmdVersionRe, "DMD", Lang.d);
+    return detectToolGeneric(["dmd", "--version"], dmdVersionRe, "dc", "DMD");
 }
 
-Compiler detectGcc()
+Tool detectGcc()
 {
-    return detectCompiler(["gcc", "--version"], gccVersionRe, "GCC", Lang.c);
+    return detectToolGeneric(["gcc", "--version"], gccVersionRe, "cc", "GCC");
 }
 
-Compiler detectGpp()
+Tool detectGpp()
 {
-    return detectCompiler(["g++", "--version"], gppVersionRe, "G++", Lang.cpp);
+    return detectToolGeneric(["g++", "--version"], gppVersionRe, "c++", "G++");
 }
 
-Compiler detectClang()
+Tool detectClang()
 {
-    return detectCompiler(["clang", "--version"], clangVersionRe, "CLANG", Lang.c);
+    return detectToolGeneric(["clang", "--version"], clangVersionRe, "cc", "CLANG");
 }
 
-Compiler detectClangpp()
+Tool detectClangpp()
 {
-    return detectCompiler(["clang++", "--version"], clangVersionRe, "CLANG++", Lang.cpp);
+    return detectToolGeneric(["clang++", "--version"], clangVersionRe, "c++", "CLANG++");
+}
+
+version(unittest)
+{
+    import unit_threaded.assertions;
 }
 
 @("extract Clang version")
 unittest
 {
     auto output = import("version-clang-13.0.0.txt");
-    assert(extractCompilerVersion(output, clangVersionRe) == "13.0.0");
+    extractToolVersion(output, clangVersionRe).should == "13.0.0";
 }
 
 @("extract gcc/g++ version")
 unittest
 {
     auto output = import("version-gcc-11.1.0.txt");
-    assert(extractCompilerVersion(output, gccVersionRe) == "11.1.0");
+    extractToolVersion(output, gccVersionRe).should == "11.1.0";
 
     output = import("version-g++-11.1.0.txt");
-    assert(extractCompilerVersion(output, gppVersionRe) == "11.1.0");
+    extractToolVersion(output, gppVersionRe).should == "11.1.0";
 
     output = import("version-gcc-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
-    assert(extractCompilerVersion(output, gccVersionRe) == "8.1.0");
+    extractToolVersion(output, gccVersionRe).should == "8.1.0";
 
     output = import("version-g++-8.1.0-x86_64-posix-seh-rev0-mingw.txt");
-    assert(extractCompilerVersion(output, gppVersionRe) == "8.1.0");
+    extractToolVersion(output, gppVersionRe).should == "8.1.0";
 }
 
 @("extract DMD version")
 unittest
 {
     auto output = import("version-dmd-2.098.1.txt");
-    assert(extractCompilerVersion(output, dmdVersionRe) == "2.098.1");
+    extractToolVersion(output, dmdVersionRe).should == "2.098.1";
 }
 
 @("extract LDC version")
 unittest
 {
     auto output = import("version-ldc-1.28.1.txt");
-    assert(extractCompilerVersion(output, ldcVersionRe) == "1.28.1");
+    extractToolVersion(output, ldcVersionRe).should == "1.28.1";
+}
+
+@("extract Python version")
+unittest
+{
+    auto output = "Python 3.10.6";
+    extractToolVersion(output, genericRe).should == "3.10.6";
 }

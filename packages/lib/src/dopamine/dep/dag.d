@@ -1296,7 +1296,7 @@ unittest
 
     auto pack = TestPackage("a", [
             TestPackVersion("1.0.1", [], DepLocation.cache)
-        ], [Lang.c]);
+        ], ["cc"]);
     auto services = buildMockDepServices([]);
     auto profile = mockProfileLinux();
 
@@ -1490,7 +1490,7 @@ struct TestPackage
 {
     string name;
     TestPackVersion[] nodes;
-    Lang[] langs;
+    string[] tools;
     RecipeType type;
 
     RecipeDir recipe(string ver)
@@ -1499,7 +1499,7 @@ struct TestPackage
         {
             if (n.ver == ver)
             {
-                return RecipeDir(new MockRecipe(name, Semver(ver), type, "1",  n.deps, langs), testPackDir);
+                return RecipeDir(new MockRecipe(name, Semver(ver), type, "1",  n.deps, tools), testPackDir);
             }
         }
         assert(false, "wrong version");
@@ -1517,7 +1517,7 @@ TestPackage[] testPackBase()
             TestPackVersion("1.1.1", [], DepLocation.network),
             TestPackVersion("2.0.0", [], DepLocation.network),
         ],
-        [Lang.c]
+        ["cc"]
     );
 
     auto b = TestPackage(
@@ -1543,7 +1543,7 @@ TestPackage[] testPackBase()
                 DepLocation.system
             ),
         ],
-        [Lang.d]
+        ["dc"]
     );
 
     auto c = TestPackage(
@@ -1561,7 +1561,7 @@ TestPackage[] testPackBase()
                 ],
                 DepLocation.network),
         ],
-        [Lang.cpp]
+        ["c++"]
     );
     auto d = TestPackage(
         "d", [
@@ -1580,7 +1580,7 @@ TestPackage[] testPackBase()
                 DepLocation.network
             ),
         ],
-        [Lang.d]
+        ["dc"]
     );
     return [a, b, c, d];
 }
@@ -1597,7 +1597,7 @@ TestPackage packE = TestPackage(
             DepLocation.network
         )
     ],
-    [Lang.d]
+    ["dc"]
 );
 
 TestPackage[] testPackUnresolvable()
@@ -1616,7 +1616,7 @@ TestPackage[] testPackUnresolvable()
                 DepLocation.cache,
             ),
         ],
-        [Lang.c],
+        ["cc"],
     );
 
     // a DepDAG depending on both b and c cannot be resolved
@@ -1632,7 +1632,7 @@ TestPackage[] testPackUnresolvable()
                 DepLocation.cache,
             ),
         ],
-        [Lang.c],
+        ["cc"],
     );
 
     auto c = TestPackage(
@@ -1646,7 +1646,7 @@ TestPackage[] testPackUnresolvable()
                 DepLocation.cache,
             ),
         ],
-        [Lang.c],
+        ["cc"],
     );
     return [a, b, c];
 }
@@ -1663,7 +1663,7 @@ TestPackage packNotResolvable = TestPackage(
             DepLocation.cache,
         ),
     ],
-    [Lang.c],
+    ["cc"],
 );
 
 /// A mock Dependency Source
@@ -1719,7 +1719,7 @@ final class MockDepSource : DepSource
         auto pv = pvR.front;
 
         const revision = rev ? rev : "1";
-        return RecipeDir(new MockRecipe(name, ver, pack.type, revision, pv.deps, pack.langs), testPackDir);
+        return RecipeDir(new MockRecipe(name, ver, pack.type, revision, pv.deps, pack.tools), testPackDir);
     }
 }
 

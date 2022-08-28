@@ -91,7 +91,7 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
     const srcDir = recipe.inTreeSrc ? rdir.root : recipe.source();
 
-    const config = BuildConfig(profile.subset(recipe.langs));
+    const config = BuildConfig(profile.subset(recipe.tools));
     const buildId = BuildId(recipe, config);
     const bPaths = rdir.buildPaths(buildId);
 
@@ -216,8 +216,10 @@ int publishMain(string[] args)
     catch (Exception ex)
     {
         throw new ErrorLogException(
-            "Could not log to %s (%s).\nPublishing requires to be logged-in. Get a login key on the registry front-end.",
-            info(registry.host), ex.msg);
+            "Could not log to %s (%s).\nPublishing requires to be logged-in. " ~
+            "Get a login key on the registry front-end.",
+            info(registry.host), ex.msg
+        );
     }
 
     PostRecipe req;

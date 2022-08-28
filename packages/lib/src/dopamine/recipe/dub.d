@@ -88,9 +88,9 @@ class DubRecipe : Recipe
         return (() @trusted => _dubPack.recipe.homepage)();
     }
 
-    @property const(Lang)[] langs() const @safe
+    @property const(string)[] tools() const @safe
     {
-        return [Lang.d];
+        return ["dc"];
     }
 
     @property bool hasDependencies() const @safe
@@ -165,8 +165,8 @@ class DubRecipe : Recipe
         nb.writeToFile(buildPath(dirs.build, "build.ninja"));
         runCommand(["ninja"], dirs.build, LogLevel.verbose, ninjaEnv);
 
-        auto dc = config.profile.compilerFor(Lang.d);
-        auto dcf = CompilerFlags.fromCompiler(dc);
+        auto dc = config.profile.toolFor("dc");
+        auto dcf = CompilerFlags.fromTool(dc);
 
         const builtTarget = libraryFileName(name);
 
@@ -227,8 +227,8 @@ class DubRecipe : Recipe
             enum objExt = ".o";
         }
 
-        auto dc = config.profile.compilerFor(Lang.d);
-        auto dcf = CompilerFlags.fromCompiler(dc);
+        auto dc = config.profile.toolFor("dc");
+        auto dcf = CompilerFlags.fromTool(dc);
 
         const targetName = libraryFileName(name);
 
@@ -328,7 +328,7 @@ BuildPlatform toDubPlatform(const(Profile) profile)
         res.platform = ["x86_64"];
         break;
     }
-    const dc = profile.compilerFor(Lang.d);
+    const dc = profile.toolFor("dc");
     res.compiler = baseName(dc.path).stripExtension;
     res.compilerBinary = dc.path;
     res.compilerVersion = dc.ver;
@@ -352,7 +352,7 @@ interface CompilerFlags
     string libSearchPath(string path);
     string staticLib();
 
-    static CompilerFlags fromCompiler(const(Compiler) dc)
+    static CompilerFlags fromTool(const(Tool) dc)
     {
         if (dc.name == "DMD")
         {

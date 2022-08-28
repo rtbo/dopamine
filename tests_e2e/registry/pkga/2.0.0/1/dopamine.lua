@@ -1,6 +1,6 @@
 name = 'pkga'
 version = '2.0.0'
-langs = {'c'}
+tools = {'cc'}
 
 function build (dirs, config)
     local profile = config.profile
