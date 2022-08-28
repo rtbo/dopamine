@@ -2,5 +2,5 @@ RECIPE=profile
 CMD=$DOP profile --describe
 EXPECT_MATCH=Profile ldc-d
 EXPECT_MATCH=Architecture:\s+X86-64
-EXPECT_MATCH=D Compiler
+EXPECT_MATCH=Tool\s+dc
 EXPECT_MATCH=name:\s+LDC

@@ -3,7 +3,7 @@ version = '1.0.0'
 description = 'a test library'
 upstream_url = 'https://github.com/rtbo/dopamine'
 license = 'MIT'
-langs = {'c'}
+tools = {'cc'}
 
 include = {
     'lib1.c',

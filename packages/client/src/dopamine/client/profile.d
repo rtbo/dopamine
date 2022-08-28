@@ -7,6 +7,7 @@ import dopamine.paths;
 import dopamine.profile;
 import dopamine.recipe;
 
+import std.algorithm;
 import std.array;
 import std.exception;
 import std.file;
@@ -87,9 +88,9 @@ int profileMain(string[] args)
 
     if (opt.discover)
     {
-        Lang[] langs = recipe ? recipe.langs.dup : [Lang.d, Lang.cpp, Lang.c];
+        string[] tools = recipe ? recipe.tools.dup : ["dc", "c++", "cc"];
         const allowMissing = recipe ? No.allowMissing : Yes.allowMissing;
-        auto profile = detectDefaultProfile(langs, allowMissing);
+        auto profile = detectDefaultProfile(tools, allowMissing);
         const homeFile = homeProfileFile(profile.name);
         const dirFile = dir.profileFile;
         logInfo(
@@ -162,21 +163,19 @@ int profileMain(string[] args)
                 "no profile found.",
         ));
 
-        const allLangs = recipe.langs;
-        const availLangs = profile.langs;
+        const allTools = recipe.tools;
+        const availTools = profile.tools.map!(t => t.id).array;
 
-        foreach (l; allLangs)
+        foreach (t; allTools)
         {
-            import std.algorithm : canFind;
-
-            if (!availLangs.canFind(l))
+            if (!availTools.canFind(t))
             {
-                auto cl = Compiler.detect(l);
-                logInfo("Found %s compiler: %s (%s)",
-                    l.to!string, cl.displayName, cl.path,
+                auto tool = Tool.detect(t);
+                logInfo("Found tool %s: %s (%s)",
+                    t, tool.displayName, tool.path,
                 );
-                auto compilers = profile.compilers.dup ~ cl;
-                profile = profile.withCompilers(compilers);
+                auto tools = profile.tools.dup ~ tool;
+                profile = profile.withTools(tools);
             }
         }
     }
@@ -238,8 +237,8 @@ private Profile checkProfileName(Recipe recipe, string name = "default")
     auto pf = homeProfileFile(name);
     if (!exists(pf))
     {
-        const langs = recipe.langs;
-        name = profileName(name, langs);
+        const tools = recipe.tools;
+        name = profileName(name, tools);
         pf = homeProfileFile(name);
         if (!exists(pf))
             return null;
@@ -248,10 +247,10 @@ private Profile checkProfileName(Recipe recipe, string name = "default")
     return Profile.loadFromFile(pf);
 }
 
-private struct SetLang
+private struct SetTool
 {
-    Lang lang;
-    string compiler;
+    string toolId;
+    string toolExe;
 }
 
 private struct ProfileOptions
@@ -266,7 +265,7 @@ private struct ProfileOptions
     bool discover;
     bool describe;
     bool addMissing;
-    SetLang[] setLangs;
+    SetTool[] setTools;
     bool setDebug;
     bool setRelease;
     string exportName;
@@ -274,7 +273,7 @@ private struct ProfileOptions
 
     @property Mode mode() const
     {
-        if (addMissing || setLangs.length || setDebug || setRelease ||
+        if (addMissing || setTools.length || setDebug || setRelease ||
             profileName.length || exportName.length || discover)
         {
             return Mode.write;
@@ -328,23 +327,22 @@ private struct ProfileOptions
             {
                 enum start = "--set-".length;
                 const eq = arg.indexOf('=');
-                string lnam;
-                string cl;
+                string id;
+                string exe;
                 if (eq == -1)
                 {
-                    lnam = arg[start .. $];
+                    id = arg[start .. $];
                     if (i + 1 < args.length && !args[i + 1].startsWith("-"))
                     {
-                        cl = args[++i];
+                        exe = args[++i];
                     }
                 }
                 else
                 {
-                    lnam = arg[start .. eq];
-                    cl = arg[eq + 1 .. $];
+                    id = arg[start .. eq];
+                    exe = arg[eq + 1 .. $];
                 }
-                Lang lang = fromConfig!Lang(lnam);
-                opt.setLangs ~= SetLang(lang, cl);
+                opt.setTools ~= SetTool(id, exe);
             }
             else if (arg == "--debug")
             {
@@ -414,27 +412,20 @@ unittest
     assert(opt.isWrite);
     assert(opt.addMissing);
 
-    opt = ProfileOptions.parse(["--set-d"]);
+    opt = ProfileOptions.parse(["--set-dc"]);
     assert(opt.isWrite);
-    assert(opt.setLangs.length == 1);
-    assert(opt.setLangs[0] == SetLang(Lang.d, null));
+    assert(opt.setTools.length == 1);
+    assert(opt.setTools[0] == SetTool("dc", null));
 
-    opt = ProfileOptions.parse(["--set-d=dmd"]);
+    opt = ProfileOptions.parse(["--set-dc=dmd"]);
     assert(opt.isWrite);
-    assert(opt.setLangs.length == 1);
-    assert(opt.setLangs[0] == SetLang(Lang.d, "dmd"));
+    assert(opt.setTools.length == 1);
+    assert(opt.setTools[0] == SetTool("dc", "dmd"));
 
-    opt = ProfileOptions.parse(["--set-d", "dmd"]);
+    opt = ProfileOptions.parse(["--set-dc", "dmd"]);
     assert(opt.isWrite);
-    assert(opt.setLangs.length == 1);
-    assert(opt.setLangs[0] == SetLang(Lang.d, "dmd"));
-
-    assertThrown(ProfileOptions.parse(["--set-x"]));
-
-    opt = ProfileOptions.parse(["--set-d=dmd"]);
-    assert(opt.isWrite);
-    assert(opt.setLangs.length == 1);
-    assert(opt.setLangs[0] == SetLang(Lang.d, "dmd"));
+    assert(opt.setTools.length == 1);
+    assert(opt.setTools[0] == SetTool("dc", "dmd"));
 
     assertThrown(ProfileOptions.parse(["--export"]));
 

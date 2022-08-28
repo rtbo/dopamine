@@ -1,6 +1,6 @@
 name = 'lib2'
 version = '1.0.0'
-langs = {'c'}
+tools = {'cc'}
 
 dependencies = {
     pkga = '>=1.0.0',

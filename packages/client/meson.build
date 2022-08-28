@@ -40,7 +40,7 @@ if get_option('enable_test')
     dop_client_test_exe = executable('dop-client-test', client_stupid, dop_client_test_src,
         d_unittest: true,
         include_directories: include_directories('.', 'src'),
-        dependencies: dop_dep,
+        dependencies: [dop_dep, ut_assertions_dep],
     )
 
     test('client unit tests', dop_client_test_exe,

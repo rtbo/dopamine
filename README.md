@@ -63,7 +63,7 @@ description = 'The PNG reference library'
 authors = {'The PNG Reference Library Authors'}
 license = 'http://www.libpng.org/pub/png/src/libpng-LICENSE.txt'
 copyright = 'Copyright (c) 1995-2019 The PNG Reference Library Authors'
-langs = {'c'}
+tools = {'cc'}
 
 dependencies = {zlib = '>=1.2.5'}
 

@@ -1,6 +1,6 @@
 name = 'lib1'
 version = '1.0.0'
-langs = {'c'}
+tools = {'cc'}
 
 include = {
     'lib1.c',

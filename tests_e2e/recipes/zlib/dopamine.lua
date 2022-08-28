@@ -4,7 +4,7 @@ description = 'A Massively Spiffy Yet Delicately Unobtrusive Compression Library
 authors = {'Jean-loup Gailly', 'Mark Adler'}
 license = 'MIT'
 copyright = 'Copyright (C) 1995-2017 Jean-loup Gailly and Mark Adler'
-langs = {'c'}
+tools = {'cc'}
 
 function source ()
     local folder = 'zlib-' .. version

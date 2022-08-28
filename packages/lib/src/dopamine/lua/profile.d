@@ -26,32 +26,30 @@ void luaPushProfile(lua_State* L, const(Profile) profile)
 
     luaSetTable(L, ind, "build_type", profile.buildType.toConfig);
 
-    lua_pushliteral(L, "compilers");
-    lua_createtable(L, 0, cast(int) profile.compilers.length);
-    const compsInd = lua_gettop(L);
-    foreach (const ref comp; profile.compilers)
+    lua_pushliteral(L, "tools");
+    lua_createtable(L, 0, cast(int) profile.tools.length);
+    const toolsInd = lua_gettop(L);
+    foreach (const ref tool; profile.tools)
     {
-        const lang = comp.lang.toConfig();
-        lua_pushlstring(L, lang.ptr, lang.length);
+        const id = tool.id;
+        lua_pushlstring(L, id.ptr, id.length);
 
         lua_createtable(L, 0, 3);
-        const compInd = lua_gettop(L);
-        luaSetTable(L, compInd, "name", comp.name);
-        luaSetTable(L, compInd, "version", comp.ver);
-        luaSetTable(L, compInd, "path", comp.path);
+        const toolInd = lua_gettop(L);
+        luaSetTable(L, toolInd, "name", tool.name);
+        luaSetTable(L, toolInd, "version", tool.ver);
+        luaSetTable(L, toolInd, "path", tool.path);
         version (Windows)
         {
-            if (comp.vsvc)
+            if (tool.vsvc)
             {
-                import dopamine.semver : Semver;
-
-                luaSetTable(L, compInd, "msvc", true);
-                luaSetTable(L, compInd, "msvc_ver", comp.vsvc.productLineVersion);
-                luaSetTable(L, compInd, "msvc_disp", comp.vsvc.displayName);
+                luaSetTable(L, toolInd, "msvc", true);
+                luaSetTable(L, toolInd, "msvc_ver", tool.vsvc.productLineVersion);
+                luaSetTable(L, toolInd, "msvc_disp", tool.vsvc.displayName);
             }
         }
 
-        lua_settable(L, compsInd);
+        lua_settable(L, toolsInd);
     }
     lua_settable(L, ind); // compilers table
 
@@ -76,18 +74,18 @@ const(Profile) luaReadProfile(lua_State* L, int ind)
 
     const buildType = fromConfig!BuildType(luaGetTable!string(L, ind, "build_type"));
 
-    lua_getfield(L, ind, "compilers");
-    const compInd = lua_gettop(L);
-    enforce(lua_type(L, -1) == LUA_TTABLE, "Cannot find compilers profile table");
-    Compiler[] compilers;
+    lua_getfield(L, ind, "tools");
+    const toolInd = lua_gettop(L);
+    enforce(lua_type(L, -1) == LUA_TTABLE, "Cannot find tools profile table");
+    Tool[] tools;
     lua_pushnil(L);
-    while (lua_next(L, compInd) != 0)
+    while (lua_next(L, toolInd) != 0)
     {
-        enforce(lua_type(L, -2) == LUA_TSTRING, "Compilers table key must be language name");
+        enforce(lua_type(L, -2) == LUA_TSTRING, "Tools table key must be the tool id");
 
-        const lang = fromConfig!Lang(luaTo!string(L, -2));
+        const id = luaTo!string(L, -2);
 
-        // compiler table at index -1
+        // tool table at index -1
         const name = luaGetTable!string(L, -1, "name");
         const ver = luaGetTable!string(L, -1, "version");
         const path = luaGetTable!string(L, -1, "path");
@@ -103,13 +101,13 @@ const(Profile) luaReadProfile(lua_State* L, int ind)
                 install.productLineVersion = luaGetTable!string(L, -1, "msvc_ver");
                 install.displayName = luaGetTable!string(L, -1, "msvc_disp");
 
-                compilers ~= Compiler(lang, install);
+                tools ~= Tool(id, install);
                 lua_pop(L, 1);
                 continue;
             }
         }
 
-        compilers ~= Compiler(lang, name, ver, path);
+        tools ~= Tool(id, name, ver, path);
 
         lua_pop(L, 1);
     }
@@ -117,7 +115,7 @@ const(Profile) luaReadProfile(lua_State* L, int ind)
 
     const hash = luaGetTable!string(L, ind, "digest_hash");
 
-    auto profile = new Profile(basename, host, buildType, compilers);
+    auto profile = new Profile(basename, host, buildType, tools);
 
     enforce(hash == profile.digestHash,
             "Error: hash mismatch between profile rebuilt from Lua and original");

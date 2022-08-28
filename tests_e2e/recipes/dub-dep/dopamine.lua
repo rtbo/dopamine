@@ -1,6 +1,6 @@
 name = 'dub-dep'
 version = '1.0.0'
-langs = {'d'}
+tools = {'dc'}
 
 dependencies = {
     urld = { version = '~>2.1.1', dub = true }

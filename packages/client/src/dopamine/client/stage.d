@@ -28,7 +28,7 @@ in(isAbsolute(absDest))
 {
     if (!rdir.recipe.canStage)
     {
-        const config = BuildConfig(profile.subset(rdir.recipe.langs));
+        const config = BuildConfig(profile.subset(rdir.recipe.tools));
         const buildId = BuildId(rdir.recipe, config, absDest);
         const bPaths = rdir.buildPaths(buildId);
         acquireBuildLockFile(bPaths);
@@ -40,7 +40,7 @@ in(isAbsolute(absDest))
         return;
     }
 
-    auto config = BuildConfig(profile.subset(rdir.recipe.langs));
+    auto config = BuildConfig(profile.subset(rdir.recipe.tools));
     const buildId = BuildId(rdir.recipe, config, absDest);
     const bPaths = rdir.buildPaths(buildId);
     acquireBuildLockFile(bPaths);
@@ -99,12 +99,12 @@ int stageMain(string[] args)
         {
             auto service = dn.dub ? services.dub : services.dop;
             auto drdir = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
-            auto dprof = profile.subset(drdir.recipe.langs);
+            auto dprof = profile.subset(drdir.recipe.tools);
             stagePackage(drdir, dprof, absDest, depInfos);
         }
     }
 
-    stagePackage(rdir, profile.subset(recipe.langs), absDest, depInfos);
+    stagePackage(rdir, profile.subset(recipe.tools), absDest, depInfos);
 
     logInfo("Stage: %s - %s", success("OK"), info(dest));
 

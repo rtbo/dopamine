@@ -1,4 +1,4 @@
 RECIPE=profile
 CMD=$DOP profile
-EXPECT_MATCH=ldc-d
+EXPECT_MATCH=ldc-dc
 EXPECT_NOT_MATCH=Architecture:\s+X86-64

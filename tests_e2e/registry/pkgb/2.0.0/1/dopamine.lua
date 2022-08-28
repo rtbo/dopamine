@@ -1,6 +1,6 @@
 name = 'pkgb'
 version = '2.0.0'
-langs = {'d'}
+tools = {'dc'}
 
 dependencies = {
     pkga = '>=2.0.0',

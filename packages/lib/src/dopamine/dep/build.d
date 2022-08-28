@@ -17,14 +17,14 @@ DepInfo[string] collectDepInfos(DepDAG dag, Recipe recipe,
 in (dag.resolved)
 in (!stageDest || isAbsolute(stageDest))
 {
-    const langs = collectLangs(dag, services);
-    enforceHasLangs(profile, langs, recipe);
+    const tools = collectTools(dag, services);
+    enforceHasTools(profile, tools, recipe);
 
     foreach (depNode; dag.traverseTopDownResolved())
     {
         auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        const prof = profile.subset(rdir.recipe.langs);
+        const prof = profile.subset(rdir.recipe.tools);
         const conf = BuildConfig(prof);
         const buildId = BuildId(rdir.recipe, conf, stageDest);
         const bPaths = rdir.buildPaths(buildId);
@@ -44,8 +44,8 @@ in (!stageDest || isAbsolute(stageDest))
     import std.datetime : Clock;
     import std.format : format;
 
-    const langs = collectLangs(dag, services);
-    enforceHasLangs(profile, langs, recipe);
+    const tools = collectTools(dag, services);
+    enforceHasTools(profile, tools, recipe);
 
     const maxLen = dag.traverseTopDownResolved()
         .map!(dn => dn.pack.name.length + dn.ver.toString().length + 1)
@@ -58,7 +58,7 @@ in (!stageDest || isAbsolute(stageDest))
 
         auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        const prof = profile.subset(rdir.recipe.langs);
+        const prof = profile.subset(rdir.recipe.tools);
         const conf = BuildConfig(prof);
         const bid = BuildId(rdir.recipe, conf, stageDest);
         const bPaths = rdir.buildPaths(bid);
@@ -132,11 +132,11 @@ in (node.isResolved)
     return res;
 }
 
-private Lang[] collectLangs(DepDAG dag, DepServices services)
+private string[] collectTools(DepDAG dag, DepServices services)
 {
     import std.algorithm : canFind, sort;
 
-    Lang[] allLangs;
+    string[] allTools;
 
     foreach (depNode; dag.traverseTopDownResolved)
     {
@@ -145,31 +145,31 @@ private Lang[] collectLangs(DepDAG dag, DepServices services)
 
         auto service = depNode.dub ? services.dub : services.dop;
         auto drdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
-        foreach (l; drdir.recipe.langs)
+        foreach (t; drdir.recipe.tools)
         {
-            if (!allLangs.canFind(l))
-                allLangs ~= l;
+            if (!allTools.canFind(t))
+                allTools ~= t;
         }
     }
 
-    sort(allLangs);
+    sort(allTools);
 
-    return allLangs;
+    return allTools;
 }
 
-private void enforceHasLangs(const(Profile) profile, const(Lang)[] langs, Recipe recipe)
+private void enforceHasTools(const(Profile) profile, const(string)[] tools, Recipe recipe)
 {
     import std.format : format;
 
-    if (!profile.hasAllLangs(langs))
+    if (!profile.hasAllTools(tools))
     {
         string msg = format("Profile %s misses the following languages to build the dependencies of %s-%s:", profile
                 .name, recipe.name, recipe.ver);
-        foreach (l; langs)
+        foreach (t; tools)
         {
-            if (!profile.hasLang(l))
+            if (!profile.hasTool(t))
             {
-                msg ~= "\n  - " ~ l.to!string;
+                msg ~= "\n  - " ~ t;
             }
         }
         throw new Exception(msg);
