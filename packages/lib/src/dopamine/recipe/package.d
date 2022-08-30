@@ -6,6 +6,7 @@ import dopamine.semver;
 
 import std.file;
 import std.path;
+import std.sumtype;
 
 public import dopamine.recipe.dir;
 public import dopamine.recipe.dop;
@@ -33,6 +34,14 @@ struct BuildDirs
         assert(build.isAbsolute);
         assert(install.isAbsolute);
     }
+}
+
+alias OptionVal = SumType!(bool, string, int);
+
+struct Option
+{
+    OptionVal defaultValue;
+    string description;
 }
 
 /// The build configuration
@@ -106,6 +115,12 @@ interface Recipe
     /// Return tools needed by this recipe.
     /// This will determine the toolchain needed to build the package.
     @property const(string)[] tools() const @safe;
+
+    /// Return options declared by this recipe.
+    /// This is not strictly needed to use options but serves two purposes:
+    ///  - define default values.
+    ///  - document options
+    @property const(Option[string]) options() const @safe;
 
     /// Whether this recipe has dependencies.
     /// In case dependencies are only needed for some config cases, true is returned.
@@ -224,7 +239,7 @@ version (unittest)  : final class MockRecipe : Recipe
 
     @property string upstreamUrl() const @safe
     {
-        return "Description of " ~ _name;
+        return "https://" ~ _name ~ ".test";
     }
 
     @property string license() const @safe
@@ -235,6 +250,11 @@ version (unittest)  : final class MockRecipe : Recipe
     @property const(string)[] tools() const @safe
     {
         return _tools;
+    }
+
+    @property const(Option[string]) options() const @safe
+    {
+        return null;
     }
 
     /// Whether this recipe has dependencies.

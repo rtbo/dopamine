@@ -94,6 +94,11 @@ class DubRecipe : Recipe
         return ["dc"];
     }
 
+    @property const(Option[string]) options() const @safe
+    {
+        return null;
+    }
+
     @property bool hasDependencies() const @safe
     {
         return (() @trusted => _dubPack.rawRecipe.buildSettings.dependencies.length > 0)();

@@ -1,0 +1,11 @@
+option('enable_lib1',
+    type: 'boolean',
+    value: true,
+    description: 'Whether to build the lib 1',
+)
+
+option('enable_lib2',
+    type: 'boolean',
+    value: true,
+    description: 'Whether to build the lib 2',
+)
