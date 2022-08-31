@@ -2,6 +2,7 @@ module dopamine.client.app;
 
 import dopamine.client.build;
 import dopamine.client.login;
+import dopamine.client.options;
 import dopamine.client.profile;
 import dopamine.client.publish;
 import dopamine.client.resolve;
@@ -37,6 +38,7 @@ int main(string[] args)
         Command("search", &searchMain, "Search for packages on the registry"),
         Command("login", &loginMain, "Register login credientials"),
         Command("profile", &profileMain, "Manage compilation profile"),
+        Command("options", &optionsMain, "Manage package options"),
         Command("resolve", &resolveMain, "Resolve and lock dependencies versions"),
         Command("source", &sourceMain, "Download and prepare the source code"),
         Command("build", &buildMain, "Build the package"),

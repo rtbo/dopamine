@@ -8,6 +8,7 @@ import dopamine.util;
 import std.datetime;
 import std.exception;
 import std.file;
+import std.json;
 import std.path;
 
 /// Content of the main state for the package dir state
@@ -43,7 +44,7 @@ alias BuildStateFile = JsonStateFile!BuildState;
 ///  - etc.
 ///
 /// In a nutshell:
-///  - Recipe knows a to get the source and build the software and could do it anywhere.
+///  - Recipe knows how to get the source and build the software and could do it anywhere.
 ///  - RecipeDir is tied to a particular location (project dir or cache dir) and manage the recipe
 ///    and package state at this locaiton.
 struct RecipeDir
@@ -145,6 +146,104 @@ struct RecipeDir
         return exists(p) && isFile(p);
     }
 
+    @property string optionFile() const
+    {
+        return dopPath("options.json");
+    }
+
+    @property bool hasOptionFile() const
+    {
+        const p = optionFile();
+        return exists(p) && isFile(p);
+    }
+
+    OptionVal[string] readOptionFile() const
+    {
+        auto json = readJsonOptions();
+        OptionVal[string] res;
+        jsonToOptions(json, res);
+        return res;
+    }
+
+    void writeOptionFile(const(OptionVal[string]) opts) const
+    {
+        JSONValue[string] json;
+        optionsToJson(opts, json);
+        writeJsonOptions(json);
+    }
+
+    void clearOptionFile() const
+    {
+        const p = optionFile;
+        if (exists(p) && isFile(p))
+            remove(p);
+    }
+
+    OptionVal[string] mergeOptionFile(return scope OptionVal[string] opts) const
+    {
+        auto json = readJsonOptions();
+        optionsToJson(opts, json);
+        jsonToOptions(json, opts);
+        writeJsonOptions(json);
+        return opts;
+    }
+
+    private JSONValue[string] readJsonOptions() const
+    {
+        const p = optionFile();
+        if (!exists(p) || !isFile(p))
+            return null;
+        auto json = cast(const(char)[]) read(p);
+        return parseJSON(json).objectNoRef;
+    }
+
+    private void writeJsonOptions(JSONValue[string] json) const
+    {
+        import std.string : representation;
+
+        mkdirRecurse(dopPath());
+        const str = JSONValue(json).toPrettyString();
+        write(optionFile, str.representation);
+    }
+
+    private void jsonToOptions(const(JSONValue[string]) json, ref OptionVal[string] opts) const
+    {
+        foreach (string key, const ref JSONValue val; json)
+        {
+            switch (val.type)
+            {
+            case JSONType.true_:
+                opts[key] = OptionVal(true);
+                break;
+            case JSONType.false_:
+                opts[key] = OptionVal(false);
+                break;
+            case JSONType.integer:
+                opts[key] = OptionVal(val.get!int);
+                break;
+            case JSONType.string:
+                opts[key] = OptionVal(val.get!string);
+                break;
+            default:
+                throw new Exception("Invalid JSON option type in " ~ optionFile);
+            }
+        }
+    }
+
+    private static void optionsToJson(const(OptionVal[string]) opts, ref JSONValue[string] json)
+    {
+        import std.sumtype : match;
+
+        foreach (name, optVal; opts)
+        {
+            optVal.match!(
+                (bool val) => json[name] = val,
+                (int val) => json[name] = val,
+                (string val) => json[name] = val,
+            );
+        }
+    }
+
     /// Get the recipe of this directory.
     /// May be null if the directory has no recipe.
     @property inout(Recipe) recipe() inout
@@ -208,7 +307,7 @@ struct RecipeDir
     }
 
     string checkSourceReady(out string reason)
-    out(dir; !dir || !std.path.isAbsolute(dir))
+    out (dir; !dir || !std.path.isAbsolute(dir))
     {
         if (!recipe)
         {

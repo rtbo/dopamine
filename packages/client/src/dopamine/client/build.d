@@ -113,7 +113,8 @@ int buildMain(string[] args)
         depInfos = buildDependencies(dag, recipe, profile, services);
     }
 
-    const config = BuildConfig(profile.subset(recipe.tools));
+    auto options = rdir.readOptionFile();
+    const config = BuildConfig(profile.subset(recipe.tools), options);
     const buildId = BuildId(recipe, config);
 
     if (environment.get("DOP_E2ETEST_BUILDID"))

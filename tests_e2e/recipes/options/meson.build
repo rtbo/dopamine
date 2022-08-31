@@ -13,7 +13,7 @@ if get_option('enable_lib1')
 endif
 
 if get_option('enable_lib2')
-    lib2_lib = static_library('options_lib2', 'thelib1/src/thelib2.d',
+    lib2_lib = static_library('options_lib2', 'thelib2/src/thelib2.d',
         install: true,
     )
 endif
