@@ -13,6 +13,7 @@ import std.process;
 import std.regex;
 import std.stdio;
 import std.string;
+import std.typecons;
 
 struct Exes
 {
@@ -142,6 +143,15 @@ final class Test
                     break;
                 case "SHARED_LIB":
                     expect = new ExpectLib(data, ExpectLib.Type.dynamic);
+                    break;
+                case "NOT_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.both, Yes.expectNot);
+                    break;
+                case "NOT_STATIC_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.archive, Yes.expectNot);
+                    break;
+                case "NOT_SHARED_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.dynamic, Yes.expectNot);
                     break;
                 case "EXE":
                     expect = new ExpectExe(data);

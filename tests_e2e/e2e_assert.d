@@ -8,6 +8,7 @@ import std.path;
 import std.regex;
 import std.stdio;
 import std.string;
+import std.typecons;
 
 struct RunResult
 {
@@ -138,12 +139,14 @@ class ExpectLib : Expect
     string dirname;
     string basename;
     Type type;
+    Flag!"expectNot" expectNot;
 
-    this(string path, Type type)
+    this(string path, Type type, Flag!"expectNot" expectNot = No.expectNot)
     {
         dirname = dirName(path);
         basename = baseName(path);
         this.type = type;
+        this.expectNot = expectNot;
     }
 
     override string expect(ref RunResult res)
@@ -167,20 +170,40 @@ class ExpectLib : Expect
                 basename ~ ".dll",
             ];
         }
+        string found;
         string[] tries;
         foreach (name; names)
         {
             const path = buildPath(dirname, name);
             if (exists(path))
+            {
+                found = path;
+                break;
+            }
+            else
+            {
+                tries ~= path;
+            }
+        }
+
+        if (expectNot)
+        {
+            if (!found)
                 return null;
             else
-                tries ~= path;
+                return format!"Did not expect to find library %s (%s)"(basename, found);
         }
+
+        if (found)
+            return null;
+
         auto msg = format("Could not find any library named %s in %s\nTried:", basename, dirname);
         foreach (tr; tries)
         {
             msg ~= "\n - " ~ tr;
         }
+        if (msg && expectNot)
+            msg = null;
         return msg;
     }
 }
