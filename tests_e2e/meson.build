@@ -44,6 +44,8 @@ e2e_tests = [
 
     'search',
 
+    'options-default',
+
     'warning',
 ]
 

@@ -1,0 +1,7 @@
+RECIPE=options
+
+CMD=$DOP profile --discover
+CMD=$DOP source
+CMD=$DOP build
+EXPECT_LIB=.dop/$DOP_BID/lib/options_lib1
+EXPECT_NOT_LIB=.dop/$DOP_BID/lib/options_lib2
