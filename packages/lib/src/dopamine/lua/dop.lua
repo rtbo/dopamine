@@ -276,10 +276,10 @@ function Meson:setup(params, env)
 
     local cmd = { 'meson', 'setup' }
     for k, v in pairs(self.options) do
-        table.insert(cmd, k .. '=' .. v)
+        table.insert(cmd, k .. '=' .. tostring(v))
     end
     for k, v in pairs(self.defs) do
-        table.insert(cmd, '-D' .. k .. '=' .. v)
+        table.insert(cmd, '-D' .. k .. '=' .. tostring(v))
     end
 
     table.insert(cmd, self.build_dir)
