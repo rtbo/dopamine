@@ -50,11 +50,27 @@ struct BuildConfig
     /// the build profile
     const(Profile) profile;
 
-    // TODO: options
+    OptionVal[string] options;
 
     void feedDigest(D)(ref D digest) const
     {
+        import dopamine.util : feedDigestData;
+        import std.algorithm : sort;
+        import std.sumtype : match;
+
         profile.feedDigest(digest);
+
+        auto names = options.keys;
+        sort(names);
+        foreach (name; names)
+        {
+            feedDigestData(digest, name);
+            options[name].match!(
+                (bool val) => feedDigestData(digest, val),
+                (int val) => feedDigestData(digest, val),
+                (string val) => feedDigestData(digest, val),
+            );
+        }
     }
 }
 
@@ -153,7 +169,7 @@ interface Recipe
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepInfo[string] depInfos = null) @system
     in (!isLight, "Light recipes do not build");
 
     /// Whether this recipe can stage an installation to another
@@ -302,7 +318,7 @@ version (unittest)  : final class MockRecipe : Recipe
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepInfo[string] depInfos = null) @system
     {
     }
 

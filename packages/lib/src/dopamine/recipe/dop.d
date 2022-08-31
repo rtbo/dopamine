@@ -392,7 +392,7 @@ final class DopRecipe : Recipe
         return L.luaPop!string();
     }
 
-    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepInfo[string] depInfos = null) @system
     {
         assert(buildNormalizedPath(dirs.root) == buildNormalizedPath(_rootDir));
 
@@ -400,7 +400,7 @@ final class DopRecipe : Recipe
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
         pushBuildDirs(L, dirs);
-        pushConfig(L, config);
+        pushConfig(L, config, _options);
         pushDepInfos(L, depInfos);
 
         const cwd = getcwd();
@@ -770,16 +770,37 @@ void pushBuildDirs(lua_State* L, BuildDirs dirs) @trusted
     luaSetTable(L, ind, "install", dirs.install);
 }
 
-void pushConfig(lua_State* L, BuildConfig config) @trusted
+void pushConfig(lua_State* L, const(BuildConfig) config, Option[string] optionDecls) @trusted
 {
-    lua_createtable(L, 0, 4);
+    import std.sumtype : match;
+
+    lua_createtable(L, 0, 2);
     const ind = lua_gettop(L);
 
     lua_pushliteral(L, "profile");
     luaPushProfile(L, config.profile);
     lua_settable(L, ind);
 
-    // TODO options
+    OptionVal[string] options;
+    foreach(name, decl; optionDecls)
+        options[name] = decl.defaultValue;
+    foreach(name, val; config.options)
+        options[name] = val;
+
+    lua_pushliteral(L, "options");
+    lua_createtable(L, 0, cast(int)options.length);
+    const optInd = lua_gettop(L);
+    foreach (name, val; options)
+    {
+        luaPush(L, name);
+        val.match!(
+            (bool val) => luaPush(L, val),
+            (int val) => luaPush(L, val),
+            (string val) => luaPush(L, val),
+        );
+        lua_settable(L, optInd);
+    }
+    lua_settable(L, ind);
 }
 
 void pushDepInfos(lua_State* L, DepInfo[string] depInfos) @trusted

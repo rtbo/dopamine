@@ -126,7 +126,7 @@ class DubRecipe : Recipe
         return ".";
     }
 
-    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepInfo[string] depInfos = null) @system
     {
         import std.process;
 
@@ -221,7 +221,7 @@ class DubRecipe : Recipe
         return installRecurse(src, dest);
     }
 
-    private NinjaBuild createNinja(const ref BuildSettings bs, BuildDirs dirs, BuildConfig config)
+    private NinjaBuild createNinja(const ref BuildSettings bs, BuildDirs dirs, const(BuildConfig) config)
     {
         version (Windows)
         {
