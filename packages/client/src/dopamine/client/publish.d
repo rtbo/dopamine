@@ -38,7 +38,7 @@ void enforceRecipeIdentity(Recipe recipe)
         new ErrorLogException(
             "The following fields are needed to publish a recipe:\n - %s\n - %s\n - %s\n - %s",
             info("name"), info("description"), info("license"), info("upstream_url")
-        )
+    )
     );
 
     const forbidden = ["/", "\\", "@"];
@@ -48,7 +48,7 @@ void enforceRecipeIdentity(Recipe recipe)
             !recipe.name.canFind(c),
             new ErrorLogException(
                 "Invalid recipe name. Illegal character: %s", info(c)
-            )
+        )
         );
     }
 
@@ -64,7 +64,11 @@ void enforceRecipeIdentity(Recipe recipe)
     );
 }
 
-void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, string revision)
+void enforceRecipeIntegrity(RecipeDir rdir,
+    Profile profile,
+    string cacheDir,
+    string revision,
+    OptionVal[string] options)
 {
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;
@@ -74,7 +78,7 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
-        auto services = DepServices(buildDepService(No.system), buildDubDepService());
+        auto services = DepServices(buildDepService(No.system, cacheDir), buildDubDepService());
         Heuristics heuristics;
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;
@@ -91,7 +95,7 @@ void enforceRecipeIntegrity(RecipeDir rdir, Profile profile, string cacheDir, st
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
     const srcDir = recipe.inTreeSrc ? rdir.root : recipe.source();
 
-    const config = BuildConfig(profile.subset(recipe.tools));
+    const config = BuildConfig(profile.subset(recipe.tools), options);
     const buildId = BuildId(recipe, config);
     const bPaths = rdir.buildPaths(buildId);
 
@@ -107,11 +111,13 @@ int publishMain(string[] args)
 {
     string profileName;
     bool skipCvsClean;
+    string[] optionOverrides;
 
     // dfmt off
     auto helpInfo = getopt(args,
         "check-profile|p", "Use specified profile to check package.", &profileName,
         "skip-cvs-clean", "Skip to check that CVS is clean", &skipCvsClean,
+        "option|o", "Override option for the integrity check", &optionOverrides,
     );
     // dfmt on
 
@@ -148,7 +154,7 @@ int publishMain(string[] args)
         enforce(
             isRepoClean(cvs, rdir.root),
             new ErrorLogException(
-                "%s repo isn't clean. By default, %s is only possible with clean repo.\n" ~
+                "%s repo isn't clean. By default, %s is only possible with a clean repo.\n" ~
                 "Run with %s to skip this check.", info(cvs), info("publish"), info(
                 "--skip-cvs-clean")
         ),
@@ -190,11 +196,17 @@ int publishMain(string[] args)
         .unboxTarXz()
         .each!(e => e.extractTo(extractPath));
 
+    auto options = rdir.readOptionFile();
+    foreach (oo; optionOverrides)
+    {
+        parseOptionSpec(options, oo);
+    }
+
     logInfo("Checking recipe integrity in %s", info(extractPath));
 
     try
     {
-        enforceRecipeIntegrity(enforceRecipe(extractPath), profile, cacheDir, recipe.revision);
+        enforceRecipeIntegrity(enforceRecipe(extractPath), profile, cacheDir, recipe.revision, options);
     }
     catch (ServerDownException ex)
     {
@@ -217,8 +229,8 @@ int publishMain(string[] args)
     {
         throw new ErrorLogException(
             "Could not log to %s (%s).\nPublishing requires to be logged-in. " ~
-            "Get a login key on the registry front-end.",
-            info(registry.host), ex.msg
+                "Get a login key on the registry front-end.",
+                info(registry.host), ex.msg
         );
     }
 
@@ -243,18 +255,18 @@ int publishMain(string[] args)
 
     switch (newRecResp.new_)
     {
-        case "package":
-            logInfo("Publish: New package - %s/%s", info(rec.name), info(rec.ver));
-            break;
-        case "version":
-            logInfo("Publish: Adding version %s to package %s", info(rec.ver), info(rec.name));
-            break;
-        case "":
-            logInfo("Publish: Adding new revision to %s/%s", info(rec.name), info(rec.ver));
-            break;
-        default:
-            debug assert(false, "unknown new_ field value");
-            else break;
+    case "package":
+        logInfo("Publish: New package - %s/%s", info(rec.name), info(rec.ver));
+        break;
+    case "version":
+        logInfo("Publish: Adding version %s to package %s", info(rec.ver), info(rec.name));
+        break;
+    case "":
+        logInfo("Publish: Adding new revision to %s/%s", info(rec.name), info(rec.ver));
+        break;
+    default:
+        debug assert(false, "unknown new_ field value");
+        else break;
     }
 
     logInfo("Uploading archive and checking archive...");
