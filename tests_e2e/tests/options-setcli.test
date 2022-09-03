@@ -11,3 +11,7 @@ EXPECT_FILE=.dop/options.json
 CMD=$DOP build
 EXPECT_NOT_LIB=.dop/$DOP_BID/lib/options_lib1
 EXPECT_LIB=.dop/$DOP_BID/lib/options_lib2
+
+CMD=$DOP build --option lib1=true
+EXPECT_LIB=.dop/$DOP_BID/lib/options_lib1
+EXPECT_LIB=.dop/$DOP_BID/lib/options_lib2

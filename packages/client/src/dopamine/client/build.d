@@ -70,13 +70,14 @@ int buildMain(string[] args)
     string profileName;
     bool force;
     bool noNetwork;
-    bool noSystem;
+    string[] optionOverrides;
 
     // dfmt off
     auto helpInfo = getopt(args,
         "profile|p",    &profileName,
         "no-network|N", &noNetwork,
         "force|f",      &force,
+        "option|o", "Override option", &optionOverrides,
     );
     // dfmt on
 
@@ -114,6 +115,10 @@ int buildMain(string[] args)
     }
 
     auto options = rdir.readOptionFile();
+    foreach(oo; optionOverrides)
+    {
+        parseOptionSpec(options, oo);
+    }
     const config = BuildConfig(profile.subset(recipe.tools), options);
     const buildId = BuildId(recipe, config);
 
