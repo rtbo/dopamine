@@ -31,7 +31,7 @@ struct PkgConfFile
     string[] conflicts;
     string[] provided;
 
-    static PkgConfFile parse(string filename)
+    static PkgConfFile parseFile(string filename)
     {
         auto f = File(filename, "r");
 
@@ -166,3 +166,43 @@ string[] depsSplit(string src)
 extern(C) nothrow char *pkgconf_fgetline(char *line, size_t size, FILE *stream);
 extern(C) nothrow int pkgconf_argv_split(const char *src, int *argc, char ***argv);
 extern(C) nothrow void pkgconf_argv_free(char **argv);
+
+version(unittest)
+{
+    import test.util;
+    import unit_threaded.assertions;
+}
+
+@("PkgConfFile.parse")
+unittest
+{
+    import std.file;
+
+    auto pc = `
+prefix=/some/path
+# a comment
+incdir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: package name
+URL: https://pkg.com
+Libs: -lpkg -L${libdir}
+Cflags: -I${incdir} -Wall
+    `;
+
+    auto dm = DeleteMe("pkg", "pc");
+    std.file.write(dm.path, pc);
+
+    auto pkgf = PkgConfFile.parseFile(dm.path);
+
+    pkgf.vars.should == [
+        PkgConfFile.Var("prefix", "/some/path"),
+        PkgConfFile.Var("incdir", "${prefix}/include"),
+        PkgConfFile.Var("libdir", "${prefix}/lib"),
+    ];
+
+    pkgf.name.should == "package name";
+    pkgf.url.should == "https://pkg.com";
+    pkgf.libs.should == [ "-lpkg", "-L${libdir}" ];
+    pkgf.cflags.should == [ "-I${incdir}", "-Wall" ];
+}
