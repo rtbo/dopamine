@@ -1,7 +1,7 @@
 // dfmt off
 /*
-	This is a modified version of silly that allows integration out of DUB.
-	This file actually is a template used by gen_silly
+	This is a modified version of silly for Dopamine that allows integration out of DUB.
+	This file actually is a template used by stupid_gen
 */
 /*
  * Silly is a test runner for the D programming language
