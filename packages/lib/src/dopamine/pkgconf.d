@@ -68,6 +68,7 @@ void parsePkgConfLine(string line, ref PkgConfFile pcf)
             string ident = line[0 .. idx];
             string val = line[idx+1 .. $].strip();
             pcf.vars ~= PkgConfFile.Var(ident, val);
+            break;
         }
         else if (c == ':')
         {
@@ -128,6 +129,7 @@ void parsePkgConfLine(string line, ref PkgConfFile pcf)
             default:
                 throw new Exception("Unknown pkg-config keyword: " ~ ident);
             }
+            break;
         }
         else
         {
@@ -190,7 +192,7 @@ Libs: -lpkg -L${libdir}
 Cflags: -I${incdir} -Wall
     `;
 
-    auto dm = DeleteMe("pkg", "pc");
+    auto dm = DeleteMe("pkg", ".pc");
     std.file.write(dm.path, pc);
 
     auto pkgf = PkgConfFile.parseFile(dm.path);
