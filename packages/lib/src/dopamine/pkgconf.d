@@ -1,6 +1,7 @@
 module dopamine.pkgconf;
 
 import std.exception;
+import std.range;
 import std.stdio;
 import std.string;
 
@@ -51,6 +52,43 @@ struct PkgConfFile
         }
 
         return res;
+    }
+
+    void write(O)(O output) if (isOutputRange!(O, char))
+    {
+        foreach (v; vars)
+        {
+            output.put(v.name ~ "=" ~ v.value ~ "\n");
+        }
+        output.put("\n");
+        output.put("Name: " ~ enforce(name, "Name field is required") ~ "\n");
+        output.put("Version: " ~ enforce(ver, "Version field is required") ~ "\n");
+        if (description)
+            output.put("Description: " ~ description ~ "\n");
+        if (url)
+            output.put("URL: " ~ url ~ "\n");
+        if (license)
+            output.put("License: " ~ license ~ "\n");
+        if (maintainer)
+            output.put("Maintainer: " ~ maintainer ~ "\n");
+        if (copyright)
+            output.put("Copyright: " ~ copyright ~ "\n");
+        if (cflags)
+            output.put("Cflags: " ~ cflags.join(" ") ~ "\n");
+        if (cflagsPriv)
+            output.put("Cflags.private: " ~ cflagsPriv.join(" ") ~ "\n");
+        if (libs)
+            output.put("Libs: " ~ libs.join(" ") ~ "\n");
+        if (libsPriv)
+            output.put("Libs.private: " ~ libsPriv.join(" ") ~ "\n");
+        if (required)
+            output.put("Requires: " ~ required.join(" , ") ~ "\n");
+        if (requiredPriv)
+            output.put("Requires.private: " ~ requiredPriv.join(" , ") ~ "\n");
+        if (conflicts)
+            output.put("Conflicts: " ~ conflicts.join(" , ") ~ "\n");
+        if (provided)
+            output.put("Provides: " ~ provided.join(" , ") ~ "\n");
     }
 }
 
@@ -175,11 +213,12 @@ version(unittest)
     import unit_threaded.assertions;
 }
 
-@("PkgConfFile.parse")
+@("PkgConfFile")
 unittest
 {
     import std.file;
 
+    // parsing
     auto pc = `
 prefix=/some/path
 # a comment
@@ -187,9 +226,10 @@ incdir=${prefix}/include
 libdir=${prefix}/lib
 
 Name: package name
+Version: 1.0.0
 URL: https://pkg.com
-Libs: -lpkg -L${libdir}
 Cflags: -I${incdir} -Wall
+Libs: -lpkg -L${libdir}
     `;
 
     auto dm = DeleteMe("pkg", ".pc");
@@ -204,7 +244,27 @@ Cflags: -I${incdir} -Wall
     ];
 
     pkgf.name.should == "package name";
+    pkgf.ver.should == "1.0.0";
     pkgf.url.should == "https://pkg.com";
     pkgf.libs.should == [ "-lpkg", "-L${libdir}" ];
     pkgf.cflags.should == [ "-I${incdir}", "-Wall" ];
+
+    // modification
+    pkgf.vars[0].value = "/some/other/path";
+
+    auto expected = `
+prefix=/some/other/path
+incdir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: package name
+Version: 1.0.0
+URL: https://pkg.com
+Cflags: -I${incdir} -Wall
+Libs: -lpkg -L${libdir}
+    `;
+
+    auto output = appender!string();
+    pkgf.write(output);
+    output.data.strip().should == expected.strip();
 }
