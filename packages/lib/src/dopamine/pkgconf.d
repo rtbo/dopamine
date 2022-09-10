@@ -32,7 +32,7 @@ struct PkgConfFile
     string[] conflicts;
     string[] provided;
 
-    static PkgConfFile parseFile(string filename)
+    static PkgConfFile parseFile(const(char)[] filename)
     {
         auto f = File(filename, "r");
 
@@ -52,6 +52,30 @@ struct PkgConfFile
         }
 
         return res;
+    }
+
+    string var(string name)
+    {
+        foreach (v; vars)
+        {
+            if (v.name == name)
+                return v.value;
+        }
+        throw new Exception("Unknown variable: " ~ name);
+    }
+
+    bool setVar(string name, string value)
+    {
+        foreach (ref v; vars)
+        {
+            if (v.name == name)
+            {
+                v.value = value;
+                return false;
+            }
+        }
+        vars ~= Var(name, value);
+        return true;
     }
 
     void write(O)(O output) if (isOutputRange!(O, char))
@@ -243,6 +267,8 @@ Libs: -lpkg -L${libdir}
         PkgConfFile.Var("libdir", "${prefix}/lib"),
     ];
 
+    pkgf.var("incdir").should == "${prefix}/include";
+
     pkgf.name.should == "package name";
     pkgf.ver.should == "1.0.0";
     pkgf.url.should == "https://pkg.com";
@@ -250,7 +276,7 @@ Libs: -lpkg -L${libdir}
     pkgf.cflags.should == [ "-I${incdir}", "-Wall" ];
 
     // modification
-    pkgf.vars[0].value = "/some/other/path";
+    pkgf.setVar("prefix", "/some/other/path");
 
     auto expected = `
 prefix=/some/other/path

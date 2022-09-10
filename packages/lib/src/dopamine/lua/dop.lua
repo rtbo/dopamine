@@ -1,8 +1,11 @@
 local dop = {}
+local dop_native = require('dop_native')
 
 -- adding dop_native funcs and constants to dop
-for k, v in pairs(require('dop_native')) do
-    dop[k] = v
+for k, v in pairs(dop_native) do
+    if k:find('priv_', 1, true) ~= 1 then
+        dop[k] = v
+    end
 end
 
 local function create_class(name)
@@ -296,88 +299,119 @@ function Meson:install()
     }
 end
 
-local PkgConfig = create_class('PkgConfig')
+local PkgConfFile = create_class('PkgConfFile')
 
-function PkgConfig:new(options)
+local pc_str_fields = {
+    'name',
+    'version',
+    'description',
+    'url',
+    'license',
+    'maintainer',
+    'copyright',
+}
+
+local pc_lst_fields = {
+    'cflags',
+    'cflags.private',
+    'libs',
+    'libs.private',
+    'requires',
+    'requires.private',
+    'conflicts',
+    'provides',
+}
+
+function PkgConfFile:parse(path)
+    local parsed = dop_native.priv_read_pkgconf_file(path)
+    setmetatable(parsed, self)
+    setmetatable(parsed.vars, vars_mt)
+    return parsed
+end
+
+function PkgConfFile:new(options)
+    options.vars = options.vars or {}
+
     setmetatable(options, self)
+    setmetatable(options.vars, vars_mt)
 
-    if options.prefix == nil then
-        error('PkgConfig needs a prefix', -2)
-    end
     if options.name == nil then
-        error('PkgConfig needs a name', -2)
+        error('Name field is required by PkgConfig', -2)
     end
     if options.version == nil then
-        error('PkgConfig needs a version', -2)
+        error('Version field is required by PkgConfig', -2)
     end
-    if options.libs == nil or options.cflags == nil then
-        -- TODO warn
+
+    if options.vars.prefix == nil then
+        io.stderr:write('Warning: PkgConfFile without prefix variable')
+    end
+
+    for k, _ in pairs(options) do
+        if k == 'vars' then goto continue end
+        for _, s in ipairs(pc_str_fields) do
+            if k == s then goto continue end
+        end
+        for _, s in ipairs(pc_lst_fields) do
+            if k == s then goto continue end
+        end
+        error('Unknown pkg-config field: ' .. k, -2)
+        ::continue::
     end
 
     return options
 end
 
-function PkgConfig:write(filename)
-    dop.mkdir {dop.dir_name(filename), recurse = true}
+-- function that compute variable order such as each can be evaluated without look-ahead
+-- once written in a file.
+-- not strictly necessary, but consistent order is better than random hash-key order
+local function var_order(vars, var)
+    local val = vars[var]
+    local pat = '%${(%w+)}'
+    local m = string.match(val, pat)
+    if not m then
+        return 0
+    else
+        return 1 + var_order(vars, m)
+    end
+end
 
+function PkgConfFile:write(filename)
+    dop.mkdir {dop.dir_name(filename), recurse = true}
     local pc = io.open(filename, 'w')
 
-    -- everything not standard is a custom key variable
-    local stdfields = {
-        prefix = 1,
-        exec_prefix = 1,
-        includedir = 1,
-        libdir = 1,
-        name = 1,
-        version = 1,
-        description = 1,
-        url = 1,
-        requires = 1,
-        ['requires.private'] = 1,
-        conflicts = 1,
-        cflags = 1,
-        libs = 1,
-        ['libs.private'] = 1,
-    }
-
-    function write_field(field, sep)
-        local v = self[field]
-        if v ~= nil then
-            sep = sep or ': '
-            if sep == ': ' then
-                field = field:gsub('^%l', string.upper)
-            end
-            pc:write(field, sep, v, '\n')
-        end
+    local vars = {}
+    for k, v in pairs(self.vars) do
+        table.insert(vars, {name = k, value = v, order = var_order(self.vars, k)})
     end
+    table.sort(vars, function (a, b)
+        if a.order == b.order then return a.name < b.name end
+        return a.order < b.order
+    end)
 
-    write_field('prefix', '=')
-    write_field('exec_prefix', '=')
-    write_field('includedir', '=')
-    write_field('libdir', '=')
-
-    -- writing custom fields as variable declaration
-    for k, v in pairs(self) do
-        if stdfields[k] == nil then
-            write_field(k, '=')
-        end
+    for _, var in ipairs(vars) do
+        pc:write(var.name, '=', var.value, '\n')
     end
 
     pc:write('\n')
 
-    write_field('name')
-    write_field('version')
-    write_field('description')
-    if self[url] ~= nil then
-        pc:write('URL: ', self[url], '\n')
+    for _, f in ipairs(pc_str_fields) do
+        local v = self[f]
+        if v then
+            local fu = f:gsub('^%l', string.upper)
+            pc:write(fu, ': ', v, '\n')
+        end
     end
-    write_field('requires')
-    write_field('requires.private')
-    write_field('conflicts')
-    write_field('cflags')
-    write_field('libs')
-    write_field('libs.private')
-
+    for _, f in ipairs(pc_lst_fields) do
+        local v = self[f]
+        if v then
+            local fu = f:gsub('^%l', string.upper)
+            if type(v) == 'table' then
+                pc:write(fu, ': ', table.concat(v, ' '), '\n')
+            else
+                pc:write(fu, ': ', v, '\n')
+            end
+        end
+    end
     pc:close()
 end
 

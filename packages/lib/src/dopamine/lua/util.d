@@ -142,7 +142,7 @@ T luaGetTable(T)(lua_State* L, int tableInd, string key, T defaultVal) nothrow
 }
 
 void luaSetTable(T)(lua_State* L, int tableInd, string key, T value) nothrow
-        if (isLuaScalar!T)
+if (isLuaScalar!T)
 {
     tableInd = positiveStackIndex(L, tableInd);
     lua_pushlstring(L, key.ptr, key.length);
@@ -157,7 +157,7 @@ T luaGetGlobal(T)(lua_State* L, string varName) if (isLuaScalar!T)
 }
 
 T luaGetGlobal(T)(lua_State* L, string varName, T defaultVal) nothrow
-        if (isLuaScalar!T)
+if (isLuaScalar!T)
 {
     lua_getglobal(L, toStringz(varName));
     return luaPop!T(L, defaultVal);
@@ -235,6 +235,18 @@ string[] luaReadStringArray(lua_State* L, int ind) nothrow
     }
 
     return arr;
+}
+
+/// Push a string array on the stack
+void luaPushArray(T)(lua_State* L, const(T)[] arr)
+{
+    lua_createtable(L, cast(int) arr.length, 0);
+    int ind = lua_gettop(L);
+    foreach (i, val; arr)
+    {
+        luaPush(L, val);
+        lua_rawseti(L, ind, cast(int) i + 1);
+    }
 }
 
 // some debugging functions

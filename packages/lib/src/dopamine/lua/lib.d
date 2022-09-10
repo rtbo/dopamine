@@ -175,6 +175,7 @@ int luaDopNativeModule(lua_State* L) nothrow
         "checksum": &luaChecksum,
         "create_archive": &luaCreateArchive,
         "extract_archive": &luaExtractArchive,
+        "priv_read_pkgconf_file": &luaPrivReadPkgConfFile,
     ];
     // dfmt on
 
@@ -897,5 +898,63 @@ int luaExtractArchive(lua_State* L) nothrow
         entries.each!((e) { logVerbose("    %s", e.path); e.extractTo(outdir); });
 
         return 0;
+    });
+}
+
+int luaPrivReadPkgConfFile(lua_State* L) nothrow
+{
+    import dopamine.pkgconf;
+
+    const path = checkString(L, 1);
+
+    return L.catchAll!({
+        auto pkgf = PkgConfFile.parseFile(path);
+
+        lua_newtable(L);
+        int pkgInd = lua_gettop(L);
+
+        lua_pushliteral(L, "vars");
+        lua_createtable(L, 0, cast(int) pkgf.vars.length);
+        int varsInd = lua_gettop(L);
+        foreach (i, v; pkgf.vars)
+        {
+            luaSetTable(L, varsInd, v.name, v.value);
+        }
+        lua_settable(L, pkgInd);
+
+        if (pkgf.name)
+            luaSetTable(L, pkgInd, "name", pkgf.name);
+        if (pkgf.ver)
+            luaSetTable(L, pkgInd, "version", pkgf.ver);
+        if (pkgf.description)
+            luaSetTable(L, pkgInd, "description", pkgf.description);
+        if (pkgf.url)
+            luaSetTable(L, pkgInd, "url", pkgf.url);
+        if (pkgf.maintainer)
+            luaSetTable(L, pkgInd, "maintainer", pkgf.maintainer);
+        if (pkgf.license)
+            luaSetTable(L, pkgInd, "license", pkgf.license);
+        if (pkgf.copyright)
+            luaSetTable(L, pkgInd, "copyright", pkgf.copyright);
+
+        void setArray(string key, string[] arr)
+        {
+            if (!arr)
+                return;
+            luaPush(L, key);
+            luaPushArray(L, arr);
+            lua_settable(L, pkgInd);
+        }
+
+        setArray("cflags", pkgf.cflags);
+        setArray("cflags.private", pkgf.cflagsPriv);
+        setArray("libs", pkgf.libs);
+        setArray("libs.private", pkgf.libsPriv);
+        setArray("requires", pkgf.required);
+        setArray("requires.private", pkgf.requiredPriv);
+        setArray("conflicts", pkgf.conflicts);
+        setArray("provides", pkgf.provided);
+
+        return 1;
     });
 }

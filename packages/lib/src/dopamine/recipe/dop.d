@@ -502,7 +502,7 @@ DepSpec[] readDependencies(lua_State* L) @trusted
 
 void pushBuildDirs(lua_State* L, BuildDirs dirs) @trusted
 {
-    lua_createtable(L, 0, 2);
+    lua_createtable(L, 0, 4);
     const ind = lua_gettop(L);
     luaSetTable(L, ind, "root", dirs.root);
     luaSetTable(L, ind, "src", dirs.src);
@@ -536,7 +536,7 @@ void pushDepInfos(lua_State* L, DepInfo[string] depInfos) @trusted
     {
         lua_pushlstring(L, k.ptr, k.length);
 
-        lua_createtable(L, 0, 1);
+        lua_createtable(L, 0, 2);
         luaSetTable(L, -1, "install_dir", di.installDir);
         luaSetTable(L, -1, "version", di.ver.toString());
 
