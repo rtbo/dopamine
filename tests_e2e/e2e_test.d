@@ -214,17 +214,23 @@ final class Test
 
         int numFailed;
 
-        foreach (i, cmd; cmds)
+        try
         {
-            numFailed += cmd.exec(cast(int) i + 1, sandbox);
-            if (numFailed)
-                break;
+            foreach (i, cmd; cmds)
+            {
+                numFailed += cmd.exec(cast(int) i + 1, sandbox, gdb);
+                if (numFailed)
+                    break;
+            }
         }
-
-        if (reg)
+        finally
         {
-            enforce(reg.stop() == 0, "registry did not close normally");
-            reg.reportOutput(stderr);
+            if (reg)
+            {
+                int code = reg.stop();
+                stderr.writeln("registry exit code ", code);
+                reg.reportOutput(stderr);
+            }
         }
 
         // in case of success, we delete the sandbox dir,
