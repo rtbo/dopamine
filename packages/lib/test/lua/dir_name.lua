@@ -1,5 +1,8 @@
-test.assert_eq(dop.dir_name('relative/dir/file'),
-               dop.dir_name('relative/dir/file', 1), 'relative/dir')
+test.assert_eq(
+    dop.dir_name('relative/dir/file'),
+    dop.dir_name('relative/dir/file', 1),
+    'relative/dir'
+)
 test.assert_eq(dop.dir_name('relative/dir/dir/'), 'relative/dir')
 test.assert_eq(dop.dir_name('relative/dir/file', 2), 'relative')
 test.assert_eq(dop.dir_name('.'), '..')

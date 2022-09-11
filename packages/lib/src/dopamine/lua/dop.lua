@@ -16,22 +16,25 @@ local function create_class(name)
 end
 
 function dop.assert(pred, msg, level)
-    if pred then return pred end
+    if pred then
+        return pred
+    end
     if not msg then
         msg = 'Error: assertion failed'
     elseif type(msg) == 'number' then
         level = msg - 1
         msg = 'Error: assertion failed'
     else
-        level = level and level-1 or -2
+        level = level and level - 1 or -2
     end
     error(msg, level)
 end
 
 function dop.git_ls_files(opts)
-    return function ()
+    return function()
         local cmd = {
-            'git', 'ls-files'
+            'git',
+            'ls-files',
         }
         if opts and opts.submodules then
             table.insert(cmd, '--recurse-submodules')
@@ -56,7 +59,7 @@ function dop.from_dir(dir, func)
     local cwd = dop.cwd()
 
     dop.chdir(dir)
-    local pres = {pcall(func)}
+    local pres = { pcall(func) }
     dop.chdir(cwd)
 
     if pres[1] then
@@ -89,38 +92,49 @@ function dop.installer(src_dir, dest_dir)
 end
 
 function dop.to_string(o)
-   if type(o) == 'table' then
-      local s = '{ '
-      for k,v in pairs(o) do
-         if type(k) ~= 'number' then k = '"'..k..'"' end
-         s = s .. '['..k..'] = ' .. dop.to_string(v) .. ',\n'
-      end
-      return s .. '} '
-   else
-      return tostring(o)
-   end
-end
-
-
-local function find_libfile_posix (dir, name, libtype)
-    if not libtype or libtype == 'shared' then
-        local p = dop.path(dir, 'lib' .. name .. '.so')
-        if dop.is_file(p) then return p end
-    elseif not libtype or libtype == 'static' then
-        local p = dop.path(dir, 'lib' .. name .. '.a')
-        if dop.is_file(p) then return p end
+    if type(o) == 'table' then
+        local s = '{ '
+        for k, v in pairs(o) do
+            if type(k) ~= 'number' then
+                k = '"' .. k .. '"'
+            end
+            s = s .. '[' .. k .. '] = ' .. dop.to_string(v) .. ',\n'
+        end
+        return s .. '} '
+    else
+        return tostring(o)
     end
 end
 
-local function find_libfile_win (dir, name, libtype)
+local function find_libfile_posix(dir, name, libtype)
+    if not libtype or libtype == 'shared' then
+        local p = dop.path(dir, 'lib' .. name .. '.so')
+        if dop.is_file(p) then
+            return p
+        end
+    elseif not libtype or libtype == 'static' then
+        local p = dop.path(dir, 'lib' .. name .. '.a')
+        if dop.is_file(p) then
+            return p
+        end
+    end
+end
+
+local function find_libfile_win(dir, name, libtype)
     if not libtype or libtype == 'shared' then
         local p = dop.path(dir, name .. '.dll')
-        if dop.is_file(p) then return p end
+        if dop.is_file(p) then
+            return p
+        end
     elseif not libtype or libtype == 'static' then
         local p = dop.path(dir, name .. '.lib')
-        if dop.is_file(p) then return p end
+        if dop.is_file(p) then
+            return p
+        end
         p = dop.path(dir, 'lib' .. name .. '.a')
-        if dop.is_file(p) then return p end
+        if dop.is_file(p) then
+            return p
+        end
     end
 end
 
@@ -146,7 +160,7 @@ function CMake:new(profile)
         error('wrong profile parameter', -2)
     end
     o.profile = profile
-    o.defs = {['CMAKE_BUILD_TYPE'] = profile.build_type}
+    o.defs = { ['CMAKE_BUILD_TYPE'] = profile.build_type }
 
     return o
 end
@@ -173,7 +187,7 @@ function CMake:configure(params)
 
     local gen = params.gen or 'Ninja'
 
-    local cmd = {'cmake', '-G', gen}
+    local cmd = { 'cmake', '-G', gen }
 
     for k, v in pairs(self.defs) do
         if type(v) == 'boolean' then
@@ -196,12 +210,12 @@ function CMake:configure(params)
 end
 
 function CMake:build()
-    cmd = {'cmake', '--build', '.'}
+    cmd = { 'cmake', '--build', '.' }
     dop.run_cmd(cmd)
 end
 
 function CMake:install()
-    cmd = {'cmake', '--build', '.', '--target', 'install'}
+    cmd = { 'cmake', '--build', '.', '--target', 'install' }
     dop.run_cmd(cmd)
 end
 
@@ -229,10 +243,9 @@ end
 function Meson:setup(params, env)
     assert(params, 'Meson:setup must be passed a parameter table')
 
-    self.build_dir = assert(params.build_dir,
-                            'build_dir is a mandatory parameter')
-    self.src_dir = assert(params.src_dir,
-                          'src_dir is a mandatory parameter')
+    self.build_dir =
+        assert(params.build_dir, 'build_dir is a mandatory parameter')
+    self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
 
     if params.install_dir then
         self.options['--prefix'] = params.install_dir
@@ -261,7 +274,7 @@ function Meson:setup(params, env)
         end
     end
 
-    local cmd = {'meson', 'setup'}
+    local cmd = { 'meson', 'setup' }
     for k, v in pairs(self.options) do
         table.insert(cmd, k .. '=' .. v)
     end
@@ -287,14 +300,16 @@ end
 
 function Meson:compile()
     dop.run_cmd {
-        'meson', 'compile',
+        'meson',
+        'compile',
         env = self.env,
     }
 end
 
 function Meson:install()
     dop.run_cmd {
-        'meson', 'install',
+        'meson',
+        'install',
         env = self.env,
     }
 end
@@ -347,12 +362,18 @@ function PkgConfFile:new(options)
     end
 
     for k, _ in pairs(options) do
-        if k == 'vars' then goto continue end
+        if k == 'vars' then
+            goto continue
+        end
         for _, s in ipairs(pc_str_fields) do
-            if k == s then goto continue end
+            if k == s then
+                goto continue
+            end
         end
         for _, s in ipairs(pc_lst_fields) do
-            if k == s then goto continue end
+            if k == s then
+                goto continue
+            end
         end
         error('Unknown pkg-config field: ' .. k, -2)
         ::continue::
@@ -376,15 +397,20 @@ local function var_order(vars, var)
 end
 
 function PkgConfFile:write(filename)
-    dop.mkdir {dop.dir_name(filename), recurse = true}
+    dop.mkdir { dop.dir_name(filename), recurse = true }
     local pc = io.open(filename, 'w')
 
     local vars = {}
     for k, v in pairs(self.vars) do
-        table.insert(vars, {name = k, value = v, order = var_order(self.vars, k)})
+        table.insert(
+            vars,
+            { name = k, value = v, order = var_order(self.vars, k) }
+        )
     end
-    table.sort(vars, function (a, b)
-        if a.order == b.order then return a.name < b.name end
+    table.sort(vars, function(a, b)
+        if a.order == b.order then
+            return a.name < b.name
+        end
         return a.order < b.order
     end)
 

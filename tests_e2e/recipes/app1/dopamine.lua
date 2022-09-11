@@ -1,1 +1,1 @@
-dependencies = {pkgb = '>=1.0'}
+dependencies = { pkgb = '>=1.0' }
