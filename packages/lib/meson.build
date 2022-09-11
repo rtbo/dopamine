@@ -23,6 +23,7 @@ dop_src = files([
     'src/dopamine/lua/util.d',
     'src/dopamine/msvc.d',
     'src/dopamine/paths.d',
+    'src/dopamine/pkgconf.d',
     'src/dopamine/profile.d',
     'src/dopamine/recipe/dir.d',
     'src/dopamine/recipe/dop.d',
@@ -60,7 +61,7 @@ install_data('src/dopamine/lua/dop.lua',
 dop_dep = declare_dependency(
     include_directories: dop_inc,
     dependencies: dop_deps,
-    link_with: [dop_lib],
+    link_with: [dop_lib, pkgconf_lib],
     sources: dop_conf,
 )
 
@@ -88,6 +89,7 @@ if get_option('enable_test')
         d_import_dirs: dop_test_imp,
         dependencies: [dop_deps, ut_assertions_dep],
         include_directories: include_directories('.', 'src'),
+        link_with: pkgconf_lib,
     )
 
     test('dop library unit tests', dop_test_exe,

@@ -22,10 +22,11 @@ if get_option('enable_client') or get_option('enable_registry') or get_option('e
     squiz_dep = squiz_proj.get_variable('squiz_dep')
 endif
 
-if get_option('enable_client') and get_option('enable_pkgconf')
+if get_option('enable_client')
     pkgconf_proj = subproject('pkgconf',
         default_options: ['tests=false'],
     )
+    pkgconf_lib = pkgconf_proj.get_variable('libpkgconf')
 endif
 
 vibed_version = '0.9.4'

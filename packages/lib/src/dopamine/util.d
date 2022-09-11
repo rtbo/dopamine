@@ -663,69 +663,8 @@ string pkgConfigExe()
         new ErrorLogException(
             "Could not find %s or %s in PATH",
             info("pkgconf"), info("pkg-config"),
-        )
+    )
     );
-}
-
-struct PkgConfig
-{
-    struct Var
-    {
-        string name;
-        string value;
-    }
-
-    Var[] vars;
-
-    string name;
-    string ver;
-    string description;
-    string url;
-    string[] requires;
-    string[] requiresPriv;
-    string[] conflicts;
-    string cflags;
-    string libs;
-    string libsPriv;
-
-    void addVar(string name, string value)
-    {
-        vars ~= Var(name, value);
-    }
-
-    void writeToFile(string filename)
-    {
-        import std.exception : enforce;
-        import std.stdio : File;
-
-        auto f = File(filename, "w");
-
-        foreach (v; vars)
-        {
-            f.writefln!"%s=%s"(v.name, v.value);
-        }
-
-        f.writeln();
-
-        f.writefln!"Name: %s"(enforce(name, "PkgConfig needs a prefix"));
-        f.writefln!"Version: %s"(enforce(ver, "PkgConfig needs a version"));
-        if (description)
-            f.writefln!"Description: %s"(description);
-        if (url)
-            f.writefln!"URL: %s"(url);
-        if (requires)
-            f.writefln!"Requires: %s"(requires.join(" , "));
-        if (requiresPriv)
-            f.writefln!"Requires.private: %s"(requiresPriv.join(" , "));
-        if (conflicts)
-            f.writefln!"Conflicts: %s"(conflicts.join(" , "));
-        if (cflags)
-            f.writefln!"Cflags: %s"(cflags);
-        if (libs)
-            f.writefln!"Libs: %s"(libs);
-        if (libsPriv)
-            f.writefln!"Libs.private: %s"(libsPriv);
-    }
 }
 
 void runCommand(in string[] cmd, string workDir = null,
@@ -800,4 +739,27 @@ void runCommand(in string[] cmd, string workDir = null,
     import std.array : join;
 
     return cmd.map!(c => c.canFind(' ') ? '"' ~ c ~ '"' : c).join(" ");
+}
+
+version (unittest) struct DeleteMe
+{
+    string path;
+
+    this(string basename, string ext)
+    {
+        path = tempPath(null, basename, ext);
+    }
+
+    ~this()
+    {
+        import std.file : exists, isDir, remove, rmdirRecurse;
+
+        if (exists(path))
+        {
+            if (isDir(path))
+                rmdirRecurse(path);
+            else
+                remove(path);
+        }
+    }
 }

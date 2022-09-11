@@ -80,7 +80,7 @@ unittest
                 shell=true,
             })
         end)
-       
+
         assert(string.find(ls_res, 'lib.d'))
         assert(string.find(ls_res, 'ut.d'))
         assert(string.find(ls_res, 'dir_name.lua'))
