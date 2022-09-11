@@ -318,8 +318,8 @@ local pc_lst_fields = {
     'libs.private',
     'requires',
     'requires.private',
-    'conflicts',
     'provides',
+    'conflicts',
 }
 
 function PkgConfFile:parse(path)

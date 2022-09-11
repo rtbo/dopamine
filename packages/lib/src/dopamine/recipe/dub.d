@@ -2,6 +2,7 @@ module dopamine.recipe.dub;
 
 import dopamine.dep.spec;
 import dopamine.log;
+import dopamine.pkgconf;
 import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
@@ -145,13 +146,13 @@ class DubRecipe : Recipe
         auto pkgconfEnv = [
             "PKG_CONFIG_PATH": pkgconfPath,
         ];
-        foreach(d; depInfos.byKey())
+        foreach (d; depInfos.byKey())
         {
             auto df = execute([pkgConfigExe, "--cflags", d], pkgconfEnv);
-            enforce (df.status == 0, "pkg-config failed: " ~ df.output);
+            enforce(df.status == 0, "pkg-config failed: " ~ df.output);
             bs.dflags ~= df.output.strip().split(" ");
             auto lf = execute([pkgConfigExe, "--libs", d], pkgconfEnv);
-            enforce (lf.status == 0, "pkg-config failed " ~ lf.output);
+            enforce(lf.status == 0, "pkg-config failed " ~ lf.output);
             bs.lflags ~= lf.output.strip().split(" ");
         }
 
@@ -172,10 +173,10 @@ class DubRecipe : Recipe
 
         // generate a pkg-config file
         const pcPath = buildPath(dirs.build, name ~ ".pc");
-        PkgConfig pkg;
-        pkg.addVar("prefix", dirs.install);
-        pkg.addVar("includedir", "${prefix}/include/d/" ~ name);
-        pkg.addVar("libdir", "${prefix}/lib");
+        PkgConfFile pkg;
+        pkg.addOrSetVar("prefix", dirs.install);
+        pkg.addOrSetVar("includedir", "${prefix}/include/d/" ~ name);
+        pkg.addOrSetVar("libdir", "${prefix}/lib");
         pkg.name = name;
         pkg.description = _dubPack.rawRecipe.description;
         pkg.ver = ver.toString();
@@ -183,9 +184,8 @@ class DubRecipe : Recipe
             pkg.requires ~= format!"%s = %s"(k, v.ver);
         pkg.cflags = bs.importPaths.map!(p => dcf.importPath("${includedir}/" ~ p))
             .chain(bs.versions.map!(v => dcf.version_(v)))
-            .array
-            .join(" ");
-        pkg.libs = "${libdir}/" ~ builtTarget;
+            .array;
+        pkg.libs = ["${libdir}/" ~ builtTarget];
         pkg.writeToFile(pcPath);
 
         // we drive the installation directly

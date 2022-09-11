@@ -27,10 +27,10 @@ struct PkgConfFile
     string[] cflagsPriv;
     string[] libs;
     string[] libsPriv;
-    string[] required;
-    string[] requiredPriv;
+    string[] requires;
+    string[] requiresPriv;
+    string[] provides;
     string[] conflicts;
-    string[] provided;
 
     static PkgConfFile parseFile(const(char)[] filename)
     {
@@ -64,7 +64,7 @@ struct PkgConfFile
         throw new Exception("Unknown variable: " ~ name);
     }
 
-    bool setVar(string name, string value)
+    bool addOrSetVar(string name, string value)
     {
         foreach (ref v; vars)
         {
@@ -78,7 +78,7 @@ struct PkgConfFile
         return true;
     }
 
-    void write(O)(O output) if (isOutputRange!(O, char))
+    void write(O)(O output) const if (isOutputRange!(O, char))
     {
         foreach (v; vars)
         {
@@ -105,14 +105,20 @@ struct PkgConfFile
             output.put("Libs: " ~ libs.join(" ") ~ "\n");
         if (libsPriv)
             output.put("Libs.private: " ~ libsPriv.join(" ") ~ "\n");
-        if (required)
-            output.put("Requires: " ~ required.join(" , ") ~ "\n");
-        if (requiredPriv)
-            output.put("Requires.private: " ~ requiredPriv.join(" , ") ~ "\n");
+        if (requires)
+            output.put("Requires: " ~ requires.join(" , ") ~ "\n");
+        if (requiresPriv)
+            output.put("Requires.private: " ~ requiresPriv.join(" , ") ~ "\n");
+        if (provides)
+            output.put("Provides: " ~ provides.join(" , ") ~ "\n");
         if (conflicts)
             output.put("Conflicts: " ~ conflicts.join(" , ") ~ "\n");
-        if (provided)
-            output.put("Provides: " ~ provided.join(" , ") ~ "\n");
+    }
+
+    void writeToFile(string filename) const
+    {
+        auto f = File(filename, "w");
+        write(f.lockingTextWriter());
     }
 }
 
@@ -177,16 +183,16 @@ void parsePkgConfLine(string line, ref PkgConfFile pcf)
                 pcf.libsPriv = argvSplit(val);
                 break;
             case "Requires":
-                pcf.required = depsSplit(val);
+                pcf.requires = depsSplit(val);
                 break;
             case "Requires.private":
-                pcf.requiredPriv = depsSplit(val);
+                pcf.requiresPriv = depsSplit(val);
+                break;
+            case "Provides":
+                pcf.provides = depsSplit(val);
                 break;
             case "Conflicts":
                 pcf.conflicts = depsSplit(val);
-                break;
-            case "Provides":
-                pcf.provided = depsSplit(val);
                 break;
             default:
                 throw new Exception("Unknown pkg-config keyword: " ~ ident);
@@ -233,7 +239,7 @@ extern(C) nothrow void pkgconf_argv_free(char **argv);
 
 version(unittest)
 {
-    import test.util;
+    import dopamine.util;
     import unit_threaded.assertions;
 }
 
@@ -276,7 +282,7 @@ Libs: -lpkg -L${libdir}
     pkgf.cflags.should == [ "-I${incdir}", "-Wall" ];
 
     // modification
-    pkgf.setVar("prefix", "/some/other/path");
+    pkgf.addOrSetVar("prefix", "/some/other/path");
 
     auto expected = `
 prefix=/some/other/path

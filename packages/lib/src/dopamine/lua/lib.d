@@ -950,10 +950,10 @@ int luaPrivReadPkgConfFile(lua_State* L) nothrow
         setArray("cflags.private", pkgf.cflagsPriv);
         setArray("libs", pkgf.libs);
         setArray("libs.private", pkgf.libsPriv);
-        setArray("requires", pkgf.required);
-        setArray("requires.private", pkgf.requiredPriv);
+        setArray("requires", pkgf.requires);
+        setArray("requires.private", pkgf.requiresPriv);
+        setArray("provides", pkgf.provides);
         setArray("conflicts", pkgf.conflicts);
-        setArray("provides", pkgf.provided);
 
         return 1;
     });

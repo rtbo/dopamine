@@ -15,29 +15,6 @@ string testPath(Args...)(Args args)
     return buildNormalizedPath(dirName(__FILE_FULL_PATH__), args);
 }
 
-struct DeleteMe
-{
-    string path;
-
-    this(string basename, string ext)
-    {
-        path = tempPath(null, basename, ext);
-    }
-
-    ~this()
-    {
-        import std.file : exists, isDir, remove, rmdirRecurse;
-
-        if (exists(path))
-        {
-            if (isDir(path))
-                rmdirRecurse(path);
-            else
-                remove(path);
-        }
-    }
-}
-
 /// Generate a unique name for temporary path (either dir or file)
 /// Params:
 ///     location = some directory to place the file in. If omitted, std.file.tempDir is used
