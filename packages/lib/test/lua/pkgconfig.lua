@@ -43,3 +43,7 @@ test.assert_eq(parsed.version, '1.0.1')
 test.assert_eq(parsed.description, 'A test pkgconfig package')
 test.assert_eq(table.concat(parsed.cflags, ' '), '-I${includedir}')
 test.assert_eq(table.concat(parsed.libs, ' '), '-L${libdir} -lpctest')
+
+dop.translate_pkgconf_msvc(fp)
+parsed = dop.PkgConfFile:parse(fp)
+test.assert_eq(table.concat(parsed.libs, ' '), '/LIBPATH:${libdir} pctest.lib')

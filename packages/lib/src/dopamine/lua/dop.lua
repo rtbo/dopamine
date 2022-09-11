@@ -112,7 +112,8 @@ local function find_libfile_posix(dir, name, libtype)
         if dop.is_file(p) then
             return p
         end
-    elseif not libtype or libtype == 'static' then
+    end
+    if not libtype or libtype == 'static' then
         local p = dop.path(dir, 'lib' .. name .. '.a')
         if dop.is_file(p) then
             return p
@@ -123,15 +124,19 @@ end
 local function find_libfile_win(dir, name, libtype)
     if not libtype or libtype == 'shared' then
         local p = dop.path(dir, name .. '.dll')
+        print('check '..p)
         if dop.is_file(p) then
             return p
         end
-    elseif not libtype or libtype == 'static' then
+    end
+    if not libtype or libtype == 'static' then
         local p = dop.path(dir, name .. '.lib')
+        print('check '..p)
         if dop.is_file(p) then
             return p
         end
         p = dop.path(dir, 'lib' .. name .. '.a')
+        print('check '..p)
         if dop.is_file(p) then
             return p
         end
@@ -382,6 +387,16 @@ function PkgConfFile:new(options)
     return options
 end
 
+function PkgConfFile:expand(value)
+    while 1 do
+        local num
+        value, num = value:gsub('%${(%w+)}', self.vars)
+        if num == 0 then
+            return value
+        end
+    end
+end
+
 -- function that compute variable order such as each can be evaluated without look-ahead
 -- once written in a file.
 -- not strictly necessary, but consistent order is better than random hash-key order
@@ -449,6 +464,64 @@ function dop.pkg_config_path(dep_infos)
         end
     end
     return table.concat(path, dop.path_sep)
+end
+
+local function translate_msvc_libs(pc, field)
+    local libflags = pc[field]
+    local msvc = {}
+    local libpaths = {}
+    local libs = {}
+    for _,flag in ipairs(libflags) do
+        local libpath = flag:match('-L(.+)')
+        if libpath then
+            print('found libpath '..libpath)
+            table.insert(libpaths, libpath)
+            goto continue
+        end
+        local lib = flag:match('-l(.+)')
+        if lib then
+            print('found lib '..lib)
+            table.insert(libs, lib)
+            goto continue
+        end
+        print('fallback '..flag)
+        table.insert(msvc, flag)
+        ::continue::
+    end
+    for _, lib in ipairs(libs) do
+        local flag = nil
+        local elib = pc:expand(lib)
+
+        if dop.is_file(lib) then
+            flag = elib
+        else
+            for _, libpath in ipairs(libpaths) do
+                local elibpath = pc:expand(libpath)
+                print ('elibpath = ' .. elibpath)
+                local path = find_libfile_win(elibpath, elib)
+                if path then
+                    print ('found ' .. path)
+                    flag = libpath .. '/' .. dop.base_name(path)
+                    break
+                end
+            end
+        end
+        table.insert(msvc, flag or lib .. '.lib')
+    end
+    return msvc
+end
+
+function dop.translate_pkgconf_msvc(path)
+    local pc = PkgConfFile:parse(path)
+    if pc.libs then
+        print('adapt libs ' .. table.concat(pc.libs, ' '))
+        pc.libs = translate_msvc_libs(pc, 'libs')
+        print('adapted libs ' .. table.concat(pc.libs, ' '))
+    end
+    if pc['libs.private'] then
+        pc['libs.private'] = translate_msvc_libs(pc, 'libs.private')
+    end
+    pc:write(path)
 end
 
 return dop

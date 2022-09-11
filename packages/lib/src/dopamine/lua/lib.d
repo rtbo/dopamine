@@ -163,6 +163,7 @@ int luaDopNativeModule(lua_State* L) nothrow
         "base_name": &luaBaseName,
         "cwd": &luaCwd,
         "chdir": &luaChangeDir,
+        "exists": &luaExists,
         "is_file": &luaIsFile,
         "is_dir": &luaIsDir,
         "mkdir": &luaMkdir,
@@ -398,6 +399,16 @@ int luaChangeDir(lua_State* L) nothrow
     const dir = checkString(L, 1);
     L.catchAll!({ logVerbose("changing dir to %s", dir); chdir(dir); });
     return 0;
+}
+
+int luaExists(lua_State* L) nothrow
+{
+    import std.file : exists, isFile;
+
+    const f = checkString(L, 1);
+    const res = L.catchAll!({ return f.exists; });
+    lua_pushboolean(L, res ? 1 : 0);
+    return 1;
 }
 
 int luaIsFile(lua_State* L) nothrow
