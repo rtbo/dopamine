@@ -6,12 +6,8 @@ license = 'MIT'
 tools = { 'dc' }
 
 options = {
-    lib1 = {
-        type = 'boolean',
-        default = true,
-        description = 'Enable lib1 module',
-    },
-    lib2 = false,
+    a = true,
+    b = false,
 }
 
 function build(dirs, config)
@@ -21,8 +17,8 @@ function build(dirs, config)
         src_dir = dirs.src,
         install_dir = dirs.install,
         defs = {
-            enable_lib1 = config.options.lib1,
-            enable_lib2 = config.options.lib2,
+            feature_a = config.options.a,
+            feature_b = config.options.b,
         },
     }
     meson:compile()

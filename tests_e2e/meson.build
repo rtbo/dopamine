@@ -44,8 +44,8 @@ e2e_tests = [
 
     'search',
 
-    'options-default',
-    'options-setcli',
+    'options',
+    'options-dep',
 
     'warning',
 ]
