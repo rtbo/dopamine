@@ -1,4 +1,4 @@
-module recipes.modules.thelib1.src.thelib1;
+module thelib1;
 
 int lib1func()
 {
