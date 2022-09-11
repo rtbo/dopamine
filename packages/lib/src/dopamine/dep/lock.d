@@ -11,6 +11,7 @@ import dopamine.semver;
 
 import std.conv;
 import std.exception;
+import std.format;
 import std.json;
 import std.range;
 import std.traits;
@@ -27,10 +28,10 @@ in (emitAllVersions || dag.resolved)
 {
     enforce(ver == 1, "Unsupported lock file format");
 
-    return jsonToDagV1(dag, emitAllVersions);
+    return dagToJsonV1(dag, emitAllVersions);
 }
 
-private JSONValue jsonToDagV1(ref DepDAG dag,
+private JSONValue dagToJsonV1(ref DepDAG dag,
     Flag!"emitAllVersions" emitAllVersions)
 {
     JSONValue[string] dagDict;
@@ -217,6 +218,7 @@ private DepDAG jsonToDagV1(JSONValue json)
     foreach (d; deps)
     {
         auto up = packs[d.pack].getNode(d.aver);
+        enforce(up, format("Can't find node %s in package %s", d.aver, d.pack));
         auto down = packs[d.down];
         DagEdge.create(up, down, d.spec);
     }
