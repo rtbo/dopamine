@@ -124,19 +124,16 @@ end
 local function find_libfile_win(dir, name, libtype)
     if not libtype or libtype == 'shared' then
         local p = dop.path(dir, name .. '.dll')
-        print('check '..p)
         if dop.is_file(p) then
             return p
         end
     end
     if not libtype or libtype == 'static' then
         local p = dop.path(dir, name .. '.lib')
-        print('check '..p)
         if dop.is_file(p) then
             return p
         end
         p = dop.path(dir, 'lib' .. name .. '.a')
-        print('check '..p)
         if dop.is_file(p) then
             return p
         end
@@ -471,20 +468,17 @@ local function translate_msvc_libs(pc, field)
     local msvc = {}
     local libpaths = {}
     local libs = {}
-    for _,flag in ipairs(libflags) do
+    for _, flag in ipairs(libflags) do
         local libpath = flag:match('-L(.+)')
         if libpath then
-            print('found libpath '..libpath)
             table.insert(libpaths, libpath)
             goto continue
         end
         local lib = flag:match('-l(.+)')
         if lib then
-            print('found lib '..lib)
             table.insert(libs, lib)
             goto continue
         end
-        print('fallback '..flag)
         table.insert(msvc, flag)
         ::continue::
     end
@@ -497,10 +491,8 @@ local function translate_msvc_libs(pc, field)
         else
             for _, libpath in ipairs(libpaths) do
                 local elibpath = pc:expand(libpath)
-                print ('elibpath = ' .. elibpath)
                 local path = find_libfile_win(elibpath, elib)
                 if path then
-                    print ('found ' .. path)
                     flag = libpath .. '/' .. dop.base_name(path)
                     break
                 end
@@ -514,9 +506,7 @@ end
 function dop.translate_pkgconf_msvc(path)
     local pc = PkgConfFile:parse(path)
     if pc.libs then
-        print('adapt libs ' .. table.concat(pc.libs, ' '))
         pc.libs = translate_msvc_libs(pc, 'libs')
-        print('adapted libs ' .. table.concat(pc.libs, ' '))
     end
     if pc['libs.private'] then
         pc['libs.private'] = translate_msvc_libs(pc, 'libs.private')

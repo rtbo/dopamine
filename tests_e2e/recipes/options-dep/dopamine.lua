@@ -14,12 +14,6 @@ dependencies = {
 function build(dirs, config, dep_infos)
     local pc = dep_infos.options.install_dir .. '/lib/pkgconfig/options.pc'
 
-    print('\noptions pkg-config file\n')
-    for line in io.lines(pc) do
-        print(line)
-    end
-    print('\n')
-
     local meson = dop.Meson:new(config.profile)
 
     meson:setup({

@@ -25,7 +25,8 @@ function build(dirs, config)
     meson:install()
 
     if dop.windows then
-        print('translating flags for msvc')
-        dop.translate_pkgconf_msvc( dop.path(dirs.install, 'lib/pkgconfig/options.pc'))
+        dop.translate_pkgconf_msvc(
+            dop.path(dirs.install, 'lib/pkgconfig/options.pc')
+        )
     end
 end
