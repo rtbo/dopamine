@@ -166,6 +166,7 @@ int luaDopNativeModule(lua_State* L) nothrow
         "exists": &luaExists,
         "is_file": &luaIsFile,
         "is_dir": &luaIsDir,
+        "dir_entries": &luaDirEntries,
         "mkdir": &luaMkdir,
         "copy": &luaCopy,
         "install_file": &luaInstallFile,
@@ -179,6 +180,11 @@ int luaDopNativeModule(lua_State* L) nothrow
         "priv_read_pkgconf_file": &luaPrivReadPkgConfFile,
     ];
     // dfmt on
+
+    luaL_newmetatable(L, "doplua.dir_entries");
+    lua_pushliteral(L, "__gc");
+    lua_pushcfunction(L, &luaDirGc);
+    lua_settable(L, -3);
 
     lua_createtable(L, 0, cast(int)(strconsts.length + boolconsts.length + funcs.length));
     const libInd = lua_gettop(L);
@@ -429,6 +435,107 @@ int luaIsDir(lua_State* L) nothrow
     const res = L.catchAll!({ return d.exists && d.isDir; });
     lua_pushboolean(L, res ? 1 : 0);
     return 1;
+}
+
+struct LuaDirEntries
+{
+    import std.file : DirIterator;
+
+    DirIterator iter;
+}
+
+int luaDirEntries(lua_State* L) nothrow
+{
+    import core.memory : GC;
+    import std.file : dirEntries, SpanMode;
+
+    const path = checkString(L, 1);
+
+    return L.catchAll!({
+        SpanMode mode = SpanMode.shallow;
+        bool followSymlink = true;
+
+        switch (lua_type(L, 2))
+        {
+        case LUA_TTABLE:
+            const deep = luaGetTable!string(L, 2, "deep", "no");
+            switch (deep)
+            {
+            case "depth":
+                mode = SpanMode.depth;
+                break;
+            case "breadth":
+                mode = SpanMode.breadth;
+                break;
+            case "no":
+                break;
+            default:
+                throw new Exception("Invalid 'deep' parameter to dop.dir_entries");
+            }
+            followSymlink = luaGetTable!bool(L, 2, "follow_symlink", true);
+            break;
+        case LUA_TNONE:
+            break;
+        default:
+            luaL_argerror(L, 2, null);
+        }
+
+        auto lde = new LuaDirEntries;
+        lde.iter = dirEntries(path.idup, mode, followSymlink);
+
+        GC.addRoot(cast(void*)lde);
+        lua_pushlightuserdata(L, cast(void*)lde);
+        lua_pushcclosure(L, &luaDirIter, 1);
+        return 1;
+    });
+}
+
+int luaDirIter(lua_State* L) nothrow
+{
+    import std.file : DirEntry;
+    import std.path : baseName;
+    import std.datetime : stdTimeToUnixTime;
+
+    return L.catchAll!({
+        auto lde = cast(LuaDirEntries*)  lua_touserdata(L, lua_upvalueindex(1));
+        if (!lde)
+            return 0;
+
+        if (lde.iter.empty)
+            return 0;
+
+        DirEntry entry = lde.iter.front;
+
+        lua_createtable(L, 0, 2);
+        luaSetTable(L, -1, "path", entry.name);
+        luaSetTable(L, -1, "name", baseName(entry.name));
+        luaSetTable(L, -1, "is_file", entry.isFile);
+        luaSetTable(L, -1, "is_dir", entry.isDir);
+        luaSetTable(L, -1, "is_symlink", entry.isSymlink);
+        luaSetTable(L, -1, "size", entry.size);
+        const mtime = entry
+            .timeLastModified
+            .stdTime
+            .stdTimeToUnixTime;
+        luaSetTable(L, -1, "mtime", mtime);
+
+        lde.iter.popFront();
+
+        return 1;
+    });
+
+}
+
+int luaDirGc(lua_State* L) nothrow
+{
+    import core.memory : GC;
+
+    return L.catchAll!({
+        auto lde = cast(LuaDirEntries*) lua_touserdata(L, 1);
+        if (lde)
+        GC.removeRoot(lde);
+        return 0;
+    });
 }
 
 /// Create a directory and return the absolute path of created dir
