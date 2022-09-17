@@ -157,173 +157,6 @@ function dop.find_libfile(dir, name, libtype)
     end
 end
 
-local CMake = create_class('CMake')
-
-function CMake:new(profile)
-    o = {}
-    setmetatable(o, self)
-
-    if profile == nil then
-        error('profile is mandatory', -2)
-    end
-    if profile.build_type == nil then
-        error('wrong profile parameter', -2)
-    end
-    o.profile = profile
-    o.defs = { ['CMAKE_BUILD_TYPE'] = profile.build_type }
-
-    return o
-end
-
-function CMake:configure(params)
-    if params == nil then
-        error('CMake:configure must be passed a parameter table', -2)
-    end
-    if params.src_dir == nil then
-        error('CMake:configure: src_dir is a mandatory parameter', -2)
-    end
-    self.src_dir = params.src_dir
-
-    if params.install_dir then
-        self.install_dir = params.install_dir
-        self.defs['CMAKE_INSTALL_PREFIX'] = self.install_dir
-    end
-
-    if params.defs then
-        for k, v in pairs(params.defs) do
-            self.defs[k] = v
-        end
-    end
-
-    local gen = params.gen or 'Ninja'
-
-    local cmd = { 'cmake', '-G', gen }
-
-    for k, v in pairs(self.defs) do
-        if type(v) == 'boolean' then
-            if v then
-                v = 'ON'
-            else
-                v = 'OFF'
-            end
-        elseif type(v) == 'number' then
-            v = tostring(v)
-        end
-        table.insert(cmd, '-D' .. k .. '=' .. v)
-    end
-
-    table.insert(cmd, self.src_dir)
-
-    cmd['env'] = dop.profile_environment(self.profile)
-
-    dop.run_cmd(cmd)
-end
-
-function CMake:build()
-    cmd = { 'cmake', '--build', '.' }
-    dop.run_cmd(cmd)
-end
-
-function CMake:install()
-    cmd = { 'cmake', '--build', '.', '--target', 'install' }
-    dop.run_cmd(cmd)
-end
-
-local Meson = create_class('Meson')
-
-function Meson:new(profile)
-    o = {}
-    setmetatable(o, self)
-
-    o.profile = assert(profile, 'profile parameter is mandatory')
-    o.options = {}
-    o.defs = {}
-
-    if profile then
-        o.options['--buildtype'] = profile.build_type
-    end
-
-    return o
-end
-
-local function is_system_wide(prefix)
-    return prefix:sub(1, 4) == '/usr' or prefix == '/'
-end
-
-function Meson:setup(params, env)
-    assert(params, 'Meson:setup must be passed a parameter table')
-
-    self.build_dir =
-        assert(params.build_dir, 'build_dir is a mandatory parameter')
-    self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
-
-    if params.install_dir then
-        self.options['--prefix'] = params.install_dir
-
-        -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
-        -- e.g. [prefix]/lib/x86_64-linux-gnu
-        -- we don't want this with dopamine if we are not installing
-        -- to system wide location. see meson #5925
-        if dop.os == 'Linux' and not is_system_wide(params.install_dir) then
-            self.options['--libdir'] = dop.path(params.install_dir, 'lib')
-        end
-    end
-
-    if params.pkg_config_path then
-        self.options['--pkg-config-path'] = params.pkg_config_path
-    end
-
-    if params.options then
-        for k, v in pairs(params.options) do
-            self.options[k] = v
-        end
-    end
-    if params.defs then
-        for k, v in pairs(params.defs) do
-            self.defs[k] = v
-        end
-    end
-
-    local cmd = { 'meson', 'setup' }
-    for k, v in pairs(self.options) do
-        table.insert(cmd, k .. '=' .. tostring(v))
-    end
-    for k, v in pairs(self.defs) do
-        table.insert(cmd, '-D' .. k .. '=' .. tostring(v))
-    end
-
-    table.insert(cmd, self.build_dir)
-    table.insert(cmd, self.src_dir)
-
-    local cmd_env = dop.profile_environment(self.profile)
-    if env then
-        for k, v in pairs(env) do
-            cmd_env[k] = v
-        end
-    end
-
-    cmd.env = cmd_env
-    self.env = cmd_env
-
-    dop.run_cmd(cmd)
-end
-
-function Meson:compile()
-    dop.run_cmd {
-        'meson',
-        'compile',
-        env = self.env,
-    }
-end
-
-function Meson:install()
-    dop.run_cmd {
-        'meson',
-        'install',
-        env = self.env,
-    }
-end
-
 local PkgConfFile = create_class('PkgConfFile')
 
 local pc_str_fields = {
@@ -511,7 +344,7 @@ local function translate_msvc_libs(pc, field)
     return msvc
 end
 
-function dop.translate_pkgconf_msvc(path)
+local function translate_pkgconf_msvc(path)
     local pc = PkgConfFile:parse(path)
     if pc.libs then
         pc.libs = translate_msvc_libs(pc, 'libs')
@@ -520,6 +353,187 @@ function dop.translate_pkgconf_msvc(path)
         pc['libs.private'] = translate_msvc_libs(pc, 'libs.private')
     end
     pc:write(path)
+end
+
+local CMake = create_class('CMake')
+
+function CMake:new(profile)
+    o = {}
+    setmetatable(o, self)
+
+    if profile == nil then
+        error('profile is mandatory', -2)
+    end
+    if profile.build_type == nil then
+        error('wrong profile parameter', -2)
+    end
+    o.profile = profile
+    o.defs = { ['CMAKE_BUILD_TYPE'] = profile.build_type }
+
+    return o
+end
+
+function CMake:configure(params)
+    if params == nil then
+        error('CMake:configure must be passed a parameter table', -2)
+    end
+    if params.src_dir == nil then
+        error('CMake:configure: src_dir is a mandatory parameter', -2)
+    end
+    self.src_dir = params.src_dir
+
+    if params.install_dir then
+        self.install_dir = params.install_dir
+        self.defs['CMAKE_INSTALL_PREFIX'] = self.install_dir
+    end
+
+    if params.defs then
+        for k, v in pairs(params.defs) do
+            self.defs[k] = v
+        end
+    end
+
+    local gen = params.gen or 'Ninja'
+
+    local cmd = { 'cmake', '-G', gen }
+
+    for k, v in pairs(self.defs) do
+        if type(v) == 'boolean' then
+            if v then
+                v = 'ON'
+            else
+                v = 'OFF'
+            end
+        elseif type(v) == 'number' then
+            v = tostring(v)
+        end
+        table.insert(cmd, '-D' .. k .. '=' .. v)
+    end
+
+    table.insert(cmd, self.src_dir)
+
+    cmd['env'] = dop.profile_environment(self.profile)
+
+    dop.run_cmd(cmd)
+end
+
+function CMake:build()
+    cmd = { 'cmake', '--build', '.' }
+    dop.run_cmd(cmd)
+end
+
+function CMake:install()
+    cmd = { 'cmake', '--build', '.', '--target', 'install' }
+    dop.run_cmd(cmd)
+end
+
+local Meson = create_class('Meson')
+
+function Meson:new(profile)
+    o = {}
+    setmetatable(o, self)
+
+    o.profile = assert(profile, 'profile parameter is mandatory')
+    o.options = {}
+    o.defs = {}
+
+    if profile then
+        o.options['--buildtype'] = profile.build_type
+    end
+
+    return o
+end
+
+local function is_system_wide(prefix)
+    return prefix:sub(1, 4) == '/usr' or prefix == '/'
+end
+
+function Meson:setup(params, env)
+    assert(params, 'Meson:setup must be passed a parameter table')
+
+    self.build_dir =
+        assert(params.build_dir, 'build_dir is a mandatory parameter')
+    self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
+
+    if params.install_dir then
+        self.install_dir = params.install_dir
+        self.options['--prefix'] = params.install_dir
+
+        -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
+        -- e.g. [prefix]/lib/x86_64-linux-gnu
+        -- we don't want this with dopamine if we are not installing
+        -- to system wide location. see meson #5925
+        if dop.os == 'Linux' and not is_system_wide(params.install_dir) then
+            self.options['--libdir'] = dop.path(params.install_dir, 'lib')
+        end
+    end
+
+    if params.pkg_config_path then
+        self.options['--pkg-config-path'] = params.pkg_config_path
+    end
+
+    if params.options then
+        for k, v in pairs(params.options) do
+            self.options[k] = v
+        end
+    end
+    if params.defs then
+        for k, v in pairs(params.defs) do
+            self.defs[k] = v
+        end
+    end
+
+    local cmd = { 'meson', 'setup' }
+    for k, v in pairs(self.options) do
+        table.insert(cmd, k .. '=' .. tostring(v))
+    end
+    for k, v in pairs(self.defs) do
+        table.insert(cmd, '-D' .. k .. '=' .. tostring(v))
+    end
+
+    table.insert(cmd, self.build_dir)
+    table.insert(cmd, self.src_dir)
+
+    local cmd_env = dop.profile_environment(self.profile)
+    if env then
+        for k, v in pairs(env) do
+            cmd_env[k] = v
+        end
+    end
+
+    cmd.env = cmd_env
+    self.env = cmd_env
+
+    dop.run_cmd(cmd)
+end
+
+function Meson:compile()
+    dop.run_cmd {
+        'meson',
+        'compile',
+        env = self.env,
+    }
+end
+
+function Meson:install()
+    dop.run_cmd {
+        'meson',
+        'install',
+        env = self.env,
+    }
+    -- adapting pkg-config file for MSVC and D
+    if not dop.windows or not self.install_dir or not self.profile.tools.dc then
+        return
+    end
+    local pkgc_dir = dop.path(self.install_dir, 'lib', 'pkgconfig')
+    if not dop.is_dir(pkgc_dir) then
+        return
+    end
+    for f in dop.dir_entries(pkgc_dir) do
+        if f.is_file and dop.ends_with(f.name, '.pc') then
+            translate_pkgconf_msvc(f.path)
+        end
+    end
 end
 
 return dop

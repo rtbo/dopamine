@@ -23,10 +23,4 @@ function build(dirs, config)
     }
     meson:compile()
     meson:install()
-
-    if dop.windows then
-        dop.translate_pkgconf_msvc(
-            dop.path(dirs.install, 'lib/pkgconfig/options.pc')
-        )
-    end
 end
