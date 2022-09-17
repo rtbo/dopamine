@@ -15,6 +15,14 @@ local function create_class(name)
     return cls
 end
 
+function dop.starts_with(str, prefix)
+    return str:sub(1, #prefix) == prefix
+end
+
+function dop.ends_with(str, suffix)
+    return suffix == '' or str:sub(-#suffix) == suffix
+end
+
 function dop.assert(pred, msg, level)
     if pred then
         return pred
