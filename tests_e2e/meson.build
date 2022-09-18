@@ -46,6 +46,7 @@ e2e_tests = [
 
     'options',
     'options-dep',
+    'options-dep2',
 
     'warning',
 ]

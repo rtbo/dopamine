@@ -8,6 +8,10 @@ tools = { 'dc' }
 dependencies = {
     options = {
         version = '1.0.0',
+        options = {
+            a = false,
+            b = true,
+        },
     },
 }
 

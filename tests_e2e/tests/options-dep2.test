@@ -1,4 +1,5 @@
-RECIPE=options-dep
+# options of subdependency specified in the recipe
+RECIPE=options-dep2
 REGISTRY=options
 
 CMD=$DOP profile --discover
@@ -8,4 +9,4 @@ CMD=$DOP source
 CMD=$DOP build
 
 CMD=.dop/$DOP_BID/bin/options-dep
-EXPECT_MATCH=1
+EXPECT_MATCH=2

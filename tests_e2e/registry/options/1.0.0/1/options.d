@@ -10,7 +10,7 @@ version(FeatureA)
 version(FeatureB)
 {
     int featureB() {
-        return 1;
+        return 2;
     }
 }
 
