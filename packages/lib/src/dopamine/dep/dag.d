@@ -332,8 +332,20 @@ struct DepDAG
         const Heuristics heuristics = Heuristics.init, Flag!"preFilter" preFilter = Yes.preFilter) @system
     in (rdir.recipe, "RecipeDir must have a recipe loaded")
     {
-        import std.algorithm : canFind, filter, sort, uniq;
+        import std.algorithm : canFind, filter;
         import std.array : array;
+
+        string packId(string name, bool dub)
+        {
+            import std.digest.sha;
+            import std.string : representation;
+
+            auto dig = makeDigest!SHA1();
+            dig.put(name.representation);
+            dig.put(0);
+            dig.put(dub ? 1 : 0);
+            return toHexString(dig.finish())[].idup;
+        }
 
         DagPack[string] packs;
 
@@ -347,27 +359,19 @@ struct DepDAG
                 .filter!(av => heuristics.allow(dep.name, av))
                 .array : allAvs;
 
-            DagPack pack;
-            if (auto p = dep.name in packs)
-                pack = *p;
-
+            const id = packId(dep.name, dep.dub);
+            auto pack = packs.get(id, null);
             if (pack)
-            {
-                avs ~= pack.allVersions;
-            }
+                pack.mergeSpec(avs);
             else
             {
-                pack = new DagPack(dep);
-                packs[dep.name] = pack;
+                pack = new DagPack(dep.name, dep.dub, avs);
+                packs[id] = pack;
             }
-
-            pack.allVersions = sort(avs).uniq().array;
             return pack;
         }
 
         auto root = DagPack.makeRoot(rdir.recipe);
-        const aver = AvailVersion(rdir.recipe.ver, DepLocation.cache);
-        root.allVersions = [aver];
 
         DagNode[] visited;
 
@@ -417,7 +421,7 @@ struct DepDAG
             }
         }
 
-        doPackVersion(rdir, root, aver);
+        doPackVersion(rdir, root, root.allVersions[0]);
 
         return DepDAG(root, heuristics);
     }
@@ -866,11 +870,11 @@ struct DepDAG
 /// Dependency DAG package : represent a package and gathers DAG nodes, each of which is a version of this package
 final class DagPack
 {
-    /// The dependency specification that will resolve this package
-    DepSpec spec;
+    // TODO: fix this module privacy
 
-    /// The available versions of the package that are compatible with the current state of the DAG.
-    AvailVersion[] allVersions;
+    private string _name;
+    private bool _dub;
+    package AvailVersion[] _allVersions;
 
     /// The version nodes of the package that are considered for the resolution.
     /// This is a subset of allVersions
@@ -882,24 +886,47 @@ final class DagPack
     /// Edges towards packages that depends on this
     DagEdge[] upEdges;
 
-    package this(DepSpec spec) @safe
+    package this(string name, bool dub, AvailVersion[] avs) @trusted
     {
-        this.spec = spec;
+        import std.algorithm : sort, uniq;
+        import std.array : array;
+
+        _name = name;
+        _dub = dub;
+        //_specs = [spec.spec];
+        _allVersions = sort(avs).uniq().array;
+    }
+
+    private void mergeSpec(AvailVersion[] avs) @trusted
+    {
+        import std.algorithm : sort, uniq;
+        import std.array : array;
+
+        //_specs ~= spec;
+        _allVersions ~= avs;
+        _allVersions = sort(_allVersions).uniq().array;
     }
 
     package static DagPack makeRoot(const(Recipe) recipe)
     {
-        return new DagPack(DepSpec(recipe.name, VersionSpec("*"), recipe.isDub));
+        const aver = AvailVersion(recipe.ver, DepLocation.cache);
+        return new DagPack(recipe.name, recipe.isDub, [aver]);
     }
 
     @property string name() const @safe
     {
-        return spec.name;
+        return _name;
     }
 
     @property bool dub() const @safe
     {
-        return spec.dub;
+        return _dub;
+    }
+
+    /// The available versions of the package that are compatible with the current state of the DAG.
+    @property const(AvailVersion)[] allVersions() const
+    {
+        return _allVersions;
     }
 
     /// Get node that match with [ver]

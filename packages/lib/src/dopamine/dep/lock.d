@@ -35,7 +35,7 @@ private JSONValue jsonToDagV1(ref DepDAG dag,
 {
     JSONValue[string] dagDict;
 
-    dagDict["dopamine-lock-ver"] = 1;
+    dagDict["dopamine-lock-version"] = 1;
 
     JSONValue[string] heur;
     heur["mode"] = dag.heuristics.mode.to!string;
@@ -49,7 +49,6 @@ private JSONValue jsonToDagV1(ref DepDAG dag,
         JSONValue[string] packDict;
 
         packDict["name"] = pack.name;
-        packDict["spec"] = pack.spec.spec.toString();
         packDict["dub"] = pack.dub;
 
         JSONValue[] vers;
@@ -91,9 +90,6 @@ private JSONValue jsonToDagV1(ref DepDAG dag,
                 JSONValue[] deps;
                 foreach (e; n.downEdges)
                 {
-                    string[string] depDict;
-                    depDict["name"] = e.down.name;
-                    depDict["spec"] = e.spec.to!string();
                     deps ~= JSONValue([
                         "name": e.down.name,
                         "spec": e.spec.to!string(),
@@ -113,7 +109,7 @@ private JSONValue jsonToDagV1(ref DepDAG dag,
 
 DepDAG jsonToDag(JSONValue json)
 {
-    enforce(json["dopamine-lock-ver"].integer == 1, "Unsupported dependency lock format");
+    enforce(json["dopamine-lock-version"].integer == 1, "Unsupported dependency lock format");
 
     return jsonToDagV1(json);
 }
@@ -163,10 +159,9 @@ private DepDAG jsonToDagV1(JSONValue json)
     foreach (jpack; json["packages"].array)
     {
         const name = jpack["name"].str;
-        const spec = safeJsonGet!string(jpack["spec"]);
         const dub = safeJsonGet!bool(jpack["dub"]);
 
-        DagPack p = new DagPack(DepSpec(name, VersionSpec(spec), dub));
+        DagPack p = new DagPack(name, dub, []);
 
         AvailVersion[] allVers;
         DagNode[] nodes;
@@ -209,7 +204,7 @@ private DepDAG jsonToDagV1(JSONValue json)
             }
         }
 
-        p.allVersions = allVers;
+        p._allVersions = allVers;
         p.nodes = nodes;
         packs[p.name] = p;
 
