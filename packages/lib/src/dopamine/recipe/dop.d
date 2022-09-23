@@ -21,7 +21,7 @@ import std.string;
 /// e.g. loading from a cache directory.
 DopRecipe parseDopRecipe(string filename, string root, string revision)
 {
-    auto L = luaL_newstate();
+    auto L = luaNewState();
     luaL_openlibs(L);
     luaLoadDopLib(L);
 
@@ -239,7 +239,7 @@ final class DopRecipe : Recipe
 
     ~this()
     {
-        lua_close(L);
+        luaCloseState(L);
     }
 
     @property RecipeType type() const @safe
@@ -313,7 +313,7 @@ final class DopRecipe : Recipe
 
         const cwd = getcwd();
         chdir(_rootDir);
-        scope(exit)
+        scope (exit)
             chdir(cwd);
 
         if (lua_pcall(L, nargs, /* nresults = */ 1, 0) != LUA_OK)
@@ -345,7 +345,7 @@ final class DopRecipe : Recipe
 
         const cwd = getcwd();
         chdir(_rootDir);
-        scope(exit)
+        scope (exit)
             chdir(cwd);
 
         if (lua_pcall(L, 0, 1, 0) != LUA_OK)
@@ -373,7 +373,7 @@ final class DopRecipe : Recipe
 
         const cwd = getcwd();
         chdir(_rootDir);
-        scope(exit)
+        scope (exit)
             chdir(cwd);
 
         if (lua_pcall(L, /* nargs = */ 0, /* nresults = */ 1, 0) != LUA_OK)
@@ -397,7 +397,7 @@ final class DopRecipe : Recipe
 
         const cwd = getcwd();
         chdir(dirs.build);
-        scope(exit)
+        scope (exit)
             chdir(cwd);
 
         if (lua_pcall(L, /* nargs = */ 3, /* nresults = */ 0, 0) != LUA_OK)
@@ -427,7 +427,7 @@ final class DopRecipe : Recipe
 
             const cwd = getcwd();
             chdir(src);
-            scope(exit)
+            scope (exit)
                 chdir(cwd);
 
             if (lua_pcall(L, 2, 0, 0) != LUA_OK)

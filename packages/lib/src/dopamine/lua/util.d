@@ -7,6 +7,87 @@ import std.stdio;
 import std.string;
 import std.traits;
 
+private extern (C) void* luaAlloc(void* ud, void* ptr, size_t osize, size_t nsize) nothrow @nogc
+{
+    import core.stdc.stdlib : free, realloc;
+    cast(void) ud;
+    cast(void) osize;
+
+    if (nsize == 0)
+    {
+        free(ptr);
+        return null;
+    }
+    else
+        return realloc(ptr, nsize);
+}
+
+private struct LuaWarn
+{
+    bool on;
+    string msg;
+}
+
+private extern (C) void luaWarn(void* ud, const(char)* msg, int tocont) nothrow
+{
+    import dopamine.log;
+
+    auto warn = cast(LuaWarn*) ud;
+
+    auto m = msg.fromStringz();
+    if (!tocont && !warn.msg && m.length && m[0] == '@')
+    {
+        if (m == "@off")
+            warn.on = false;
+        else if (m == "@on")
+            warn.on = true;
+        return;
+    }
+
+    string toprint = warn.msg ~ m.idup;
+    if (tocont)
+    {
+        warn.msg = toprint;
+    }
+    else
+    {
+        try
+        {
+            if (warn.on)
+                logWarning("%s: %s", warning("Recipe warning"), toprint);
+        }
+        catch (Exception ex)
+        {
+        }
+        warn.msg = null;
+    }
+}
+
+lua_State* luaNewState() nothrow @nogc
+{
+    import core.stdc.stdlib : malloc;
+
+    // luaAlloc doesn't need userdata, but luaWarn does.
+    // we use the LuaWarn object for both such as we can clean-up
+    // during close (lua_getallocf exists, but not lua_getwarnf).
+    auto warn = cast(LuaWarn*)malloc(LuaWarn.sizeof);
+    *warn = LuaWarn(true, null);
+    auto L = lua_newstate(&luaAlloc, cast(void*)warn);
+    lua_setwarnf(L, &luaWarn, cast(void*)warn);
+    return L;
+}
+
+void luaCloseState(lua_State* L) nothrow @nogc
+{
+    import core.stdc.stdlib : free;
+
+    void* warn;
+    lua_getallocf(L, &warn);
+    lua_close(L);
+    free(warn);
+}
+
+
 int positiveStackIndex(lua_State* L, int index) nothrow
 {
     pragma(inline, true);
