@@ -1,0 +1,5 @@
+RECIPE=warning
+
+CMD=$DOP profile --discover
+CMD=$DOP source
+EXPECT_MATCH[stderr]=Recipe warning: A warning from recipe
