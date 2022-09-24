@@ -43,6 +43,8 @@ e2e_tests = [
     'publish-missingfields',
 
     'search',
+
+    'warning',
 ]
 
 foreach e2e_test : e2e_tests
