@@ -11,12 +11,217 @@ import std.sumtype;
 public import dopamine.recipe.dir;
 public import dopamine.recipe.dop;
 
+/// The value of an option can be bool, string or int
+alias OptionVal = SumType!(bool, string, int);
+
+/// A set of options.
+/// A recipe can defines options for itself, or specify option values
+/// for its dependencies.
+/// OptionSet is an OptionVal dictionary. Keys are option names.
+/// Options specified for dependencies must be prefixed with "pkgname/"
+/// (forward slash acts as separator).
+struct OptionSet
+{
+    private OptionVal[string] _opts;
+
+    this(OptionVal[string] opts) @safe
+    {
+        _opts = opts;
+    }
+
+    OptionVal get(string key, lazy OptionVal def) const @safe
+    {
+        return _opts.get(key, def);
+    }
+
+    OptionVal opIndex(string key) const @safe
+    {
+        return _opts[key];
+    }
+
+    OptionVal opIndexAssign(OptionVal val, string key) @trusted
+    {
+        return _opts[key] = val;
+    }
+
+    inout(OptionVal)* opBinaryRight(string op)(string key) inout @safe
+    {
+        static assert(op == "in", "only 'in' binary operator is defined");
+        return key in _opts;
+    }
+
+    int opApply(scope int delegate(string key, OptionVal val) @safe dg) const @safe
+    {
+        foreach (k, v; _opts)
+        {
+            int res = dg(k, v);
+            if (res)
+                return res;
+        }
+        return 0;
+    }
+
+    int opApply(scope int delegate(string key, ref OptionVal val) @safe dg) @safe
+    {
+        foreach (k, ref v; _opts)
+        {
+            int res = dg(k, v);
+            if (res)
+                return res;
+        }
+        return 0;
+    }
+
+    bool remove(string key) @safe
+    {
+        return _opts.remove(key);
+    }
+
+    @property string[] keys() const @safe
+    {
+        return _opts.keys;
+        // string[] res;
+        // foreach (k; _opts)
+        //     res ~= k;
+        // res;
+    }
+
+    @property size_t length() const @safe
+    {
+        return _opts.length;
+    }
+
+    @property OptionSet dup() const @trusted
+    {
+        OptionVal[string] opts;
+        foreach (k, v; _opts)
+            opts[k] = v;
+
+        return OptionSet(opts);
+    }
+
+    /// Return the keys that are present in both this set and the other set
+    /// but for which the value is different
+    string[] conflicts(const(OptionSet) other) const @safe
+    {
+        string[] res;
+        foreach (k, v; _opts)
+        {
+            const ov = k in other;
+            if (ov && *ov != v)
+                res ~= k;
+        }
+        return res;
+    }
+
+    /// Retrieve all option values that are specified for the root dependency
+    OptionSet forRoot() const @trusted
+    {
+        import std.algorithm : canFind;
+
+        OptionVal[string] res;
+        foreach (key, val; _opts)
+        {
+            if (!key.canFind('/'))
+                res[key] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Retrieve all option values that are specified for the given dependency
+    /// The prefix [name/] is removed from keys in the returned dict.
+    OptionSet forDependency(string name) const @trusted
+    {
+        import std.algorithm : startsWith;
+
+        OptionVal[string] res;
+        const prefix = name ~ "/";
+        foreach (key, val; _opts)
+        {
+            if (key.startsWith(prefix))
+                res[key[prefix.length .. $]] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Retrieve all option values that are not specified for the root recipe
+    OptionSet forDependencies() const @trusted
+    {
+        import std.algorithm : canFind;
+
+        OptionVal[string] res;
+        foreach (key, val; _opts)
+        {
+            if (key.canFind('/'))
+                res[key] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Retrieve all option values that are specified for another dependency
+    /// than the provided one. Root names are excluded as well.
+    OptionSet notFor(string name) const @trusted
+    {
+        import std.algorithm : canFind, startsWith;
+
+        OptionVal[string] res;
+        const prefix = name ~ "/";
+        foreach (key, val; _opts)
+        {
+            if (!key.startsWith(prefix) && key.canFind('/'))
+                res[key] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Merge this set with the other sets in parameters.
+    /// In case of conflicting options (same key but different values),
+    /// the value of `this` is chosen, and the key is appended to the
+    /// `conflicts` parameter.
+    OptionSet merge(OS...)(ref string[] conflicts, OS otherSets) @trusted
+    {
+        OptionVal[string] res;
+
+        static foreach (other; otherSets)
+        {
+            foreach (k, v; other._opts)
+            {
+                const tv = k in _opts;
+                if (tv && *tv != v)
+                    conflicts ~= k;
+                else
+                    res[k] = v;
+            }
+        }
+        foreach (k, v; _opts)
+            res[k] = v;
+
+        return OptionSet(res);
+    }
+}
+
+/// An Option as specified in the dependency.
+/// Type is defined by defaultValue.
+/// Name is not defined here because this struct is typically
+/// held in an associative array.
+struct Option
+{
+    OptionVal defaultValue;
+    string description;
+}
+
 /// A recipe dependency specification
 struct DepSpec
 {
     string name;
     VersionSpec spec;
     bool dub;
+    OptionSet options;
+
+    @property DepSpec dup() const
+    {
+        return DepSpec(name, spec, dub, options.dup);
+    }
 }
 
 /// Directories passed to the `build` recipe function
@@ -34,14 +239,6 @@ struct BuildDirs
         assert(build.isAbsolute);
         assert(install.isAbsolute);
     }
-}
-
-alias OptionVal = SumType!(bool, string, int);
-
-struct Option
-{
-    OptionVal defaultValue;
-    string description;
 }
 
 /// The build configuration
