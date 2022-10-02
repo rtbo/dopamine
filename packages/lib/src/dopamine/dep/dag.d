@@ -328,8 +328,12 @@ struct DepDAG
     ///               Default is [Yes.preFilter].
     ///
     /// Returns: a [DepDAG] ready for the next phase
-    static DepDAG prepare(RecipeDir rdir, Profile profile, DepServices services,
-        const Heuristics heuristics = Heuristics.init, Flag!"preFilter" preFilter = Yes.preFilter) @system
+    static DepDAG prepare(
+        RecipeDir rdir,
+        Profile profile,
+        DepServices services,
+        const Heuristics heuristics = Heuristics.init,
+        Flag!"preFilter" preFilter = Yes.preFilter) @system
     in (rdir.recipe, "RecipeDir must have a recipe loaded")
     {
         import std.algorithm : canFind, filter;
@@ -349,7 +353,7 @@ struct DepDAG
 
         DagPack[string] packs;
 
-        DagPack prepareDagPack(DepSpec dep)
+        DagPack prepareDagPack(const(DepSpec) dep)
         {
             auto service = dep.dub ? services.dub : services.dop;
             auto allAvs = service.packAvailVersions(dep.name);
@@ -361,13 +365,15 @@ struct DepDAG
 
             const id = packId(dep.name, dep.dub);
             auto pack = packs.get(id, null);
+
             if (pack)
-                pack.mergeSpec(avs);
+                pack.addAvailVersions(avs);
             else
             {
                 pack = new DagPack(dep.name, dep.dub, avs);
                 packs[id] = pack;
             }
+            pack.options ~= dep.options.dup;
             return pack;
         }
 
@@ -459,6 +465,8 @@ struct DepDAG
 
         root.resolvedNode = root.nodes[0];
         resolveDeps(root);
+
+        cascadeOptions();
     }
 
     // 2nd phase of filtering to eliminate all incompatible versions in the DAG.
@@ -533,6 +541,54 @@ struct DepDAG
 
             if (!diff)
                 break;
+        }
+    }
+
+    private void cascadeOptions() @safe
+    {
+        import dopamine.log : logWarningH;
+        import std.algorithm : startsWith;
+        import std.array : join;
+
+        OptionSet remaining;
+        string[] remainingConflicts;
+
+        void doPack(DagPack pack) @safe
+        {
+            auto rn = pack.resolvedNode;
+
+            // Initialize node options and conflicts with those
+            // from previous node that are targetting it.
+            // Used remaining options are cleaned up.
+            const prefix = pack.name ~ "/";
+            rn.options = remaining.forDependency(pack.name);
+            remaining = remaining.notFor(pack.name);
+            foreach (c; remainingConflicts)
+            {
+                if (c.startsWith(prefix))
+                    rn.optionConflicts ~= c[prefix.length .. $];
+            }
+
+            foreach (opt; pack.options)
+            {
+                rn.options.merge(rn.optionConflicts, opt.forRoot(), opt.forDependency(pack.name));
+                remaining.merge(remainingConflicts, opt.notFor(pack.name));
+            }
+
+            foreach (DagEdge e; rn.downEdges)
+            {
+                doPack(e.down);
+            }
+        }
+
+        doPack(_root);
+
+        if (remaining.length)
+        {
+            logWarningH(
+                "Some options were defined but not used in the dependency graph:\n - ",
+                remaining.keys.join("\n - ")
+            );
         }
     }
 
@@ -876,6 +932,8 @@ final class DagPack
     private bool _dub;
     package AvailVersion[] _allVersions;
 
+    private OptionSet[] options;
+
     /// The version nodes of the package that are considered for the resolution.
     /// This is a subset of allVersions
     DagNode[] nodes;
@@ -893,16 +951,14 @@ final class DagPack
 
         _name = name;
         _dub = dub;
-        //_specs = [spec.spec];
         _allVersions = sort(avs).uniq().array;
     }
 
-    private void mergeSpec(AvailVersion[] avs) @trusted
+    private void addAvailVersions(AvailVersion[] avs) @trusted
     {
         import std.algorithm : sort, uniq;
         import std.array : array;
 
-        //_specs ~= spec;
         _allVersions ~= avs;
         _allVersions = sort(_allVersions).uniq().array;
     }
@@ -913,11 +969,13 @@ final class DagPack
         return new DagPack(recipe.name, recipe.isDub, [aver]);
     }
 
+    /// The name of the package
     @property string name() const @safe
     {
         return _name;
     }
 
+    /// Whether this is a dub package
     @property bool dub() const @safe
     {
         return _dub;
@@ -987,6 +1045,13 @@ final class DagNode
 
     /// The package version and location of this node
     AvailVersion aver;
+
+    /// The options for this node coming from the top of the graph.
+    /// This field is populated only once the graph is resolved.
+    OptionSet options;
+
+    /// The options conflicts to be resolved for this node
+    string[] optionConflicts;
 
     @property string name() const @safe
     {
