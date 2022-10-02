@@ -160,16 +160,12 @@ struct RecipeDir
     OptionSet readOptionFile() const
     {
         auto json = readJsonOptions();
-        OptionSet res;
-        jsonToOptions(json, res);
-        return res;
+        return OptionSet(json);
     }
 
     void writeOptionFile(const(OptionSet) opts) const
     {
-        JSONValue[string] json;
-        optionsToJson(opts, json);
-        writeJsonOptions(json);
+        writeJsonOptions(opts.toJSON());
     }
 
     void clearOptionFile() const
@@ -182,9 +178,8 @@ struct RecipeDir
     OptionSet mergeOptionFile(return scope OptionSet opts) const
     {
         auto json = readJsonOptions();
-        optionsToJson(opts, json);
-        jsonToOptions(json, opts);
-        writeJsonOptions(json);
+        opts = opts.union_(OptionSet(json));
+        writeJsonOptions(opts.toJSON());
         return opts;
     }
 
@@ -204,44 +199,6 @@ struct RecipeDir
         mkdirRecurse(dopPath());
         const str = JSONValue(json).toPrettyString();
         write(optionFile, str.representation);
-    }
-
-    private void jsonToOptions(const(JSONValue[string]) json, ref OptionSet opts) const
-    {
-        foreach (string key, const ref JSONValue val; json)
-        {
-            switch (val.type)
-            {
-            case JSONType.true_:
-                opts[key] = OptionVal(true);
-                break;
-            case JSONType.false_:
-                opts[key] = OptionVal(false);
-                break;
-            case JSONType.integer:
-                opts[key] = OptionVal(val.get!int);
-                break;
-            case JSONType.string:
-                opts[key] = OptionVal(val.get!string);
-                break;
-            default:
-                throw new Exception("Invalid JSON option type in " ~ optionFile);
-            }
-        }
-    }
-
-    private static void optionsToJson(const(OptionSet) opts, ref JSONValue[string] json)
-    {
-        import std.sumtype : match;
-
-        foreach (name, optVal; opts)
-        {
-            optVal.match!(
-                (bool val) => json[name] = val,
-                (int val) => json[name] = val,
-                (string val) => json[name] = val,
-            );
-        }
     }
 
     /// Get the recipe of this directory.

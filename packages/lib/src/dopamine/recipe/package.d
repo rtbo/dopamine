@@ -5,6 +5,7 @@ import dopamine.profile;
 import dopamine.semver;
 
 import std.file;
+import std.json;
 import std.path;
 import std.sumtype;
 
@@ -27,6 +28,50 @@ struct OptionSet
     this(OptionVal[string] opts) @safe
     {
         _opts = opts;
+    }
+
+    this(const(JSONValue[string]) json) @trusted
+    {
+        import std.conv : to;
+
+        foreach (string key, const ref JSONValue val; json)
+        {
+            switch (val.type)
+            {
+            case JSONType.true_:
+                _opts[key] = OptionVal(true);
+                break;
+            case JSONType.false_:
+                _opts[key] = OptionVal(false);
+                break;
+            case JSONType.integer:
+                _opts[key] = OptionVal(val.get!int);
+                break;
+            case JSONType.string:
+                _opts[key] = OptionVal(val.get!string);
+                break;
+            default:
+                throw new Exception("Invalid JSON option type: " ~ val.type.to!string);
+            }
+        }
+    }
+
+    JSONValue[string] toJSON() const
+    {
+        import std.sumtype : match;
+
+        JSONValue[string] json;
+
+        foreach (name, opt; _opts)
+        {
+            opt.match!(
+                (bool val) => json[name] = val,
+                (int val) => json[name] = val,
+                (string val) => json[name] = val,
+            );
+        }
+
+        return json;
     }
 
     OptionVal get(string key, lazy OptionVal def) const @safe
@@ -191,6 +236,26 @@ struct OptionSet
                     conflicts ~= k;
                 else
                     res[k] = v;
+            }
+        }
+        foreach (k, v; _opts)
+            res[k] = v;
+
+        return OptionSet(res);
+    }
+
+    /// Return the union of this set with the other sets in parameters.
+    /// The values of this take precedence if the same key are found in multiple
+    /// sets.
+    OptionSet union_(OS...)(OS otherSets) @trusted
+    {
+        OptionVal[string] res;
+
+        static foreach (other; otherSets)
+        {
+            foreach (k, v; other._opts)
+            {
+                res[k] = v;
             }
         }
         foreach (k, v; _opts)
