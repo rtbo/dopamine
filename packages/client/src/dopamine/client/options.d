@@ -34,7 +34,7 @@ int optionsMain(string[] args)
         return 0;
     }
 
-    OptionVal[string] options;
+    OptionSet options;
     foreach (arg; args[1 .. $])
     {
         parseOptionSpec(options, arg);

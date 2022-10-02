@@ -68,7 +68,7 @@ void enforceRecipeIntegrity(RecipeDir rdir,
     Profile profile,
     string cacheDir,
     string revision,
-    OptionVal[string] options)
+    OptionSet options)
 {
     auto lock = acquireRecipeLockFile(rdir);
     auto recipe = rdir.recipe;

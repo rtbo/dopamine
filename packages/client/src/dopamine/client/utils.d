@@ -96,7 +96,7 @@ auto acquireBuildLockFile(BuildPaths bPaths)
     return acquireSomeLockFile(bPaths.lock, "build");
 }
 
-void parseOptionSpec(ref OptionVal[string] opts, string spec)
+void parseOptionSpec(ref OptionSet opts, string spec)
 {
     import std.algorithm : all;
     import std.ascii : isDigit;
@@ -117,5 +117,5 @@ void parseOptionSpec(ref OptionVal[string] opts, string spec)
     else if (value.all!(c => isDigit(c)))
         opts[key] = OptionVal(value.to!int);
     else
-        opts[key] = value;
+        opts[key] = OptionVal(value);
 }

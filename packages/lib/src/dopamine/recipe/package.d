@@ -247,7 +247,7 @@ struct BuildConfig
     /// the build profile
     const(Profile) profile;
 
-    OptionVal[string] options;
+    OptionSet options;
 
     void feedDigest(D)(ref D digest) const
     {

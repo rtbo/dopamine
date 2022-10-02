@@ -157,15 +157,15 @@ struct RecipeDir
         return exists(p) && isFile(p);
     }
 
-    OptionVal[string] readOptionFile() const
+    OptionSet readOptionFile() const
     {
         auto json = readJsonOptions();
-        OptionVal[string] res;
+        OptionSet res;
         jsonToOptions(json, res);
         return res;
     }
 
-    void writeOptionFile(const(OptionVal[string]) opts) const
+    void writeOptionFile(const(OptionSet) opts) const
     {
         JSONValue[string] json;
         optionsToJson(opts, json);
@@ -179,7 +179,7 @@ struct RecipeDir
             remove(p);
     }
 
-    OptionVal[string] mergeOptionFile(return scope OptionVal[string] opts) const
+    OptionSet mergeOptionFile(return scope OptionSet opts) const
     {
         auto json = readJsonOptions();
         optionsToJson(opts, json);
@@ -206,7 +206,7 @@ struct RecipeDir
         write(optionFile, str.representation);
     }
 
-    private void jsonToOptions(const(JSONValue[string]) json, ref OptionVal[string] opts) const
+    private void jsonToOptions(const(JSONValue[string]) json, ref OptionSet opts) const
     {
         foreach (string key, const ref JSONValue val; json)
         {
@@ -230,7 +230,7 @@ struct RecipeDir
         }
     }
 
-    private static void optionsToJson(const(OptionVal[string]) opts, ref JSONValue[string] json)
+    private static void optionsToJson(const(OptionSet) opts, ref JSONValue[string] json)
     {
         import std.sumtype : match;
 
