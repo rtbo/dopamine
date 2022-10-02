@@ -496,6 +496,39 @@ DepSpec[] readDependencies(lua_State* L) @trusted
                 dep.spec = VersionSpec(enforce(ver,
                         format("'version' not specified for '%s' dependency", dep.name)));
                 dep.dub = luaGetTable!bool(L, -1, "dub", false);
+                if (lua_getfield(L, -1, "options") == LUA_TTABLE)
+                {
+                    lua_pushnil(L);
+                    while (lua_next(L, -2))
+                    {
+                        scope (failure)
+                            lua_pop(L, 1);
+
+                        const name = enforce(luaTo!string(L, -2, null), // probably a number key (dependencies specified as array)
+                            // relying on lua_tostring for having a correct string inference
+                            format("Invalid option name: %s", lua_tostring(L, -2)));
+
+                        switch (lua_type(L, -1))
+                        {
+                        case LUA_TBOOLEAN:
+                            const val = luaPop!bool(L);
+                            dep.options[name] = OptionVal(val);
+                            break;
+                        case LUA_TNUMBER:
+                            const val = luaPop!int(L);
+                            dep.options[name] = OptionVal(val);
+                            break;
+                        case LUA_TSTRING:
+                            const val = luaPop!string(L);
+                            dep.options[name] = OptionVal(val);
+                            break;
+                        default:
+                            const s = luaL_typename(L, -1).fromStringz;
+                            throw new Exception(format("invalid type for option: %s", s));
+                        }
+                    }
+                }
+                lua_pop(L, 1);
                 break;
             }
         default:
@@ -782,13 +815,13 @@ void pushConfig(lua_State* L, const(BuildConfig) config, Option[string] optionDe
     lua_settable(L, ind);
 
     OptionVal[string] options;
-    foreach(name, decl; optionDecls)
+    foreach (name, decl; optionDecls)
         options[name] = decl.defaultValue;
-    foreach(name, val; config.options)
+    foreach (name, val; config.options)
         options[name] = val;
 
     lua_pushliteral(L, "options");
-    lua_createtable(L, 0, cast(int)options.length);
+    lua_createtable(L, 0, cast(int) options.length);
     const optInd = lua_gettop(L);
     foreach (name, val; options)
     {
