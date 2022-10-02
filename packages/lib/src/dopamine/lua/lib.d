@@ -475,6 +475,7 @@ int luaDirEntries(lua_State* L) nothrow
             followSymlink = luaGetTable!bool(L, 2, "follow_symlink", true);
             break;
         case LUA_TNONE:
+        case LUA_TNIL:
             break;
         default:
             luaL_argerror(L, 2, null);
