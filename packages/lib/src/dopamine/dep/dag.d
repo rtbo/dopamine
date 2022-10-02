@@ -571,8 +571,8 @@ struct DepDAG
 
             foreach (opt; pack.options)
             {
-                rn.options.merge(rn.optionConflicts, opt.forRoot(), opt.forDependency(pack.name));
-                remaining.merge(remainingConflicts, opt.notFor(pack.name));
+                rn.options = rn.options.merge(rn.optionConflicts, opt.forRoot(), opt.forDependency(pack.name));
+                remaining = remaining.merge(remainingConflicts, opt.notFor(pack.name));
             }
 
             foreach (DagEdge e; rn.downEdges)
