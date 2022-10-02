@@ -103,6 +103,12 @@ int buildMain(string[] args)
     if (rdir.recipe.isDop)
         logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
+    auto options = rdir.readOptionFile();
+    foreach(oo; optionOverrides)
+    {
+        parseOptionSpec(options, oo);
+    }
+
     DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
@@ -111,15 +117,10 @@ int buildMain(string[] args)
             buildDepService(Yes.system, homeCacheDir(), registryUrl()),
             buildDubDepService(),
         );
-        depInfos = buildDependencies(dag, recipe, profile, services);
+        depInfos = buildDependencies(dag, recipe, profile, services, options.forDependencies());
     }
 
-    auto options = rdir.readOptionFile();
-    foreach(oo; optionOverrides)
-    {
-        parseOptionSpec(options, oo);
-    }
-    const config = BuildConfig(profile.subset(recipe.tools), options);
+    const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
     const buildId = BuildId(recipe, config);
 
     if (environment.get("DOP_E2ETEST_BUILDID"))

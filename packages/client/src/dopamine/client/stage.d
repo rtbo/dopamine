@@ -23,15 +23,16 @@ import std.getopt;
 import std.path;
 import std.typecons;
 
-void stagePackage(RecipeDir rdir, Profile profile, string absDest, DepInfo[string] depInfos)
-in(isAbsolute(absDest))
+void stagePackage(RecipeDir rdir, Profile profile, string absDest, OptionSet options, DepInfo[string] depInfos)
+in (isAbsolute(absDest))
 {
+    const config = BuildConfig(profile.subset(rdir.recipe.tools), options.forRoot());
+    const buildId = BuildId(rdir.recipe, config, absDest);
+    const bPaths = rdir.buildPaths(buildId);
+    acquireBuildLockFile(bPaths);
+
     if (!rdir.recipe.canStage)
     {
-        const config = BuildConfig(profile.subset(rdir.recipe.tools));
-        const buildId = BuildId(rdir.recipe, config, absDest);
-        const bPaths = rdir.buildPaths(buildId);
-        acquireBuildLockFile(bPaths);
         string reason;
         if (!rdir.checkBuildReady(buildId, reason))
         {
@@ -40,23 +41,19 @@ in(isAbsolute(absDest))
         return;
     }
 
-    auto config = BuildConfig(profile.subset(rdir.recipe.tools));
-    const buildId = BuildId(rdir.recipe, config, absDest);
-    const bPaths = rdir.buildPaths(buildId);
-    acquireBuildLockFile(bPaths);
-
     enforceBuildReady(rdir, buildId);
-
     rdir.recipe.stage(bPaths.install, absDest);
 }
 
 int stageMain(string[] args)
 {
     string profileName;
+    string[] optionOverrides;
 
     // dfmt off
     auto helpInfo = getopt(args,
         "profile|p", "Stage for the given profile.", &profileName,
+        "option|o", "Override option", &optionOverrides,
     );
     // dfmt on
 
@@ -83,8 +80,13 @@ int stageMain(string[] args)
     if (rdir.recipe.isDop)
         logInfo("%s: %s", info("Revision"), info(rdir.calcRecipeRevision()));
 
-    DepInfo[string] depInfos;
+    auto options = rdir.readOptionFile();
+    foreach (oo; optionOverrides)
+    {
+        parseOptionSpec(options, oo);
+    }
 
+    DepInfo[string] depInfos;
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
@@ -93,18 +95,18 @@ int stageMain(string[] args)
             buildDubDepService(homeDubCacheDir(), null),
         );
 
-        depInfos = collectDepInfos(dag, recipe, profile, services, absDest);
+        depInfos = collectDepInfos(dag, recipe, profile, services, options.forDependencies(), absDest);
 
         foreach (dn; dag.traverseTopDownResolved())
         {
             auto service = dn.dub ? services.dub : services.dop;
             auto drdir = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
             auto dprof = profile.subset(drdir.recipe.tools);
-            stagePackage(drdir, dprof, absDest, depInfos);
+            stagePackage(drdir, dprof, absDest, options.forDependency(dn.name), depInfos);
         }
     }
 
-    stagePackage(rdir, profile.subset(recipe.tools), absDest, depInfos);
+    stagePackage(rdir, profile.subset(recipe.tools), absDest, options.forRoot(), depInfos);
 
     logInfo("Stage: %s - %s", success("OK"), info(dest));
 

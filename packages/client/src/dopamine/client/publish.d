@@ -88,14 +88,14 @@ void enforceRecipeIntegrity(RecipeDir rdir,
         auto json = dag.toJson();
         write(rdir.depsLockFile, json.toPrettyString());
 
-        depInfos = buildDependencies(dag, recipe, profile, services);
+        depInfos = buildDependencies(dag, recipe, profile, services, options.forDependencies());
     }
 
     if (!recipe.inTreeSrc)
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
     const srcDir = recipe.inTreeSrc ? rdir.root : recipe.source();
 
-    const config = BuildConfig(profile.subset(recipe.tools), options);
+    const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
     const buildId = BuildId(recipe, config);
     const bPaths = rdir.buildPaths(buildId);
 

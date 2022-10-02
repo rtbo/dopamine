@@ -1,4 +1,4 @@
-name = 'options-dep'
+name = 'options-dep2'
 version = '1.0.0'
 description = 'a test library with options'
 upstream_url = 'https://github.com/rtbo/dopamine'

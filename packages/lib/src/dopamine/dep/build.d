@@ -12,8 +12,13 @@ import std.exception;
 import std.file;
 import std.path;
 
-DepInfo[string] collectDepInfos(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepServices services, string stageDest=null)
+DepInfo[string] collectDepInfos(
+    DepDAG dag,
+    Recipe recipe,
+    const(Profile) profile,
+    DepServices services,
+    OptionSet options,
+    string stageDest=null)
 in (dag.resolved)
 in (!stageDest || isAbsolute(stageDest))
 {
@@ -25,7 +30,8 @@ in (!stageDest || isAbsolute(stageDest))
         auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
-        const conf = BuildConfig(prof);
+        auto opts = options.forDependency(depNode.name).union_(depNode.options);
+        const conf = BuildConfig(prof, opts);
         const buildId = BuildId(rdir.recipe, conf, stageDest);
         const bPaths = rdir.buildPaths(buildId);
 
@@ -35,8 +41,13 @@ in (!stageDest || isAbsolute(stageDest))
     return collectNodeDepInfos(dag.root.resolvedNode);
 }
 
-DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepServices services, string stageDest=null)
+DepInfo[string] buildDependencies(
+    DepDAG dag,
+    Recipe recipe,
+    const(Profile) profile,
+    DepServices services,
+    OptionSet options,
+    string stageDest=null)
 in (dag.resolved)
 in (!stageDest || isAbsolute(stageDest))
 {
@@ -59,7 +70,21 @@ in (!stageDest || isAbsolute(stageDest))
         auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
-        const conf = BuildConfig(prof);
+        auto opts = options.forDependency(depNode.name).union_(depNode.options);
+        foreach (c; depNode.optionConflicts)
+        {
+            enforce(
+                c in opts,
+                new ErrorLogException(
+                    "Unresolved option conflict for dependency %s: %s.\n" ~
+                    "Ensure to set the option %s with the `%s` command.",
+                    info(depNode.name), color(Color.magenta, c),
+                    color(Color.cyan | Color.bright, depNode.name ~ "/" ~ c),
+                    info("dop options")
+                )
+            );
+        }
+        const conf = BuildConfig(prof, opts);
         const bid = BuildId(rdir.recipe, conf, stageDest);
         const bPaths = rdir.buildPaths(bid);
 
