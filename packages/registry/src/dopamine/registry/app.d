@@ -89,7 +89,7 @@ final class DopRegistry
 
         version (DopRegistryServesFrontend)
         {
-            setupFrontendService();
+            setupFrontendService(api);
         }
         else
         {
@@ -100,7 +100,7 @@ final class DopRegistry
 
     version (DopRegistryServesFrontend)
     {
-        void setupFrontendService()
+        void setupFrontendService(URLRouter api)
         {
             root = new URLRouter;
             root.any("/api/*", api);
