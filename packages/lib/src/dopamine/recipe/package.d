@@ -1,5 +1,6 @@
 module dopamine.recipe;
 
+import dopamine.build_id;
 import dopamine.dep.spec;
 import dopamine.profile;
 import dopamine.semver;
@@ -336,10 +337,18 @@ struct BuildConfig
     }
 }
 
-struct DepInfo
+struct DepBuildInfo
 {
-    string installDir;
+    /// The name of the dependency package
+    string name;
+    /// Whether it is a DUB dependency
+    bool dub;
+    /// The version of the dependency package
     Semver ver;
+    /// The build-id of the dependency package
+    BuildId buildId;
+    /// Where the dependency is install
+    string installDir;
 }
 
 enum RecipeType
@@ -431,7 +440,7 @@ interface Recipe
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, const(BuildConfig) config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
     in (!isLight, "Light recipes do not build");
 
     /// Whether this recipe can stage an installation to another
@@ -580,7 +589,7 @@ version (unittest)  : final class MockRecipe : Recipe
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, const(BuildConfig) config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
     {
     }
 

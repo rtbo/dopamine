@@ -40,12 +40,13 @@ void enforceBuildReady(RecipeDir rdir, BuildId buildId)
 string buildPackage(
     RecipeDir rdir,
     const(BuildConfig) config,
-    DepInfo[string] depInfos,
+    DagNode dnode,
     string stageDest = null)
 {
     const srcDir = enforceSourceReady(rdir);
 
-    const buildId = BuildId(rdir.recipe, config, stageDest);
+    auto dbi = collectDirectDepBuildInfos(dnode);
+    const buildId = BuildId(rdir.recipe, config, dbi, stageDest);
     const bPaths = rdir.buildPaths(buildId);
 
     const cwd = getcwd();
@@ -56,7 +57,7 @@ string buildPackage(
 
     mkdirRecurse(bPaths.build);
 
-    rdir.recipe.build(bdirs, config, depInfos);
+    rdir.recipe.build(bdirs, config, collectDepBuildInfos(dnode));
 
     BuildState state = bPaths.stateFile.read();
     state.buildTime = Clock.currTime;
@@ -109,7 +110,8 @@ int buildMain(string[] args)
         parseOptionSpec(options, oo);
     }
 
-    DepInfo[string] depInfos;
+    DepBuildInfo[string] depInfos;
+    DagNode rootNode;
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
@@ -118,17 +120,16 @@ int buildMain(string[] args)
             buildDubDepService(),
         );
         depInfos = buildDependencies(dag, recipe, profile, services, options.forDependencies());
+        rootNode = dag.root.resolvedNode;
     }
 
     const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
-    const buildId = BuildId(recipe, config);
+    const buildId = BuildId(recipe, config, collectDirectDepBuildInfos(rootNode));
 
+    // undocumented env var used to dump the build-id hash in a file.
+    // Used by end-to-end tests to locate the build directory
     if (environment.get("DOP_E2ETEST_BUILDID"))
-    {
-        // undocumented env var used to dump the config hash in a file.
-        // Used by end-to-end tests to locate build config directory
         write(environment["DOP_E2ETEST_BUILDID"], buildId.toString());
-    }
 
     const bPaths = rdir.buildPaths(buildId);
     auto bLock = acquireBuildLockFile(bPaths);
@@ -146,7 +147,7 @@ int buildMain(string[] args)
 
     destroy(lock);
 
-    const dir = buildPackage(rdir, config, depInfos);
+    const dir = buildPackage(rdir, config, rootNode);
 
     logInfo("%s: %s - %s", info("Build"), success("OK"), dir);
 

@@ -7,6 +7,13 @@ CMD=$DOP resolve
 CMD=$DOP source
 
 CMD=$DOP build
-
 CMD=.dop/$DOP_BID/bin/options-dep
 EXPECT_MATCH=2
+
+CMD=$DOP build -o options/a=true -o options/b=false
+CMD=.dop/$DOP_BID/bin/options-dep
+EXPECT_MATCH=1
+
+CMD=$DOP build -o options/a=true -o options/b=true
+CMD=.dop/$DOP_BID/bin/options-dep
+EXPECT_MATCH=3

@@ -75,7 +75,8 @@ void enforceRecipeIntegrity(RecipeDir rdir,
 
     recipe.revision = revision;
 
-    DepInfo[string] depInfos;
+    DepBuildInfo[string] depBuildInfos;
+    DepBuildInfo[] directDepBuildInfos;
     if (recipe.hasDependencies)
     {
         auto services = DepServices(buildDepService(No.system, cacheDir), buildDubDepService());
@@ -88,7 +89,8 @@ void enforceRecipeIntegrity(RecipeDir rdir,
         auto json = dag.toJson();
         write(rdir.depsLockFile, json.toPrettyString());
 
-        depInfos = buildDependencies(dag, recipe, profile, services, options.forDependencies());
+        depBuildInfos = buildDependencies(dag, recipe, profile, services, options.forDependencies());
+        directDepBuildInfos = collectDirectDepBuildInfos(dag.root.resolvedNode);
     }
 
     if (!recipe.inTreeSrc)
@@ -96,7 +98,7 @@ void enforceRecipeIntegrity(RecipeDir rdir,
     const srcDir = recipe.inTreeSrc ? rdir.root : recipe.source();
 
     const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
-    const buildId = BuildId(recipe, config);
+    const buildId = BuildId(recipe, config, directDepBuildInfos);
     const bPaths = rdir.buildPaths(buildId);
 
     const bdirs = BuildDirs(rdir.root, rdir.path(srcDir), bPaths.build, bPaths.install);
@@ -104,7 +106,7 @@ void enforceRecipeIntegrity(RecipeDir rdir,
     mkdirRecurse(bPaths.build);
 
     logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
-    recipe.build(bdirs, config, depInfos);
+    recipe.build(bdirs, config, depBuildInfos);
 }
 
 int publishMain(string[] args)

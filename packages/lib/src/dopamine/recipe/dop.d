@@ -392,7 +392,7 @@ final class DopRecipe : Recipe
         return L.luaPop!string();
     }
 
-    void build(BuildDirs dirs, const(BuildConfig) config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
     {
         assert(buildNormalizedPath(dirs.root) == buildNormalizedPath(_rootDir));
 
@@ -836,7 +836,7 @@ void pushConfig(lua_State* L, const(BuildConfig) config, Option[string] optionDe
     lua_settable(L, ind);
 }
 
-void pushDepInfos(lua_State* L, DepInfo[string] depInfos) @trusted
+void pushDepInfos(lua_State* L, DepBuildInfo[string] depInfos) @trusted
 {
     if (!depInfos)
     {
@@ -851,8 +851,11 @@ void pushDepInfos(lua_State* L, DepInfo[string] depInfos) @trusted
         lua_pushlstring(L, k.ptr, k.length);
 
         lua_createtable(L, 0, 2);
-        luaSetTable(L, -1, "install_dir", di.installDir);
+        luaSetTable(L, -1, "name", di.name);
+        luaSetTable(L, -1, "dub", di.dub);
         luaSetTable(L, -1, "version", di.ver.toString());
+        luaSetTable(L, -1, "build_id", di.buildId.toString());
+        luaSetTable(L, -1, "install_dir", di.installDir);
 
         lua_settable(L, depInfosInd);
     }

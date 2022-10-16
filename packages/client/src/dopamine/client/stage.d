@@ -9,6 +9,7 @@ import dopamine.client.utils;
 import dopamine.build_id;
 import dopamine.cache;
 import dopamine.dep.build;
+import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
@@ -23,11 +24,16 @@ import std.getopt;
 import std.path;
 import std.typecons;
 
-void stagePackage(RecipeDir rdir, Profile profile, string absDest, OptionSet options, DepInfo[string] depInfos)
+void stagePackage(
+    RecipeDir rdir,
+    Profile profile,
+    string absDest,
+    OptionSet options,
+    DagNode dnode)
 in (isAbsolute(absDest))
 {
     const config = BuildConfig(profile.subset(rdir.recipe.tools), options.forRoot());
-    const buildId = BuildId(rdir.recipe, config, absDest);
+    const buildId = BuildId(rdir.recipe, config, collectDirectDepBuildInfos(dnode), absDest);
     const bPaths = rdir.buildPaths(buildId);
     acquireBuildLockFile(bPaths);
 
@@ -36,7 +42,7 @@ in (isAbsolute(absDest))
         string reason;
         if (!rdir.checkBuildReady(buildId, reason))
         {
-            buildPackage(rdir, config, depInfos, absDest);
+            buildPackage(rdir, config, dnode, absDest);
         }
         return;
     }
@@ -86,7 +92,7 @@ int stageMain(string[] args)
         parseOptionSpec(options, oo);
     }
 
-    DepInfo[string] depInfos;
+    DagNode rootNode;
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
@@ -95,18 +101,21 @@ int stageMain(string[] args)
             buildDubDepService(homeDubCacheDir(), null),
         );
 
-        depInfos = collectDepInfos(dag, recipe, profile, services, options.forDependencies(), absDest);
+        ensureDepBuildInfos(dag, recipe, profile, services, options.forDependencies(), absDest);
 
         foreach (dn; dag.traverseTopDownResolved())
         {
             auto service = dn.dub ? services.dub : services.dop;
             auto drdir = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
             auto dprof = profile.subset(drdir.recipe.tools);
-            stagePackage(drdir, dprof, absDest, options.forDependency(dn.name), depInfos);
+
+            stagePackage(drdir, dprof, absDest, options.forDependency(dn.name), dn);
         }
+
+        rootNode = dag.root.resolvedNode;
     }
 
-    stagePackage(rdir, profile.subset(recipe.tools), absDest, options.forRoot(), depInfos);
+    stagePackage(rdir, profile.subset(recipe.tools), absDest, options.forRoot(), rootNode);
 
     logInfo("Stage: %s - %s", success("OK"), info(dest));
 

@@ -22,6 +22,8 @@ import dopamine.profile;
 import dopamine.recipe;
 import dopamine.semver;
 
+import std.typecons : Nullable;
+
 /// Heuristics to help choosing a package version in a set of compatible versions.
 /// By default, we always prefer to use what is available locally and allow to use
 /// packages installed in the user system.
@@ -1081,8 +1083,24 @@ final class DagNode
     /// The edges going to dependencies of this package
     DagEdge[] downEdges;
 
-    /// User data
-    Object userData;
+    /// Build info
+    Nullable!DepBuildInfo buildInfo;
+
+    /// Depth level of this node. (root is 0)
+    @property int level() const
+    {
+        if (!pack.upEdges.length)
+            return 0;
+
+        int lev = int.max;
+        foreach (up; pack.upEdges)
+        {
+            int ll = up.up.level + 1;
+            if (ll < lev)
+                lev = ll;
+        }
+        return lev;
+    }
 
     bool isResolved() const @trusted
     {
