@@ -15,6 +15,14 @@ local function create_class(name)
     return cls
 end
 
+function dop.starts_with(str, prefix)
+    return str:sub(1, #prefix) == prefix
+end
+
+function dop.ends_with(str, suffix)
+    return suffix == '' or str:sub(-#suffix) == suffix
+end
+
 function dop.assert(pred, msg, level)
     if pred then
         return pred
@@ -112,7 +120,8 @@ local function find_libfile_posix(dir, name, libtype)
         if dop.is_file(p) then
             return p
         end
-    elseif not libtype or libtype == 'static' then
+    end
+    if not libtype or libtype == 'static' then
         local p = dop.path(dir, 'lib' .. name .. '.a')
         if dop.is_file(p) then
             return p
@@ -126,7 +135,8 @@ local function find_libfile_win(dir, name, libtype)
         if dop.is_file(p) then
             return p
         end
-    elseif not libtype or libtype == 'static' then
+    end
+    if not libtype or libtype == 'static' then
         local p = dop.path(dir, name .. '.lib')
         if dop.is_file(p) then
             return p
@@ -145,6 +155,204 @@ function dop.find_libfile(dir, name, libtype)
     else
         return find_libfile_win(dir, name, libtype)
     end
+end
+
+local PkgConfFile = create_class('PkgConfFile')
+
+local pc_str_fields = {
+    'name',
+    'version',
+    'description',
+    'url',
+    'license',
+    'maintainer',
+    'copyright',
+}
+
+local pc_lst_fields = {
+    'cflags',
+    'cflags.private',
+    'libs',
+    'libs.private',
+    'requires',
+    'requires.private',
+    'provides',
+    'conflicts',
+}
+
+function PkgConfFile:parse(path)
+    local parsed = dop_native.priv_read_pkgconf_file(path)
+    setmetatable(parsed, self)
+    setmetatable(parsed.vars, vars_mt)
+    return parsed
+end
+
+function PkgConfFile:new(options)
+    options.vars = options.vars or {}
+
+    setmetatable(options, self)
+    setmetatable(options.vars, vars_mt)
+
+    if options.name == nil then
+        error('Name field is required by PkgConfig', -2)
+    end
+    if options.version == nil then
+        error('Version field is required by PkgConfig', -2)
+    end
+
+    if options.vars.prefix == nil then
+        io.stderr:write('Warning: PkgConfFile without prefix variable')
+    end
+
+    for k, _ in pairs(options) do
+        if k == 'vars' then
+            goto continue
+        end
+        for _, s in ipairs(pc_str_fields) do
+            if k == s then
+                goto continue
+            end
+        end
+        for _, s in ipairs(pc_lst_fields) do
+            if k == s then
+                goto continue
+            end
+        end
+        error('Unknown pkg-config field: ' .. k, -2)
+        ::continue::
+    end
+
+    return options
+end
+
+function PkgConfFile:expand(value)
+    while 1 do
+        local num
+        value, num = value:gsub('%${(%w+)}', self.vars)
+        if num == 0 then
+            return value
+        end
+    end
+end
+
+-- function that compute variable order such as each can be evaluated without look-ahead
+-- once written in a file.
+-- not strictly necessary, but consistent order is better than random hash-key order
+local function var_order(vars, var)
+    local val = vars[var]
+    local pat = '%${(%w+)}'
+    local m = string.match(val, pat)
+    if not m then
+        return 0
+    else
+        return 1 + var_order(vars, m)
+    end
+end
+
+function PkgConfFile:write(filename)
+    dop.mkdir { dop.dir_name(filename), recurse = true }
+    local pc = io.open(filename, 'w')
+
+    local vars = {}
+    for k, v in pairs(self.vars) do
+        table.insert(
+            vars,
+            { name = k, value = v, order = var_order(self.vars, k) }
+        )
+    end
+    table.sort(vars, function(a, b)
+        if a.order == b.order then
+            return a.name < b.name
+        end
+        return a.order < b.order
+    end)
+
+    for _, var in ipairs(vars) do
+        pc:write(var.name, '=', var.value, '\n')
+    end
+
+    pc:write('\n')
+
+    for _, f in ipairs(pc_str_fields) do
+        local v = self[f]
+        if v then
+            local fu = f:gsub('^%l', string.upper)
+            pc:write(fu, ': ', v, '\n')
+        end
+    end
+    for _, f in ipairs(pc_lst_fields) do
+        local v = self[f]
+        if v then
+            local fu = f:gsub('^%l', string.upper)
+            if type(v) == 'table' then
+                pc:write(fu, ': ', table.concat(v, ' '), '\n')
+            else
+                pc:write(fu, ': ', v, '\n')
+            end
+        end
+    end
+    pc:close()
+end
+
+function dop.pkg_config_path(dep_infos)
+    local path = {}
+    for k, v in pairs(dep_infos) do
+        if v.install_dir then
+            table.insert(path, dop.path(v.install_dir, 'lib', 'pkgconfig'))
+        end
+    end
+    return table.concat(path, dop.path_sep)
+end
+
+local function translate_msvc_libs(pc, field)
+    local libflags = pc[field]
+    local msvc = {}
+    local libpaths = {}
+    local libs = {}
+    for _, flag in ipairs(libflags) do
+        local libpath = flag:match('-L(.+)')
+        if libpath then
+            table.insert(libpaths, libpath)
+            goto continue
+        end
+        local lib = flag:match('-l(.+)')
+        if lib then
+            table.insert(libs, lib)
+            goto continue
+        end
+        table.insert(msvc, flag)
+        ::continue::
+    end
+    for _, lib in ipairs(libs) do
+        local flag = nil
+        local elib = pc:expand(lib)
+
+        if dop.is_file(lib) then
+            flag = elib
+        else
+            for _, libpath in ipairs(libpaths) do
+                local elibpath = pc:expand(libpath)
+                local path = find_libfile_win(elibpath, elib)
+                if path then
+                    flag = libpath .. '/' .. dop.base_name(path)
+                    break
+                end
+            end
+        end
+        table.insert(msvc, flag or lib .. '.lib')
+    end
+    return msvc
+end
+
+local function translate_pkgconf_msvc(path)
+    local pc = PkgConfFile:parse(path)
+    if pc.libs then
+        pc.libs = translate_msvc_libs(pc, 'libs')
+    end
+    if pc['libs.private'] then
+        pc['libs.private'] = translate_msvc_libs(pc, 'libs.private')
+    end
+    pc:write(path)
 end
 
 local CMake = create_class('CMake')
@@ -248,6 +456,7 @@ function Meson:setup(params, env)
     self.src_dir = assert(params.src_dir, 'src_dir is a mandatory parameter')
 
     if params.install_dir then
+        self.install_dir = params.install_dir
         self.options['--prefix'] = params.install_dir
 
         -- on Debian/Ubuntu, meson adds a multi-arch path suffix to the libdir
@@ -276,10 +485,10 @@ function Meson:setup(params, env)
 
     local cmd = { 'meson', 'setup' }
     for k, v in pairs(self.options) do
-        table.insert(cmd, k .. '=' .. v)
+        table.insert(cmd, k .. '=' .. tostring(v))
     end
     for k, v in pairs(self.defs) do
-        table.insert(cmd, '-D' .. k .. '=' .. v)
+        table.insert(cmd, '-D' .. k .. '=' .. tostring(v))
     end
 
     table.insert(cmd, self.build_dir)
@@ -312,143 +521,19 @@ function Meson:install()
         'install',
         env = self.env,
     }
-end
-
-local PkgConfFile = create_class('PkgConfFile')
-
-local pc_str_fields = {
-    'name',
-    'version',
-    'description',
-    'url',
-    'license',
-    'maintainer',
-    'copyright',
-}
-
-local pc_lst_fields = {
-    'cflags',
-    'cflags.private',
-    'libs',
-    'libs.private',
-    'requires',
-    'requires.private',
-    'provides',
-    'conflicts',
-}
-
-function PkgConfFile:parse(path)
-    local parsed = dop_native.priv_read_pkgconf_file(path)
-    setmetatable(parsed, self)
-    setmetatable(parsed.vars, vars_mt)
-    return parsed
-end
-
-function PkgConfFile:new(options)
-    options.vars = options.vars or {}
-
-    setmetatable(options, self)
-    setmetatable(options.vars, vars_mt)
-
-    if options.name == nil then
-        error('Name field is required by PkgConfig', -2)
+    -- adapting pkg-config file for MSVC and D
+    if not dop.windows or not self.install_dir or not self.profile.tools.dc then
+        return
     end
-    if options.version == nil then
-        error('Version field is required by PkgConfig', -2)
+    local pkgc_dir = dop.path(self.install_dir, 'lib', 'pkgconfig')
+    if not dop.is_dir(pkgc_dir) then
+        return
     end
-
-    if options.vars.prefix == nil then
-        io.stderr:write('Warning: PkgConfFile without prefix variable')
-    end
-
-    for k, _ in pairs(options) do
-        if k == 'vars' then
-            goto continue
-        end
-        for _, s in ipairs(pc_str_fields) do
-            if k == s then
-                goto continue
-            end
-        end
-        for _, s in ipairs(pc_lst_fields) do
-            if k == s then
-                goto continue
-            end
-        end
-        error('Unknown pkg-config field: ' .. k, -2)
-        ::continue::
-    end
-
-    return options
-end
-
--- function that compute variable order such as each can be evaluated without look-ahead
--- once written in a file.
--- not strictly necessary, but consistent order is better than random hash-key order
-local function var_order(vars, var)
-    local val = vars[var]
-    local pat = '%${(%w+)}'
-    local m = string.match(val, pat)
-    if not m then
-        return 0
-    else
-        return 1 + var_order(vars, m)
-    end
-end
-
-function PkgConfFile:write(filename)
-    dop.mkdir { dop.dir_name(filename), recurse = true }
-    local pc = io.open(filename, 'w')
-
-    local vars = {}
-    for k, v in pairs(self.vars) do
-        table.insert(
-            vars,
-            { name = k, value = v, order = var_order(self.vars, k) }
-        )
-    end
-    table.sort(vars, function(a, b)
-        if a.order == b.order then
-            return a.name < b.name
-        end
-        return a.order < b.order
-    end)
-
-    for _, var in ipairs(vars) do
-        pc:write(var.name, '=', var.value, '\n')
-    end
-
-    pc:write('\n')
-
-    for _, f in ipairs(pc_str_fields) do
-        local v = self[f]
-        if v then
-            local fu = f:gsub('^%l', string.upper)
-            pc:write(fu, ': ', v, '\n')
+    for f in dop.dir_entries(pkgc_dir) do
+        if f.is_file and dop.ends_with(f.name, '.pc') then
+            translate_pkgconf_msvc(f.path)
         end
     end
-    for _, f in ipairs(pc_lst_fields) do
-        local v = self[f]
-        if v then
-            local fu = f:gsub('^%l', string.upper)
-            if type(v) == 'table' then
-                pc:write(fu, ': ', table.concat(v, ' '), '\n')
-            else
-                pc:write(fu, ': ', v, '\n')
-            end
-        end
-    end
-    pc:close()
-end
-
-function dop.pkg_config_path(dep_infos)
-    local path = {}
-    for k, v in pairs(dep_infos) do
-        if v.install_dir then
-            table.insert(path, dop.path(v.install_dir, 'lib', 'pkgconfig'))
-        end
-    end
-    return table.concat(path, dop.path_sep)
 end
 
 return dop

@@ -8,6 +8,7 @@ import dopamine.util;
 import std.datetime;
 import std.exception;
 import std.file;
+import std.json;
 import std.path;
 
 /// Content of the main state for the package dir state
@@ -43,7 +44,7 @@ alias BuildStateFile = JsonStateFile!BuildState;
 ///  - etc.
 ///
 /// In a nutshell:
-///  - Recipe knows a to get the source and build the software and could do it anywhere.
+///  - Recipe knows how to get the source and build the software and could do it anywhere.
 ///  - RecipeDir is tied to a particular location (project dir or cache dir) and manage the recipe
 ///    and package state at this locaiton.
 struct RecipeDir
@@ -145,6 +146,61 @@ struct RecipeDir
         return exists(p) && isFile(p);
     }
 
+    @property string optionFile() const
+    {
+        return dopPath("options.json");
+    }
+
+    @property bool hasOptionFile() const
+    {
+        const p = optionFile();
+        return exists(p) && isFile(p);
+    }
+
+    OptionSet readOptionFile() const
+    {
+        auto json = readJsonOptions();
+        return OptionSet(json);
+    }
+
+    void writeOptionFile(const(OptionSet) opts) const
+    {
+        writeJsonOptions(opts.toJSON());
+    }
+
+    void clearOptionFile() const
+    {
+        const p = optionFile;
+        if (exists(p) && isFile(p))
+            remove(p);
+    }
+
+    OptionSet mergeOptionFile(return scope OptionSet opts) const
+    {
+        auto json = readJsonOptions();
+        opts = opts.union_(OptionSet(json));
+        writeJsonOptions(opts.toJSON());
+        return opts;
+    }
+
+    private JSONValue[string] readJsonOptions() const
+    {
+        const p = optionFile();
+        if (!exists(p) || !isFile(p))
+            return null;
+        auto json = cast(const(char)[]) read(p);
+        return parseJSON(json).objectNoRef;
+    }
+
+    private void writeJsonOptions(JSONValue[string] json) const
+    {
+        import std.string : representation;
+
+        mkdirRecurse(dopPath());
+        const str = JSONValue(json).toPrettyString();
+        write(optionFile, str.representation);
+    }
+
     /// Get the recipe of this directory.
     /// May be null if the directory has no recipe.
     @property inout(Recipe) recipe() inout
@@ -208,7 +264,7 @@ struct RecipeDir
     }
 
     string checkSourceReady(out string reason)
-    out(dir; !dir || !std.path.isAbsolute(dir))
+    out (dir; !dir || !std.path.isAbsolute(dir))
     {
         if (!recipe)
         {

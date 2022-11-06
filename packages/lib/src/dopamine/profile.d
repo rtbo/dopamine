@@ -285,7 +285,7 @@ struct Tool
                 return;
             }
         }
-        switch (_name)
+        switch (_id)
         {
         case "dc":
             env["DC"] = _path;

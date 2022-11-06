@@ -1,0 +1,21 @@
+RECIPE=options
+
+CMD=$DOP profile --discover
+CMD=$DOP source
+
+CMD=$DOP build
+EXPECT_LIB=.dop/$DOP_BID/lib/options_lib1
+EXPECT_NOT_LIB=.dop/$DOP_BID/lib/options_lib2
+
+CMD=$DOP options --print lib2=true lib1=false
+EXPECT_MATCH=lib1\s*=\s*false
+EXPECT_MATCH=lib2\s*=\s*true
+EXPECT_FILE=.dop/options.json
+
+CMD=$DOP build
+EXPECT_NOT_LIB=.dop/$DOP_BID/lib/options_lib1
+EXPECT_LIB=.dop/$DOP_BID/lib/options_lib2
+
+CMD=$DOP build --option lib1=true
+EXPECT_LIB=.dop/$DOP_BID/lib/options_lib1
+EXPECT_LIB=.dop/$DOP_BID/lib/options_lib2

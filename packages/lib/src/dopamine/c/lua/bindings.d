@@ -104,7 +104,7 @@ void lua_warning(lua_State* L, const(char)* msg, int tocont);
 
 int lua_gc(lua_State* L, int what, ...);
 
-int lua_error(lua_State* L);
+noreturn lua_error(lua_State* L);
 
 int lua_next(lua_State* L, int idx);
 
@@ -158,8 +158,8 @@ void luaL_checkversion_(lua_State* L, lua_Number ver, size_t sz);
 int luaL_getmetafield(lua_State* L, int obj, const(char)* e);
 int luaL_callmeta(lua_State* L, int obj, const(char)* e);
 const(char)* luaL_tolstring(lua_State* L, int idx, size_t* len);
-int luaL_argerror(lua_State* L, int arg, const(char)* extramsg);
-int luaL_typeerror(lua_State* L, int arg, const(char)* tname);
+noreturn luaL_argerror(lua_State* L, int arg, const(char)* extramsg);
+noreturn luaL_typeerror(lua_State* L, int arg, const(char)* tname);
 const(char)* luaL_checklstring(lua_State* L, int arg, size_t* l);
 const(char)* luaL_optlstring(lua_State* L, int arg, const(char)* def, size_t* l);
 lua_Number luaL_checknumber(lua_State* L, int arg);
@@ -179,7 +179,7 @@ void* luaL_testudata(lua_State* L, int ud, const(char)* tname);
 void* luaL_checkudata(lua_State* L, int ud, const(char)* tname);
 
 void luaL_where(lua_State* L, int lvl);
-int luaL_error(lua_State* L, const(char)* fmt, ...);
+noreturn luaL_error(lua_State* L, const(char)* fmt, ...);
 
 int luaL_checkoption(lua_State* L, int arg, const(char)* def, const(const(char)*)* lst);
 

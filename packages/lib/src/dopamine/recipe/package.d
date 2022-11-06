@@ -1,14 +1,280 @@
 module dopamine.recipe;
 
+import dopamine.build_id;
 import dopamine.dep.spec;
 import dopamine.profile;
 import dopamine.semver;
 
 import std.file;
+import std.json;
 import std.path;
+import std.sumtype;
 
 public import dopamine.recipe.dir;
 public import dopamine.recipe.dop;
+
+/// The value of an option can be bool, string or int
+alias OptionVal = SumType!(bool, string, int);
+
+/// A set of options.
+/// A recipe can defines options for itself, or specify option values
+/// for its dependencies.
+/// OptionSet is an OptionVal dictionary. Keys are option names.
+/// Options specified for dependencies must be prefixed with "pkgname/"
+/// (forward slash acts as separator).
+struct OptionSet
+{
+    private OptionVal[string] _opts;
+
+    this(OptionVal[string] opts) @safe
+    {
+        _opts = opts;
+    }
+
+    this(const(JSONValue[string]) json) @trusted
+    {
+        import std.conv : to;
+
+        foreach (string key, const ref JSONValue val; json)
+        {
+            switch (val.type)
+            {
+            case JSONType.true_:
+                _opts[key] = OptionVal(true);
+                break;
+            case JSONType.false_:
+                _opts[key] = OptionVal(false);
+                break;
+            case JSONType.integer:
+                _opts[key] = OptionVal(val.get!int);
+                break;
+            case JSONType.string:
+                _opts[key] = OptionVal(val.get!string);
+                break;
+            default:
+                throw new Exception("Invalid JSON option type: " ~ val.type.to!string);
+            }
+        }
+    }
+
+    JSONValue[string] toJSON() const
+    {
+        import std.sumtype : match;
+
+        JSONValue[string] json;
+
+        foreach (name, opt; _opts)
+        {
+            opt.match!(
+                (bool val) => json[name] = val,
+                (int val) => json[name] = val,
+                (string val) => json[name] = val,
+            );
+        }
+
+        return json;
+    }
+
+    OptionVal get(string key, lazy OptionVal def) const @safe
+    {
+        return _opts.get(key, def);
+    }
+
+    OptionVal opIndex(string key) const @safe
+    {
+        return _opts[key];
+    }
+
+    OptionVal opIndexAssign(OptionVal val, string key) @trusted
+    {
+        return _opts[key] = val;
+    }
+
+    inout(OptionVal)* opBinaryRight(string op)(string key) inout @safe
+    {
+        static assert(op == "in", "only 'in' binary operator is defined");
+        return key in _opts;
+    }
+
+    int opApply(scope int delegate(string key, OptionVal val) @safe dg) const @safe
+    {
+        foreach (k, v; _opts)
+        {
+            int res = dg(k, v);
+            if (res)
+                return res;
+        }
+        return 0;
+    }
+
+    int opApply(scope int delegate(string key, ref OptionVal val) @safe dg) @safe
+    {
+        foreach (k, ref v; _opts)
+        {
+            int res = dg(k, v);
+            if (res)
+                return res;
+        }
+        return 0;
+    }
+
+    bool remove(string key) @safe
+    {
+        return _opts.remove(key);
+    }
+
+    @property string[] keys() const @safe
+    {
+        return _opts.keys;
+        // string[] res;
+        // foreach (k; _opts)
+        //     res ~= k;
+        // res;
+    }
+
+    @property size_t length() const @safe
+    {
+        return _opts.length;
+    }
+
+    @property OptionSet dup() const @trusted
+    {
+        OptionVal[string] opts;
+        foreach (k, v; _opts)
+            opts[k] = v;
+
+        return OptionSet(opts);
+    }
+
+    /// Return the keys that are present in both this set and the other set
+    /// but for which the value is different
+    string[] conflicts(const(OptionSet) other) const @safe
+    {
+        string[] res;
+        foreach (k, v; _opts)
+        {
+            const ov = k in other;
+            if (ov && *ov != v)
+                res ~= k;
+        }
+        return res;
+    }
+
+    /// Retrieve all option values that are specified for the root dependency
+    OptionSet forRoot() const @trusted
+    {
+        import std.algorithm : canFind;
+
+        OptionVal[string] res;
+        foreach (key, val; _opts)
+        {
+            if (!key.canFind('/'))
+                res[key] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Retrieve all option values that are specified for the given dependency
+    /// The prefix [name/] is removed from keys in the returned dict.
+    OptionSet forDependency(string name) const @trusted
+    {
+        import std.algorithm : startsWith;
+
+        OptionVal[string] res;
+        const prefix = name ~ "/";
+        foreach (key, val; _opts)
+        {
+            if (key.startsWith(prefix))
+                res[key[prefix.length .. $]] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Retrieve all option values that are not specified for the root recipe
+    OptionSet forDependencies() const @trusted
+    {
+        import std.algorithm : canFind;
+
+        OptionVal[string] res;
+        foreach (key, val; _opts)
+        {
+            if (key.canFind('/'))
+                res[key] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Retrieve all option values that are specified for another dependency
+    /// than the provided one. Root names are excluded as well.
+    OptionSet notFor(string name) const @trusted
+    {
+        import std.algorithm : canFind, startsWith;
+
+        OptionVal[string] res;
+        const prefix = name ~ "/";
+        foreach (key, val; _opts)
+        {
+            if (!key.startsWith(prefix) && key.canFind('/'))
+                res[key] = val;
+        }
+        return OptionSet(res);
+    }
+
+    /// Merge this set with the other sets in parameters.
+    /// In case of conflicting options (same key but different values),
+    /// the value of `this` is chosen, and the key is appended to the
+    /// `conflicts` parameter.
+    OptionSet merge(OS...)(ref string[] conflicts, OS otherSets) @trusted
+    {
+        OptionVal[string] res;
+
+        static foreach (other; otherSets)
+        {
+            foreach (k, v; other._opts)
+            {
+                const tv = k in _opts;
+                if (tv && *tv != v)
+                    conflicts ~= k;
+                else
+                    res[k] = v;
+            }
+        }
+        foreach (k, v; _opts)
+            res[k] = v;
+
+        return OptionSet(res);
+    }
+
+    /// Return the union of this set with the other sets in parameters.
+    /// The values of this take precedence if the same key are found in multiple
+    /// sets.
+    OptionSet union_(OS...)(OS otherSets) @trusted
+    {
+        OptionVal[string] res;
+
+        static foreach (other; otherSets)
+        {
+            foreach (k, v; other._opts)
+            {
+                res[k] = v;
+            }
+        }
+        foreach (k, v; _opts)
+            res[k] = v;
+
+        return OptionSet(res);
+    }
+}
+
+/// An Option as specified in the dependency.
+/// Type is defined by defaultValue.
+/// Name is not defined here because this struct is typically
+/// held in an associative array.
+struct Option
+{
+    OptionVal defaultValue;
+    string description;
+}
 
 /// A recipe dependency specification
 struct DepSpec
@@ -16,6 +282,12 @@ struct DepSpec
     string name;
     VersionSpec spec;
     bool dub;
+    OptionSet options;
+
+    @property DepSpec dup() const
+    {
+        return DepSpec(name, spec, dub, options.dup);
+    }
 }
 
 /// Directories passed to the `build` recipe function
@@ -41,18 +313,42 @@ struct BuildConfig
     /// the build profile
     const(Profile) profile;
 
-    // TODO: options
+    OptionSet options;
 
     void feedDigest(D)(ref D digest) const
     {
+        import dopamine.util : feedDigestData;
+        import std.algorithm : sort;
+        import std.sumtype : match;
+
         profile.feedDigest(digest);
+
+        auto names = options.keys;
+        sort(names);
+        foreach (name; names)
+        {
+            feedDigestData(digest, name);
+            options[name].match!(
+                (bool val) => feedDigestData(digest, val),
+                (int val) => feedDigestData(digest, val),
+                (string val) => feedDigestData(digest, val),
+            );
+        }
     }
 }
 
-struct DepInfo
+struct DepBuildInfo
 {
-    string installDir;
+    /// The name of the dependency package
+    string name;
+    /// Whether it is a DUB dependency
+    bool dub;
+    /// The version of the dependency package
     Semver ver;
+    /// The build-id of the dependency package
+    BuildId buildId;
+    /// Where the dependency is install
+    string installDir;
 }
 
 enum RecipeType
@@ -107,6 +403,12 @@ interface Recipe
     /// This will determine the toolchain needed to build the package.
     @property const(string)[] tools() const @safe;
 
+    /// Return options declared by this recipe.
+    /// This is not strictly needed to use options but serves two purposes:
+    ///  - define default values.
+    ///  - document options
+    @property const(Option[string]) options() const @safe;
+
     /// Whether this recipe has dependencies.
     /// In case dependencies are only needed for some config cases, true is returned.
     @property bool hasDependencies() const @safe;
@@ -138,7 +440,7 @@ interface Recipe
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
     in (!isLight, "Light recipes do not build");
 
     /// Whether this recipe can stage an installation to another
@@ -224,7 +526,7 @@ version (unittest)  : final class MockRecipe : Recipe
 
     @property string upstreamUrl() const @safe
     {
-        return "Description of " ~ _name;
+        return "https://" ~ _name ~ ".test";
     }
 
     @property string license() const @safe
@@ -235,6 +537,11 @@ version (unittest)  : final class MockRecipe : Recipe
     @property const(string)[] tools() const @safe
     {
         return _tools;
+    }
+
+    @property const(Option[string]) options() const @safe
+    {
+        return null;
     }
 
     /// Whether this recipe has dependencies.
@@ -282,7 +589,7 @@ version (unittest)  : final class MockRecipe : Recipe
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
     {
     }
 

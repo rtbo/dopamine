@@ -7,6 +7,12 @@ nothrow @nogc @system:
 
 // lua.h
 
+int lua_upvalueindex(int i)
+{
+    pragma(inline, true)
+    return LUA_REGISTRYINDEX - i;
+}
+
 void lua_call(lua_State* L, int nargs, int nresults)
 {
     pragma(inline, true)

@@ -5,6 +5,7 @@ import e2e_registry;
 import e2e_sandbox;
 import e2e_utils;
 
+import std.conv;
 import std.exception;
 import std.file;
 import std.format;
@@ -13,6 +14,7 @@ import std.process;
 import std.regex;
 import std.stdio;
 import std.string;
+import std.typecons;
 
 struct Exes
 {
@@ -143,6 +145,15 @@ final class Test
                 case "SHARED_LIB":
                     expect = new ExpectLib(data, ExpectLib.Type.dynamic);
                     break;
+                case "NOT_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.both, Yes.expectNot);
+                    break;
+                case "NOT_STATIC_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.archive, Yes.expectNot);
+                    break;
+                case "NOT_SHARED_LIB":
+                    expect = new ExpectLib(data, ExpectLib.Type.dynamic, Yes.expectNot);
+                    break;
                 case "EXE":
                     expect = new ExpectExe(data);
                     break;
@@ -189,7 +200,7 @@ final class Test
         return null;
     }
 
-    int perform(Exes exes)
+    int perform(Exes exes, string gdb)
     {
         auto sandbox = new Sandbox(name);
 
@@ -204,17 +215,23 @@ final class Test
 
         int numFailed;
 
-        foreach (i, cmd; cmds)
+        try
         {
-            numFailed += cmd.exec(cast(int) i + 1, sandbox);
-            if (numFailed)
-                break;
+            foreach (i, cmd; cmds)
+            {
+                numFailed += cmd.exec(cast(int) i + 1, sandbox, gdb);
+                if (numFailed)
+                    break;
+            }
         }
-
-        if (reg)
+        finally
         {
-            enforce(reg.stop() == 0, "registry did not close normally");
-            reg.reportOutput(stderr);
+            if (reg)
+            {
+                int code = reg.stop();
+                stderr.writeln("registry exit code ", code);
+                reg.reportOutput(stderr);
+            }
         }
 
         // in case of success, we delete the sandbox dir,
@@ -241,21 +258,38 @@ private class CmdTest
         this.command = command;
     }
 
-    int exec(int id, Sandbox sandbox)
+    int exec(int id, Sandbox sandbox, string gdb)
     {
         const cmd = expandEnvVars(command, sandbox.env);
         fileOut = sandbox.path(format!"%s.stdout"(id));
         fileErr = sandbox.path(format!"%s.stderr"(id));
 
-        auto pid = spawnShell(
-            cmd,
-            stdin,
-            File(fileOut, "w"),
-            File(fileErr, "w"),
-            sandbox.env,
-            Config.none,
-            sandbox.recipePath()
-        );
+        Pid pid;
+
+        if (id.to!string == gdb)
+        {
+            pid = spawnShell(
+                "gdb --args " ~ cmd,
+                stdin,
+                stdout,
+                stderr,
+                sandbox.env,
+                Config.none,
+                sandbox.recipePath()
+            );
+        }
+        else
+        {
+            pid = spawnShell(
+                cmd,
+                stdin,
+                File(fileOut, "w"),
+                File(fileErr, "w"),
+                sandbox.env,
+                Config.none,
+                sandbox.recipePath()
+            );
+        }
 
         int status = pid.wait();
 

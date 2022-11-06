@@ -36,7 +36,7 @@ dop_src = files([
 
 lua_d_versions = ['LUA_53', 'BindBC_Static']
 
-dop_lib_versions = lua_d_versions
+dop_lib_versions = lua_d_versions + dop_registry_serves_frontend_versions
 
 if get_option('enable_pkgconf')
     dop_lib_versions += 'DopHasPkgconf'

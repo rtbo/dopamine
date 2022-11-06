@@ -1,0 +1,11 @@
+option('feature_a',
+    type: 'boolean',
+    value: true,
+    description: 'Whether to enable the feature a',
+)
+
+option('feature_b',
+    type: 'boolean',
+    value: true,
+    description: 'Whether to enable the feature b',
+)

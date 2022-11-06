@@ -1,0 +1,11 @@
+RECIPE=options-dep
+REGISTRY=options
+
+CMD=$DOP profile --discover
+CMD=$DOP resolve
+CMD=$DOP source
+
+CMD=$DOP build
+
+CMD=".dop/$DOP_BID/bin/options-dep"
+EXPECT_MATCH=1

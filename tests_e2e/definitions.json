@@ -6,6 +6,9 @@
 
             "pkgb/1.0.0/1",
             "pkgb/2.0.0/1"
+        ],
+        "options": [
+            "options/1.0.0/1"
         ]
     },
     "caches": {

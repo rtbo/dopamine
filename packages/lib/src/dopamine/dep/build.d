@@ -12,31 +12,75 @@ import std.exception;
 import std.file;
 import std.path;
 
-DepInfo[string] collectDepInfos(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepServices services, string stageDest=null)
+void ensureDepBuildInfos(
+    DepDAG dag,
+    Recipe recipe,
+    const(Profile) profile,
+    DepServices services,
+    OptionSet options,
+    string stageDest=null)
 in (dag.resolved)
 in (!stageDest || isAbsolute(stageDest))
 {
     const tools = collectTools(dag, services);
     enforceHasTools(profile, tools, recipe);
 
-    foreach (depNode; dag.traverseTopDownResolved())
+    foreach (DagNode depNode; dag.traverseBottomUpResolved())
     {
         auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
-        const conf = BuildConfig(prof);
-        const buildId = BuildId(rdir.recipe, conf, stageDest);
+        auto opts = options.forDependency(depNode.name).union_(depNode.options);
+        const conf = BuildConfig(prof, opts);
+        auto depInfos = collectDirectDepBuildInfos(depNode);
+        const buildId = BuildId(rdir.recipe, conf, depInfos, stageDest);
         const bPaths = rdir.buildPaths(buildId);
 
-        depNode.userData = new DepInfoObj(bPaths.install, depNode.ver);
+        depNode.buildInfo = DepBuildInfo(depNode.name, depNode.dub, depNode.ver, buildId, bPaths.install);
     }
-
-    return collectNodeDepInfos(dag.root.resolvedNode);
 }
 
-DepInfo[string] buildDependencies(DepDAG dag, Recipe recipe,
-    const(Profile) profile, DepServices services, string stageDest=null)
+DepBuildInfo[] collectDirectDepBuildInfos(DagNode node)
+in (!node || node.isResolved)
+{
+    if (!node)
+        return null;
+
+    DepBuildInfo[] res;
+    foreach(de; node.downEdges)
+    {
+        auto dbi = enforce(de.down.resolvedNode).buildInfo;
+        enforce(!dbi.isNull);
+        res ~= dbi.get;
+    }
+    return res;
+}
+
+DepBuildInfo[string] collectDepBuildInfos(DagNode node)
+in (!node || node.isResolved)
+{
+    if (!node)
+        return null;
+
+    DepBuildInfo[string] res;
+    foreach (k, v; node.collectDependencies())
+    {
+        if (v.location == DepLocation.system)
+            continue;
+
+        assert(!v.buildInfo.isNull);
+        res[k] = v.buildInfo.get;
+    }
+    return res;
+}
+
+DepBuildInfo[string] buildDependencies(
+    DepDAG dag,
+    Recipe recipe,
+    const(Profile) profile,
+    DepServices services,
+    OptionSet options,
+    string stageDest=null)
 in (dag.resolved)
 in (!stageDest || isAbsolute(stageDest))
 {
@@ -51,6 +95,7 @@ in (!stageDest || isAbsolute(stageDest))
         .map!(dn => dn.pack.name.length + dn.ver.toString().length + 1)
         .maxElement();
 
+
     foreach (depNode; dag.traverseBottomUpResolved())
     {
         if (depNode.location == DepLocation.system)
@@ -59,8 +104,23 @@ in (!stageDest || isAbsolute(stageDest))
         auto service = depNode.dub ? services.dub : services.dop;
         auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
-        const conf = BuildConfig(prof);
-        const bid = BuildId(rdir.recipe, conf, stageDest);
+        auto opts = options.forDependency(depNode.name).union_(depNode.options);
+        foreach (c; depNode.optionConflicts)
+        {
+            enforce(
+                c in opts,
+                new ErrorLogException(
+                    "Unresolved option conflict for dependency %s: %s.\n" ~
+                    "Ensure to set the option %s with the `%s` command.",
+                    info(depNode.name), color(Color.magenta, c),
+                    color(Color.cyan | Color.bright, depNode.name ~ "/" ~ c),
+                    info("dop options")
+                )
+            );
+        }
+        const conf = BuildConfig(prof, opts);
+        auto depInfos = collectDirectDepBuildInfos(depNode);
+        const bid = BuildId(rdir.recipe, conf, depInfos, stageDest);
         const bPaths = rdir.buildPaths(bid);
 
         const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
@@ -86,11 +146,11 @@ in (!stageDest || isAbsolute(stageDest))
             logInfo("%s: Building", info(packNameHead));
             mkdirRecurse(bPaths.build);
 
-            auto depInfos = collectNodeDepInfos(depNode);
+            auto di = collectDepBuildInfos(depNode);
             const bd = BuildDirs(rdir.root, srcDir, bPaths.build, stageDest ? stageDest : bPaths.install);
             auto state = bPaths.stateFile.read();
 
-            rdir.recipe.build(bd, conf, depInfos);
+            rdir.recipe.build(bd, conf, di);
 
             state.buildTime = Clock.currTime;
             bPaths.stateFile.write(state);
@@ -100,36 +160,10 @@ in (!stageDest || isAbsolute(stageDest))
             logInfo("%s: Up-to-date", info(packNameHead));
         }
 
-        depNode.userData = new DepInfoObj(bPaths.install, depNode.ver);
+        depNode.buildInfo = DepBuildInfo(depNode.name, depNode.dub, depNode.ver, bid, bPaths.install);
     }
 
-    return collectNodeDepInfos(dag.root.resolvedNode);
-}
-
-private class DepInfoObj
-{
-    this(string installDir, Semver ver)
-    {
-        info = DepInfo(installDir, ver);
-    }
-
-    DepInfo info;
-}
-
-private DepInfo[string] collectNodeDepInfos(DagNode node)
-in (node.isResolved)
-{
-    DepInfo[string] res;
-    foreach (k, v; node.collectDependencies())
-    {
-        if (v.location == DepLocation.system)
-            continue;
-
-        auto obj = cast(DepInfoObj)v.userData;
-        assert(obj);
-        res[k] = obj.info;
-    }
-    return res;
+    return collectDepBuildInfos(dag.root.resolvedNode);
 }
 
 private string[] collectTools(DepDAG dag, DepServices services)

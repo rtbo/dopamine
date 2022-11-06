@@ -61,7 +61,7 @@ RecipeDir enforceRecipe(string root = getcwd())
         RecipeDir.fromDir(root), new ErrorLogException(
             "%s is not a Dopamine package directory",
             info(absolutePath(root)),
-    )
+        )
     );
     if (rdir.recipe.isLight)
         logInfo("%s: %s", info("Recipe"), success("OK"));
@@ -94,4 +94,28 @@ auto acquireRecipeLockFile(RecipeDir dir)
 auto acquireBuildLockFile(BuildPaths bPaths)
 {
     return acquireSomeLockFile(bPaths.lock, "build");
+}
+
+void parseOptionSpec(ref OptionSet opts, string spec)
+{
+    import std.algorithm : all;
+    import std.ascii : isDigit;
+    import std.conv : to;
+
+    const eq = indexOf(spec, '=');
+    enforce(eq > 0,
+        new ErrorLogException(
+            "Invalid option specification: '%s' (expected format is 'key=value')", spec
+        ),
+    );
+    const key = spec[0 .. eq];
+    const value = spec[eq + 1 .. $];
+    if (value == "true")
+        opts[key] = OptionVal(true);
+    else if (value == "false")
+        opts[key] = OptionVal(false);
+    else if (value.all!(c => isDigit(c)))
+        opts[key] = OptionVal(value.to!int);
+    else
+        opts[key] = OptionVal(value);
 }

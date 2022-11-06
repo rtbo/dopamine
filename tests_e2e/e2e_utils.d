@@ -45,9 +45,8 @@ string expandEnvVars(string input, string[string] environment)
 
     void expand()
     {
-        const val = var in environment;
-        enforce(val, format!"Could not find %s in sandbox environment"(var));
-        result ~= *val;
+        string val = *enforce(var in environment, format!"Could not find %s in sandbox environment"(var));
+        result ~= val;
         var = null;
         env = false;
         mustach = false;

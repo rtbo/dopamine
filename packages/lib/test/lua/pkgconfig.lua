@@ -43,3 +43,5 @@ test.assert_eq(parsed.version, '1.0.1')
 test.assert_eq(parsed.description, 'A test pkgconfig package')
 test.assert_eq(table.concat(parsed.cflags, ' '), '-I${includedir}')
 test.assert_eq(table.concat(parsed.libs, ' '), '-L${libdir} -lpctest')
+
+test.assert_eq(parsed:expand('${libdir}/libpctest.a'), prefix .. '/lib/libpctest.a')

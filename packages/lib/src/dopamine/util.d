@@ -395,7 +395,7 @@ void feedDigestData(D)(ref D digest, in string[] ss) if (isDigest!D)
 }
 
 void feedDigestData(D, V)(ref D digest, in V val)
-        if (isDigest!D && (isIntegral!V || is(V == enum)))
+        if (isDigest!D && (isIntegral!V || is(V == enum) || is(V == bool)))
 {
     import std.bitmanip : nativeToLittleEndian;
 

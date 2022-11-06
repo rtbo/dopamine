@@ -44,6 +44,10 @@ e2e_tests = [
 
     'search',
 
+    'options',
+    'options-dep',
+    'options-dep2',
+
     'warning',
 ]
 

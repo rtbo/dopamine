@@ -6,11 +6,12 @@ package:
 import dopamine.dep.dag;
 import dopamine.dep.service;
 import dopamine.dep.spec;
-import dopamine.recipe : DepSpec;
+import dopamine.recipe : DepSpec, OptionSet;
 import dopamine.semver;
 
 import std.conv;
 import std.exception;
+import std.format;
 import std.json;
 import std.range;
 import std.traits;
@@ -27,10 +28,10 @@ in (emitAllVersions || dag.resolved)
 {
     enforce(ver == 1, "Unsupported lock file format");
 
-    return jsonToDagV1(dag, emitAllVersions);
+    return dagToJsonV1(dag, emitAllVersions);
 }
 
-private JSONValue jsonToDagV1(ref DepDAG dag,
+private JSONValue dagToJsonV1(ref DepDAG dag,
     Flag!"emitAllVersions" emitAllVersions)
 {
     JSONValue[string] dagDict;
@@ -61,6 +62,18 @@ private JSONValue jsonToDagV1(ref DepDAG dag,
             verDict["location"] = aver.location.to!string();
 
             auto n = pack.getNode(aver);
+
+            if (n)
+            {
+                if (n.options.length)
+                {
+                    verDict["options"] = JSONValue(n.options.toJSON());
+                }
+                if (n.optionConflicts.length)
+                {
+                    verDict["optionConflicts"] = JSONValue(n.optionConflicts);
+                }
+            }
 
             string status;
 
@@ -114,7 +127,7 @@ DepDAG jsonToDag(JSONValue json)
     return jsonToDagV1(json);
 }
 
-private T safeJsonGet(T)(JSONValue val, T def=T.init)
+private T safeJsonGet(T)(JSONValue val, T def = T.init)
 {
     static if (is(T == string))
     {
@@ -128,7 +141,8 @@ private T safeJsonGet(T)(JSONValue val, T def=T.init)
             return def;
         return val.boolean;
     }
-    else static assert(false, "unimplemented type: " ~ T.stringof);
+    else
+        static assert(false, "unimplemented type: " ~ T.stringof);
 }
 
 /// Deserialize a dependency DAG from JSON
@@ -136,7 +150,6 @@ private DepDAG jsonToDagV1(JSONValue json)
 {
     import std.algorithm : map;
     import std.array : array;
-
 
     static struct Dep
     {
@@ -189,6 +202,16 @@ private DepDAG jsonToDagV1(JSONValue json)
                 {
                     node.revision = jrev.str;
                 }
+
+                if (const(JSONValue)* jopts = "options" in jver)
+                {
+                    node.options = OptionSet(jopts.objectNoRef);
+                }
+                if (const(JSONValue)* jconflicts = "optionConflicts" in jver)
+                {
+                    foreach (jc; jconflicts.arrayNoRef)
+                        node.optionConflicts ~= jc.str;
+                }
             }
             if (const(JSONValue)* jdeps = "dependencies" in jver)
             {
@@ -217,6 +240,7 @@ private DepDAG jsonToDagV1(JSONValue json)
     foreach (d; deps)
     {
         auto up = packs[d.pack].getNode(d.aver);
+        enforce(up, format("Can't find node %s in package %s", d.aver, d.pack));
         auto down = packs[d.down];
         DagEdge.create(up, down, d.spec);
     }

@@ -94,6 +94,11 @@ class DubRecipe : Recipe
         return ["dc"];
     }
 
+    @property const(Option[string]) options() const @safe
+    {
+        return null;
+    }
+
     @property bool hasDependencies() const @safe
     {
         return (() @trusted => _dubPack.rawRecipe.buildSettings.dependencies.length > 0)();
@@ -121,7 +126,7 @@ class DubRecipe : Recipe
         return ".";
     }
 
-    void build(BuildDirs dirs, BuildConfig config, DepInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
     {
         import std.process;
 
@@ -216,7 +221,7 @@ class DubRecipe : Recipe
         return installRecurse(src, dest);
     }
 
-    private NinjaBuild createNinja(const ref BuildSettings bs, BuildDirs dirs, BuildConfig config)
+    private NinjaBuild createNinja(const ref BuildSettings bs, BuildDirs dirs, const(BuildConfig) config)
     {
         version (Windows)
         {
@@ -354,6 +359,7 @@ interface CompilerFlags
 
     static CompilerFlags fromTool(const(Tool) dc)
     {
+        assert(dc.id == "dc");
         if (dc.name == "DMD")
         {
             return new DmdCompilerFlags;
@@ -362,7 +368,7 @@ interface CompilerFlags
         {
             return new LdcCompilerFlags;
         }
-        throw new Exception("Unknown Dub compiler: " ~ dc.name);
+        throw new Exception("Unknown D compiler: " ~ dc.name);
     }
 
     final const(string)[] compileArgs(const ref BuildSettings bs, string prefix)

@@ -19,12 +19,14 @@ int usage(string[] args, int code, Option[] options)
 int main(string[] args)
 {
     Exes exes;
+    string gdb;
 
     // dfmt off
     auto helpInfo = getopt(args,
         "client-exe",   &exes.client,
         "registry-exe", &exes.registry,
         "admin-exe",    &exes.admin,
+        "gdb", &gdb,
     );
     // dfmt on
 
@@ -55,7 +57,7 @@ int main(string[] args)
             return 77; // GNU skip return code
         }
 
-        return test.perform(exes);
+        return test.perform(exes, gdb);
     }
     catch (Exception ex)
     {
