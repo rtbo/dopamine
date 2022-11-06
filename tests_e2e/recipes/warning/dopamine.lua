@@ -5,7 +5,6 @@ upstream_url = 'https://github.com/rtbo/dopamine'
 license = 'MIT'
 tools = { 'cc' }
 
-warn("A warning from recipe")
+warn('A warning from recipe')
 
-function build()
-end
+function build() end

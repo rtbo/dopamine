@@ -1,11 +1,13 @@
-local dir = test.path("lua")
+local dir = test.path('lua')
 local files = {}
 
 for e in dop.dir_entries(dir) do
     table.insert(files, e)
 end
 
-table.sort(files, function (a, b) return a.name < b.name end)
+table.sort(files, function(a, b)
+    return a.name < b.name
+end)
 
 test.assert_eq(files[1].name, 'dir_entries.lua')
 test.assert_eq(files[2].name, 'dir_name.lua')
