@@ -255,10 +255,6 @@ private class CmdTest
 
     this(string command)
     {
-        version (Windows)
-        {
-            command = command.replace('/', '\\');
-        }
         this.command = command;
     }
 

@@ -7,5 +7,5 @@ CMD=$DOP source
 
 CMD=$DOP build
 
-CMD=.dop/$DOP_BID/bin/options-dep
+CMD=".dop/$DOP_BID/bin/options-dep"
 EXPECT_MATCH=1
