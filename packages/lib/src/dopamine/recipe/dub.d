@@ -359,6 +359,7 @@ interface CompilerFlags
 
     static CompilerFlags fromTool(const(Tool) dc)
     {
+        assert(dc.id == "dc");
         if (dc.name == "DMD")
         {
             return new DmdCompilerFlags;
@@ -367,7 +368,7 @@ interface CompilerFlags
         {
             return new LdcCompilerFlags;
         }
-        throw new Exception("Unknown Dub compiler: " ~ dc.name);
+        throw new Exception("Unknown D compiler: " ~ dc.name);
     }
 
     final const(string)[] compileArgs(const ref BuildSettings bs, string prefix)
