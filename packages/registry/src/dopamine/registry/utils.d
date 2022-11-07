@@ -413,13 +413,14 @@ private Json extractAuth(string head) @safe
         {
         case JwtVerifFailure.structure:
             statusError(400, format!"Ill-formed authorization header: %s"(ex.msg));
+        case JwtVerifFailure.signature:
+        case JwtVerifFailure.algorithm:
+            statusError(403, "Invalid authorization token");
+        case JwtVerifFailure.expired:
+            statusError(403, "Expired authorization token");
         case JwtVerifFailure.payload:
             // 500 because it is checked after signature
             statusError(500, format!"Improper field in authorization header payload: %s"(ex.msg));
-        case JwtVerifFailure.expired:
-            statusError(403, "Expired authorization token");
-        case JwtVerifFailure.signature:
-            statusError(403, "Invalid authorization token");
         }
     }
 }

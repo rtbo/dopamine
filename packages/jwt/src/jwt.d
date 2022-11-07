@@ -50,7 +50,7 @@ long jwtNow()
     return toJwtTime(Clock.currTime(UTC()));
 }
 
-/// Cause if failure verification
+/// Cause of verification failure
 enum JwtVerifFailure
 {
     /// The global structure of the token is not valid. E.g:
@@ -59,12 +59,15 @@ enum JwtVerifFailure
     /// - JSON deserialization fails
     /// - the header does not have the expected fields
     structure,
-    /// The `exp` field is now or in the past
-    expired,
-    /// Some field in the payload is missing or has an unexpected value
-    payload,
+    /// The signature algorithm is unsupported.
+    algorithm,
     /// The signature could not be verified
     signature,
+    /// The `exp` field is now or in the past
+    expired,
+    /// Some field in the payload is missing or has an unexpected value.
+    /// I.e `Jwt.verify` has options to check the `exp` and the `iss` fields.
+    payload,
 }
 
 /// Exception thrown when `Jwt.verify` fails, or if ill-formed token is passed to `ClientJwt`
@@ -106,7 +109,8 @@ struct Jwt
             assert(false);
 
         const header = `{"alg":"` ~ alg.algToString() ~ `","typ":"JWT"}`;
-        const toBeSigned = encodeBase64(header.representation) ~ "." ~ encodeBase64(payloadString.representation);
+        const toBeSigned = encodeBase64(header.representation) ~ "." ~ encodeBase64(
+            payloadString.representation);
         const signature = doSign(alg, toBeSigned, secret);
         return Jwt(toBeSigned ~ "." ~ signature);
     }
@@ -114,10 +118,10 @@ struct Jwt
     ///
     static struct VerifOpts
     {
-        /// checks that "exp" field of payload is in the future
+        /// Checks that the payload has an "exp" field and that it is in the future.
         Flag!"checkExpired" checkExpired;
 
-        /// if not empty, checks the "iss" field is one of the listed issuers
+        /// If not empty, checks the "iss" field is one of the listed issuers
         string[] issuers;
     }
 
@@ -149,7 +153,12 @@ struct Jwt
                 new JwtException(JwtVerifFailure.structure, "Invalid JWT header: not a JWT typ"),
             );
 
-            const alg = stringToAlg(algJson.get!string);
+            const algStr = algJson.get!string;
+            enforce(algStr == "HS256", new JwtException(
+                    JwtVerifFailure.algorithm,
+                    `Unsupported signature algorithm: "` ~ algStr ~ `"`,
+            ));
+            const alg = Alg.HS256;
 
             // decode the payload in all cases to generate an exception if JSON or base64 is invalid
             auto payload = parseJsonString(decodeBase64(token[p1 + 1 .. p2]));
@@ -324,17 +333,17 @@ struct ClientJwt
         const p1 = point1;
         const p2 = point2;
 
-        enforce (
+        enforce(
             p1 >= 1,
             new JwtException(token, JwtVerifFailure.structure, "No header found")
         );
 
-        enforce (
+        enforce(
             p2 < _token.length - 1,
             new JwtException(token, JwtVerifFailure.structure, "No signature found")
         );
 
-        enforce (
+        enforce(
             p1 < p2 - 1,
             new JwtException(token, JwtVerifFailure.structure, "No payload found")
         );
