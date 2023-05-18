@@ -29,7 +29,7 @@ if get_option('enable_client')
     pkgconf_lib = pkgconf_proj.get_variable('libpkgconf')
 endif
 
-vibed_version = '0.9.4'
+vibed_version = '0.9.6'
 
 if get_option('enable_registry') or get_option('enable_server') or get_option('enable_test')
     vibed_http_dep = dependency('vibe-d:http',
