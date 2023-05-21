@@ -31,7 +31,7 @@ endif
 
 vibed_version = '0.9.6'
 
-if get_option('enable_registry') or get_option('enable_server') or get_option('enable_test')
+if get_option('enable_registry') or get_option('enable_frontend_server') or get_option('enable_test')
     vibed_http_dep = dependency('vibe-d:http',
         method: 'dub',
         version: vibed_version,
