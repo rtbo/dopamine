@@ -429,7 +429,7 @@ private @property Alg stringToAlg(string alg)
     }
 }
 
-private string doSign(Alg alg, const(char)[] toBeSigned, const(char)[] secret) nothrow
+private string doSign(Alg alg, scope const(char)[] toBeSigned, scope const(char)[] secret) nothrow
 {
     final switch (alg)
     {
@@ -440,12 +440,12 @@ private string doSign(Alg alg, const(char)[] toBeSigned, const(char)[] secret) n
     }
 }
 
-private string decodeBase64(const(char)[] base64) @trusted
+private string decodeBase64(scope const(char)[] base64) @trusted
 {
     return assumeUnique(cast(const(char)[]) Base64URLNoPadding.decode(base64));
 }
 
-private string encodeBase64(const(ubyte)[] data) @trusted nothrow
+private string encodeBase64(scope const(ubyte)[] data) @trusted nothrow
 {
     return assumeUnique(cast(const(char)[]) Base64URLNoPadding.encode(data));
 }
