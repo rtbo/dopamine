@@ -114,45 +114,45 @@ class PgConn
         this(conninfo.toStringz(), async);
     }
 
-    @property final ConnStatus status() const @trusted nothrow
+    @property final ConnStatus status() const scope @trusted nothrow
     {
         return PQstatus(conn);
     }
 
-    @property final PostgresPollingStatus connectPoll() @trusted nothrow
+    @property final PostgresPollingStatus connectPoll() scope @trusted nothrow
     {
         return PQconnectPoll(conn);
     }
 
-    void finish() @trusted nothrow
+    void finish() scope @trusted nothrow
     {
         PQfinish(conn);
     }
 
-    final void resetStart() @trusted
+    final void resetStart() scope @trusted
     {
         if (!PQresetStart(conn))
             badConnection(conn);
     }
 
-    @property final PostgresPollingStatus resetPoll() @trusted nothrow
+    @property final PostgresPollingStatus resetPoll() scope @trusted nothrow
     {
         return PQresetPoll(conn);
     }
 
-    final void reset() @trusted nothrow
+    final void reset() scope @trusted nothrow
     {
         PQreset(conn);
     }
 
-    @property final string errorMessage() const @trusted
+    @property final string errorMessage() scope const @trusted
     {
         return PQerrorMessage(conn).fromStringz.idup;
     }
 
     /// The file descriptor of the socket that communicate with the server.
     /// Can be used for polling on the conneciton.
-    @property final int socket() @trusted
+    @property final int socket() scope @trusted
     {
         const sock = PQsocket(conn);
         if (sock == -1)
@@ -160,23 +160,23 @@ class PgConn
         return sock;
     }
 
-    @property final bool isBusy() @trusted nothrow
+    @property final bool isBusy() scope @trusted nothrow
     {
         return !!PQisBusy(conn);
     }
 
-    final void consumeInput() @trusted
+    final void consumeInput() scope @trusted
     {
         if (!PQconsumeInput(conn))
             badConnection(conn);
     }
 
-    final void trace(File dest) @trusted
+    final void trace(File dest) scope @trusted
     {
         PQtrace(conn, dest.getFP());
     }
 
-    final void untrace() @trusted nothrow
+    final void untrace() scope @trusted nothrow
     {
         PQuntrace(conn);
     }
@@ -184,7 +184,7 @@ class PgConn
     /// Wait for result by polling on the socket.
     /// Default impl does nothing, which has the effect that
     /// exec, execScalar etc. will block the current thread while waiting.
-    void pollResult() @safe
+    void pollResult() scope @safe
     {
     }
 
@@ -195,7 +195,7 @@ class PgConn
     /// `handler` must be a function or delegate accepting a scope PgTransac object.
     ///
     /// Nested transactions are also supported by use of savePoint
-    auto transac(H)(H handler) @trusted if (isSomeFunction!H && isSafe!H)
+    auto transac(H)(H handler) scope @trusted if (isSomeFunction!H && isSafe!H)
     {
         alias T = ReturnType!H;
         static assert(is(typeof(handler())), "handler must accept no parameter");
@@ -241,7 +241,7 @@ class PgConn
     /// Send a SQL statement with params but do not wait for completion.
     /// Use the get method family to wait for completion.
     /// Multiple SQL statements are not allowed.
-    void send(Args...)(string sql, Args args) @trusted
+    void send(Args...)(string sql, Args args) scope @trusted
     {
         sendPriv!true(sql, args);
     }
@@ -249,7 +249,7 @@ class PgConn
     /// Send a SQL statement with dynamic params but do not wait for completion.
     /// Use the get method family to wait for completion.
     /// Multiple SQL statements are not allowed.
-    void sendDyn(string sql, PgParam[] params) @trusted
+    void sendDyn(string sql, PgParam[] params) scope @trusted
     {
         lastSql = sql;
 
@@ -284,7 +284,7 @@ class PgConn
             badConnection(conn, sql);
     }
 
-    void enableRowByRow() @trusted
+    void enableRowByRow() scope @trusted
     {
         int res = PQsetSingleRowMode(conn);
         if (!res)
@@ -570,21 +570,21 @@ class PgConn
 
     /// Execute a SQL statement expecting no result.
     /// It is possible to submit multiple statements separated with ';'
-    void exec(Args...)(string sql, Args args) @trusted
+    void exec(Args...)(string sql, Args args) scope @trusted
     {
         sendPriv!false(sql, args);
         pollResult();
         getNone();
     }
 
-    T execScalar(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    T execScalar(T, Args...)(string sql, Args args) scope @trusted if (isScalar!T)
     {
         sendPriv!true(sql, args);
         pollResult();
         return getScalar!T();
     }
 
-    T[] execScalars(T, Args...)(string sql, Args args) @trusted if (isScalar!T)
+    T[] execScalars(T, Args...)(string sql, Args args) scope @trusted if (isScalar!T)
     {
         sendPriv!true(sql, args);
         pollResult();
@@ -593,7 +593,7 @@ class PgConn
 
     /// Execute a SQL statement expecting a single row result.
     /// Result row is converted to the provided struct type.
-    R execRow(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    R execRow(R, Args...)(string sql, Args args) scope @trusted if (isRow!R)
     {
         sendPriv!true(sql, args);
         pollResult();
@@ -602,7 +602,7 @@ class PgConn
 
     /// Execute a SQL statement expecting a zero or many row result.
     /// Result rows are converted to the provided struct type.
-    R[] execRows(R, Args...)(string sql, Args args) @trusted if (isRow!R)
+    R[] execRows(R, Args...)(string sql, Args args) scope @trusted if (isRow!R)
     {
         sendPriv!true(sql, args);
         pollResult();
@@ -617,7 +617,7 @@ class PgConn
         return getRowByRow!R();
     }
 
-    private void sendPriv(bool withResults, Args...)(string sql, Args args) @trusted
+    private void sendPriv(bool withResults, Args...)(string sql, Args args) scope @trusted
     {
         // PQsendQueryParams is needed to specify that we need results in binary format
         // The downside is that it does not allow to send multiple sql commands at once

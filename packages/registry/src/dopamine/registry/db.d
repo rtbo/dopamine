@@ -60,11 +60,11 @@ final class DbClient
         return db;
     }
 
-    T connect(T)(T delegate(scope DbConn conn) @safe dg) @safe
+    T connect(T)(T delegate(return scope DbConn conn) @safe dg) @safe
     {
         auto lock = pool.lockConnection;
         // ensure to pass the object rather than the lock to the dg
-        scope conn = cast(DbConn) lock;
+        auto conn = cast(DbConn) lock;
 
         try
             return dg(conn);
@@ -75,7 +75,7 @@ final class DbClient
         }
     }
 
-    T transac(T)(T delegate(scope DbConn conn) @safe dg) @safe
+    T transac(T)(T delegate(return scope DbConn conn) @safe dg) @safe
     {
         auto lock = pool.lockConnection;
         // ensure to pass the object rather than the lock to the dg
@@ -106,13 +106,13 @@ final class DbConn : PgConn
         super(connString, Yes.async);
     }
 
-    override void finish() @safe nothrow
+    override void finish() scope @safe nothrow
     {
         super.finish();
         destroy(sockEvent);
     }
 
-    void resetAsync() @safe
+    void resetAsync() scope @safe
     {
         resetStart();
 
@@ -140,7 +140,7 @@ final class DbConn : PgConn
         }
     }
 
-    override void pollResult() @safe
+    override void pollResult() scope @safe
     {
         while (!isBusy)
         {
@@ -158,7 +158,7 @@ final class DbConn : PgConn
         }
     }
 
-    private FileDescriptorEvent socketEvent() @safe
+    private FileDescriptorEvent socketEvent() scope @safe
     {
         const sock = super.socket;
 
