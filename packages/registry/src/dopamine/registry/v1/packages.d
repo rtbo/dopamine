@@ -91,7 +91,7 @@ class PackagesApi
         });
     }
 
-    void search(scope HTTPServerRequest httpReq, scope HTTPServerResponse resp) @safe
+    void search(HTTPServerRequest httpReq, HTTPServerResponse resp) @safe
     {
         auto req = adaptRequest!SearchPackages(httpReq);
 

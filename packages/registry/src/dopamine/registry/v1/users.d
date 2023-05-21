@@ -43,7 +43,7 @@ class UsersApi
         short privacyFlags;
     }
 
-    void get(scope HTTPServerRequest req, scope HTTPServerResponse resp) @safe
+    void get(HTTPServerRequest req, HTTPServerResponse resp) @safe
     {
         auto userInfo = checkUserAuth(req);
         const pseudo = enforceStatus(req.params.get("pseudo"), 400, "missing pseudo parameter");
@@ -80,7 +80,7 @@ class UsersApi
         resp.writeJsonBody(json);
     }
 
-    void patch(scope HTTPServerRequest req, scope HTTPServerResponse resp) @safe
+    void patch(HTTPServerRequest req, HTTPServerResponse resp) @safe
     {
         auto userInfo = enforceUserAuth(req);
         const pseudo = enforceStatus(req.params.get("pseudo"), 400, "missing pseudo parameter");

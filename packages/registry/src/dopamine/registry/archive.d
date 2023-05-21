@@ -104,7 +104,7 @@ final class ArchiveManager
         return UploadRequest(id, bearerToken.toString());
     }
 
-    void upload(scope HTTPServerRequest req, scope HTTPServerResponse resp) @safe
+    void upload(HTTPServerRequest req, HTTPServerResponse resp) @safe
     {
         auto payload = enforceAuth(req);
 
@@ -190,7 +190,7 @@ final class ArchiveManager
         resp.writeBody("");
     }
 
-    void download(scope HTTPServerRequest req, scope HTTPServerResponse resp) @safe
+    void download(HTTPServerRequest req, HTTPServerResponse resp) @safe
     {
         string name = req.params["name"];
 

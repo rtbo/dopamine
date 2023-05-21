@@ -9,7 +9,7 @@ import std.algorithm;
 
 @safe:
 
-HTTPServerRequestHandlerS cors(CorsOptions opts = CorsOptions.init)
+HTTPServerRequestHandler cors(CorsOptions opts = CorsOptions.init)
 {
     return new Cors(opts);
 }
@@ -52,7 +52,7 @@ struct CorsOptions
     int preflightSuccessStatus;
 }
 
-private void varyOrigin(scope HTTPServerResponse resp, string orig)
+private void varyOrigin(HTTPServerResponse resp, string orig)
 {
     pragma(inline, true)
 
@@ -60,7 +60,7 @@ private void varyOrigin(scope HTTPServerResponse resp, string orig)
     resp.headers["Vary"] = "Origin";
 }
 
-private class Cors : HTTPServerRequestHandlerS
+private class Cors : HTTPServerRequestHandler
 {
     CorsOptions opts;
     string allowedMethods;
@@ -94,7 +94,7 @@ private class Cors : HTTPServerRequestHandlerS
         this.opts = opts;
     }
 
-    void handleRequest(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    void handleRequest(HTTPServerRequest req, HTTPServerResponse resp)
     {
         if (opts.allowedOrigins.length == 0)
         {

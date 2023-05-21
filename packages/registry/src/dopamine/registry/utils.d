@@ -50,7 +50,7 @@ T enforceProp(T)(Json json, string prop) @safe
     return res.get!T;
 }
 
-T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
+T convParam(T)(HTTPServerRequest req, string paramName) @safe
 {
     try
     {
@@ -66,7 +66,7 @@ T convParam(T)(scope HTTPServerRequest req, string paramName) @safe
     }
 }
 
-bool reqWantDigestSha256(scope HTTPServerRequest req) @safe
+bool reqWantDigestSha256(HTTPServerRequest req) @safe
 {
     return req.headers.get("want-digest") == "sha-256";
 }
@@ -116,7 +116,7 @@ struct ContentSlice
     }
 }
 
-Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
+Rng[] parseRangeHeader(HTTPServerRequest req) @safe
 {
     auto header = req.headers.get("Range").strip();
     if (!header.length)
@@ -145,13 +145,13 @@ Rng[] parseRangeHeader(scope HTTPServerRequest req) @safe
     return res;
 }
 
-HTTPServerRequestDelegateS genericHandler(H)(H handler) @safe
+HTTPServerRequestDelegate genericHandler(H)(H handler) @safe
 {
     static assert(isSomeFunction!H);
     static assert(isSafe!H);
     static assert(is(typeof(handler(HTTPServerRequest.init, HTTPServerResponse.init)) == void));
 
-    return (scope req, scope resp) @safe {
+    return (req, resp) @safe {
         logInfo("--> %s %s", req.method, req.requestURI);
         try
         {
@@ -208,7 +208,7 @@ void setupRoute(ReqT, H)(URLRouter router, H handler) @safe
         static assert(is(typeof(handler(ReqT.init)) == ResponseType!ReqT));
     }
 
-    auto routeHandler = genericHandler((scope HTTPServerRequest httpReq, scope HTTPServerResponse httpResp) @safe {
+    auto routeHandler = genericHandler((HTTPServerRequest httpReq, HTTPServerResponse httpResp) @safe {
         static if (requiresAuth)
         {
             const userInfo = enforceUserAuth(httpReq);
@@ -249,7 +249,7 @@ void setupDownloadRoute(ReqT, H)(URLRouter router, H handler) @safe
     router.match(HTTPMethod.GET, reqAttr.resource, downloadHandler);
 }
 
-package(dopamine.registry) ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpReq) if (isRequest!ReqT)
+package(dopamine.registry) ReqT adaptRequest(ReqT)(HTTPServerRequest httpReq) if (isRequest!ReqT)
 {
     enum reqAttr = RequestAttr!ReqT;
     static if (reqAttr.method == Method.GET)
@@ -260,13 +260,13 @@ package(dopamine.registry) ReqT adaptRequest(ReqT)(scope HTTPServerRequest httpR
         static assert(false, "unimplemented method: " ~ reqAttr.method.stringof);
 }
 
-private ReqT adaptPostRequest(ReqT)(scope HTTPServerRequest httpReq)
+private ReqT adaptPostRequest(ReqT)(HTTPServerRequest httpReq)
         if (isRequest!ReqT)
 {
     return deserializeJson!ReqT(httpReq.json);
 }
 
-private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
+private ReqT adaptGetRequest(ReqT)(HTTPServerRequest httpReq)
         if (isRequest!ReqT)
 {
     enum reqAttr = RequestAttr!ReqT;
@@ -369,7 +369,7 @@ private ReqT adaptGetRequest(ReqT)(scope HTTPServerRequest httpReq)
     return req;
 }
 
-Json enforceAuth(scope HTTPServerRequest req) @safe
+Json enforceAuth(HTTPServerRequest req) @safe
 {
     const head = enforceStatus(
         req.headers.get("authorization"), 401, "Authorization required"
@@ -378,7 +378,7 @@ Json enforceAuth(scope HTTPServerRequest req) @safe
     return extractAuth(head);
 }
 
-MayBe!Json checkAuth(scope HTTPServerRequest req) @safe
+MayBe!Json checkAuth(HTTPServerRequest req) @safe
 {
     const head = req.headers.get("authorization");
 

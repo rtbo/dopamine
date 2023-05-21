@@ -139,7 +139,7 @@ class AuthApi
         router.delete_("/auth/cli-tokens/:id", genericHandler(&cliTokensRevoke));
     }
 
-    void auth(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    void auth(HTTPServerRequest req, HTTPServerResponse resp)
     {
         const provider = toProvider(req.json.enforceProp!string("provider"));
         const config = providers[provider];
@@ -286,7 +286,7 @@ class AuthApi
             return getGoogleUser(token.idToken);
     }
 
-    void token(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    void token(HTTPServerRequest req, HTTPServerResponse resp)
     {
         @OrderedCols
         static struct Row
@@ -406,7 +406,7 @@ class AuthApi
         }
     }
 
-    void cliTokens(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    void cliTokens(HTTPServerRequest req, HTTPServerResponse resp)
     {
         const userInfo = enforceUserAuth(req);
 
@@ -416,7 +416,7 @@ class AuthApi
         resp.writeJsonBody(Json(json));
     }
 
-    void cliTokensCreate(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    void cliTokensCreate(HTTPServerRequest req, HTTPServerResponse resp)
     {
         const userInfo = enforceUserAuth(req);
 
@@ -451,7 +451,7 @@ class AuthApi
         resp.writeJsonBody(json);
     }
 
-    void cliTokensRevoke(scope HTTPServerRequest req, scope HTTPServerResponse resp)
+    void cliTokensRevoke(HTTPServerRequest req, HTTPServerResponse resp)
     {
         import std.conv : to;
 
@@ -568,7 +568,7 @@ private Provider toProvider(string provider)
     }
 }
 
-UserInfo enforceUserAuth(scope HTTPServerRequest req) @safe
+UserInfo enforceUserAuth(HTTPServerRequest req) @safe
 {
     auto payload = enforceAuth(req);
 
@@ -578,7 +578,7 @@ UserInfo enforceUserAuth(scope HTTPServerRequest req) @safe
     );
 }
 
-MayBe!UserInfo checkUserAuth(scope HTTPServerRequest req) @safe
+MayBe!UserInfo checkUserAuth(HTTPServerRequest req) @safe
 {
     auto payload = checkAuth(req);
 
