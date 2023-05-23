@@ -78,7 +78,7 @@ class StatusExpect : Expect
 
         if (expectFail)
         {
-            return "Expected command failure";
+            return "Command returned 0 but expected failure";
         }
 
         return format("Command failed with status %s", res.status);

@@ -121,14 +121,13 @@ final class Test
                 enforce(cmd, "ASSERT|EXPECT needs a CMD entry before");
 
                 Expect expect;
-                bool status;
+                bool isStatus;
 
                 switch (type)
                 {
                 case "FAIL":
-                    enforce(cmd.expectations.length == 0, "ASSERT_FAIL or EXPECT_FAIL must be first");
                     expect = new StatusExpect(true);
-                    status = true;
+                    isStatus = true;
                     break;
                 case "FILE":
                     expect = new ExpectFile(data);
@@ -170,15 +169,15 @@ final class Test
                     throw new Exception("Unknown assertion: " ~ type);
                 }
 
-                if (!status && cmd.expectations.length == 0)
-                    cmd.expectations ~= new StatusExpect(false);
-
-                if (mode == "EXPECT")
-                    cmd.expectations ~= expect;
-                else if (mode == "ASSERT")
-                    cmd.expectations ~= new Assert(expect);
+                if (mode == "ASSERT")
+                    expect = new Assert(expect);
                 else
-                    assert(false, "unknown assertion mode: " ~ mode);
+                    assert(mode == "EXPECT", "unknown assertion mode: " ~ mode);
+
+                if (isStatus)
+                    cmd.statusExpectation = expect;
+                else
+                    cmd.expectations ~= expect;
 
                 break;
             }
@@ -248,6 +247,7 @@ final class Test
 private class CmdTest
 {
     string command;
+    Expect statusExpectation;
     Expect[] expectations;
 
     string fileOut;
@@ -307,8 +307,15 @@ private class CmdTest
         reportFileContent(stderr, fileOut, format!"%02s: STDOUT of %s"(id, command));
         reportFileContent(stderr, fileErr, format!"%02s: STDERR of %s"(id, command));
 
+        auto statExp = statusExpectation;
+        if (!statExp) {
+            statExp = new StatusExpect();
+        }
+
+        auto exps = [statExp] ~ expectations;
+
         int numFailed;
-        foreach (exp; expectations)
+        foreach (exp; exps)
         {
             const failMsg = exp.expect(result);
             if (failMsg)
