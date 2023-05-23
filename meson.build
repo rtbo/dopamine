@@ -3,6 +3,12 @@ project('dopamine', ['c', 'd'],
     version: '0.1.0-alpha.1',
 )
 
+if meson.get_compiler('d').get_id() == 'dmd'
+    add_global_arguments('-vcolumns',
+        language: 'd'
+    )
+endif
+
 # check options consistency
 
 if get_option('enable_test')
