@@ -85,6 +85,9 @@ class PackageCache
 
         const archiveName = rec[0].archiveName;
         const filename = buildPath(tempDir(), archiveName);
+
+        auto archiveLock = acquireLockFile(filename ~ ".lock");
+
         registry.downloadArchive(archiveName, filename);
 
         scope (exit)

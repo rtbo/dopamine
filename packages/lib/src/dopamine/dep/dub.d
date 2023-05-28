@@ -2,6 +2,7 @@
 module dopamine.dep.dub;
 
 import dopamine.cache;
+import dopamine.dep.spec;
 import dopamine.log;
 import dopamine.recipe;
 import dopamine.semver;
@@ -10,12 +11,14 @@ import dopamine.util;
 import squiz_box;
 
 import std.algorithm;
+import std.array;
 import std.exception;
 import std.file;
 import std.format;
 import std.json;
 import std.net.curl;
 import std.path;
+import std.string;
 
 @safe:
 
@@ -32,34 +35,180 @@ class DubRegistryErrorException : Exception
 const dubRegistryUrl = "https://code.dlang.org";
 
 /// Access to the Dub registry
-class DubRegistry
+final class DubRegistry
 {
+    private struct SubPkgInfo
+    {
+        string name;
+        const(DepSpec)[] deps;
+    }
+
+    private struct PkgVersionInfo
+    {
+        Semver ver;
+        const(SubPkgInfo)[] subPkgs;
+        const(DepSpec)[] deps;
+    }
+
+    private struct PkgInfo
+    {
+        string name;
+        const(PkgVersionInfo)[] versions;
+    }
+
     private string _host;
+    private PkgInfo[string] _infoCache;
 
     this(string host = dubRegistryUrl)
     {
         _host = host;
     }
 
-    Semver[] availPkgVersions(string name) const @trusted
+    Semver[] availPkgVersions(string name) @trusted
     {
+        const pn = PackageName(name);
+
+        PkgInfo info = getPkgInfo(pn.pkgName);
+
+        Semver[] res;
+
+        if (pn.isModule)
+        {
+            res = info.versions
+                .filter!(v => v.subPkgs.map!(sp => sp.name).canFind(pn.modName))
+                .map!(v => cast(Semver) v.ver)
+                .array;
+        }
+        else
+        {
+            res = info.versions
+                .map!(v => cast(Semver) v.ver)
+                .array;
+        }
+
+        sort(res);
+
+        return res;
+    }
+
+    const(DepSpec)[] pkgDependencies(string name, Semver ver) @trusted
+    {
+        const pn = PackageName(name);
+
+        PkgInfo info = getPkgInfo(pn.pkgName);
+
+        const(DepSpec)[] deps;
+
+        foreach (pkgv; info.versions)
+        {
+            if (pkgv.ver != ver)
+                continue;
+
+            if (!pn.isModule)
+                return pkgv.deps;
+
+            foreach (sp; pkgv.subPkgs)
+            {
+                if (sp.name == pn.modName)
+                    return sp.deps;
+            }
+        }
+
+        throw new DubRegistryNotFoundException(
+            format!"DUB package version %s/%s could not be found"(name, ver));
+    }
+
+    private const(DepSpec)[] depsFromJson(string name, Semver ver, JSONValue[string] deps) const @safe
+    {
+        const(DepSpec)[] res;
+        foreach (k, v; deps)
+        {
+            const pn = PackageName(k);
+            VersionSpec spec;
+            if (pn.isModule && pn.pkgName == name)
+            {
+                spec = VersionSpec("==" ~ ver.toString());
+            }
+            else
+            {
+                string str;
+                if (v.type == JSONType.string)
+                    str = v.str;
+                else
+                    str = v["version"].str;
+                if (str.indexOf('.') == -1)
+                    str ~= ".0";
+                try
+                    spec = VersionSpec(str);
+                catch (Exception ex)
+                    throw new IgnoreDubPkgVersion();
+            }
+            res ~= DepSpec(k, spec, true);
+        }
+        return res;
+    }
+
+    private const(SubPkgInfo)[] subPkgsFromJson(string name, Semver ver, JSONValue[] jspkgs)
+    {
+        const(SubPkgInfo)[] spkgs;
+        foreach (jspkg; jspkgs)
+        {
+            const(DepSpec)[] deps;
+            if (auto jdeps = "dependencies" in jspkg)
+                deps = depsFromJson(name, ver, jdeps.objectNoRef);
+            spkgs ~= SubPkgInfo(jspkg["name"].str, deps);
+        }
+        return spkgs;
+    }
+
+    private PkgInfo getPkgInfo(string name) @trusted
+    {
+        if (auto p = name in _infoCache)
+            return *p;
+
         const url = format!"%s/api/packages/%s/info?minimize=true"(_host, name);
+
+        logVerbose("fetching DUB package info for %s at %s", info(name), url);
 
         try
         {
             auto json = parseJSON(std.net.curl.get(url));
-            auto vers = "versions" in json;
-            if (!vers)
-                return [];
-            Semver[] res;
-            foreach (jver; vers.array)
+
+            const(PkgVersionInfo)[] vers;
+            auto jvers = "versions" in json;
+            if (!jvers)
+                throw new DubRegistryNotFoundException(format!"Expected key 'versions' at %s"(url));
+
+            foreach (jver; jvers.arrayNoRef)
             {
-                const ver = jver["version"].str;
-                if (Semver.isValid(ver))
-                    res ~= Semver(ver);
+                const sver = jver["version"].str;
+                if (!Semver.isValid(sver))
+                    continue;
+
+                const ver = Semver(sver);
+
+                const(SubPkgInfo)[] spkgs;
+                const(DepSpec)[] deps;
+
+                try
+                {
+                    auto jspkgs = "subPackages" in jver;
+                    if (jspkgs)
+                        spkgs = subPkgsFromJson(name, ver, jspkgs.arrayNoRef);
+
+                    auto jdeps = "dependencies" in jver;
+                    if (jdeps)
+                        deps = depsFromJson(name, ver, jdeps.objectNoRef);
+                }
+                catch (IgnoreDubPkgVersion)
+                    continue;
+
+                vers ~= PkgVersionInfo(ver, spkgs, deps);
             }
-            sort(res);
-            return res;
+
+            auto pkg = PkgInfo(name, vers);
+            _infoCache[name] = pkg;
+            return pkg;
         }
         catch (HTTPStatusException ex)
         {
@@ -85,6 +234,8 @@ class DubRegistry
         http.onReceive = (ubyte[] data) { f.rawWrite(data); return data.length; };
         HTTP.StatusLine statusLine;
         http.onReceiveStatusLine((HTTP.StatusLine line) { statusLine = line; });
+
+        logInfo("Downloading %s", url);
 
         http.perform();
 
@@ -113,6 +264,14 @@ class DubRegistry
     {
         auto reg = new DubRegistry();
         assertThrown!DubRegistryNotFoundException(reg.availPkgVersions("not-a-package"));
+    }
+}
+
+private class IgnoreDubPkgVersion : Exception
+{
+    this()
+    {
+        super("");
     }
 }
 
@@ -208,5 +367,6 @@ unittest
 unittest
 {
     auto reg = new DubRegistry();
-    assertThrown!DubRegistryNotFoundException(reg.downloadPkgZipToFile("not-a-package", Semver("1.0.0")));
+    assertThrown!DubRegistryNotFoundException(reg.downloadPkgZipToFile("not-a-package", Semver(
+            "1.0.0")));
 }

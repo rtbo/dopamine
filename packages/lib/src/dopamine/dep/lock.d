@@ -23,7 +23,7 @@ enum lockVer = 1;
 /// Serialize a dependency DAG to JSON
 JSONValue dagToJson(ref DepDAG dag,
     Flag!"emitAllVersions" emitAllVersions = Yes.emitAllVersions,
-    int ver = lockVer)
+    int ver = lockVer) @safe
 in (emitAllVersions || dag.resolved)
 {
     enforce(ver == 1, "Unsupported lock file format");
@@ -32,7 +32,7 @@ in (emitAllVersions || dag.resolved)
 }
 
 private JSONValue dagToJsonV1(ref DepDAG dag,
-    Flag!"emitAllVersions" emitAllVersions)
+    Flag!"emitAllVersions" emitAllVersions) @safe
 {
     JSONValue[string] dagDict;
 
@@ -120,7 +120,7 @@ private JSONValue dagToJsonV1(ref DepDAG dag,
     return JSONValue(dagDict);
 }
 
-DepDAG jsonToDag(JSONValue json)
+DepDAG jsonToDag(JSONValue json) @safe
 {
     enforce(json["dopamine-lock-version"].integer == 1, "Unsupported dependency lock format");
 
@@ -146,7 +146,7 @@ private T safeJsonGet(T)(JSONValue val, T def = T.init)
 }
 
 /// Deserialize a dependency DAG from JSON
-private DepDAG jsonToDagV1(JSONValue json)
+private DepDAG jsonToDagV1(JSONValue json) @trusted
 {
     import std.algorithm : map;
     import std.array : array;
@@ -174,7 +174,7 @@ private DepDAG jsonToDagV1(JSONValue json)
         const name = jpack["name"].str;
         const dub = safeJsonGet!bool(jpack["dub"]);
 
-        DagPack p = new DagPack(name, dub, []);
+        DagPack p = new DagPack(name, dub);
 
         AvailVersion[] allVers;
         DagNode[] nodes;

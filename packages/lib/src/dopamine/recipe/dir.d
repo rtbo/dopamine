@@ -51,12 +51,14 @@ struct RecipeDir
 {
     Recipe _recipe;
     string _root;
+    string _recFile;
 
-    package(dopamine) this(Recipe recipe, string root)
+    package(dopamine) this(Recipe recipe, string root, string recFile="dopamine.lua")
     in (isAbsolute(root))
     {
         _recipe = recipe;
         _root = root;
+        _recFile = recFile;
     }
 
     static RecipeDir fromDir(string root)
@@ -74,7 +76,7 @@ struct RecipeDir
         if (dubFile)
             recipe = parseDubRecipe(dubFile, root);
 
-        return RecipeDir(recipe, root);
+        return RecipeDir(recipe, root, relativePath(dopFile.length ? dopFile : dubFile, root));
     }
 
     bool opCast(T : bool)() const
@@ -99,7 +101,7 @@ struct RecipeDir
 
     @property string recipeFile() const
     {
-        return path("dopamine.lua");
+        return path(_recFile);
     }
 
     @property bool hasRecipeFile() const

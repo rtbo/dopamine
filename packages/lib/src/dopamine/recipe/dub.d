@@ -1,5 +1,6 @@
 module dopamine.recipe.dub;
 
+import dopamine.dep.source;
 import dopamine.dep.spec;
 import dopamine.log;
 import dopamine.pkgconf;
@@ -9,6 +10,7 @@ import dopamine.semver;
 import dopamine.util;
 
 import dub.compilers.buildsettings;
+import dub.dependency;
 import dub.internal.utils;
 import dub.internal.vibecompat.inet.path;
 import dub.package_;
@@ -24,6 +26,7 @@ import std.path;
 import std.range;
 import std.stdio : File;
 import std.string;
+import std.typecons;
 
 DubRecipe parseDubRecipe(string filename, string root, string ver = null)
 {
@@ -33,15 +36,22 @@ DubRecipe parseDubRecipe(string filename, string root, string ver = null)
     return new DubRecipe(dubPack);
 }
 
+private @property string subPkgName(string name) @safe
+{
+    const colon = name.indexOf(':');
+    if (colon == -1)
+        return name;
+    else
+        return name[colon + 1 .. $];
+}
+
 class DubRecipe : Recipe
 {
     Package _dubPack;
-    string _defaultConfig;
 
     private this(Package dubPack)
     {
         _dubPack = dubPack;
-        _defaultConfig = _dubPack.configurations[0];
     }
 
     @property RecipeType type() const @safe
@@ -104,16 +114,99 @@ class DubRecipe : Recipe
         return (() @trusted => _dubPack.rawRecipe.buildSettings.dependencies.length > 0)();
     }
 
+    private const(DepSpec)[] pkgDependencies(Package pkg, const(Profile) profile)
+    {
+        const name = _dubPack.name;
+        const defaultConfig = pkg.configurations.length ? pkg.configurations[0] : "library";
+
+        auto dubDeps = pkg.getDependencies(defaultConfig);
+        return dubDeps.byKeyValue()
+            .map!(dd => tuple!("name", "spec")(PackageName(dd.key), dd.value))
+            .map!(dd => DepSpec(
+                    dd.name,
+                    (dd.name.isModule && dd.name.pkgName == name) ?
+                    VersionSpec("==" ~ _dubPack.version_.toString()) : adaptDubVersionSpec(dd.spec),
+                    true))
+            .array;
+    }
+
     const(DepSpec)[] dependencies(const(Profile) profile) @system
     {
-        auto dubDeps = _dubPack.getDependencies(_defaultConfig);
-        return dubDeps.byKeyValue().map!(dd => DepSpec(dd.key, VersionSpec(dd.value.versionSpec), true))
-            .array;
+        return pkgDependencies(_dubPack, profile);
+    }
+
+    @property string[] modules() @trusted
+    {
+        string[] mods;
+        foreach (spkg; _dubPack.subPackages)
+        {
+            if (spkg.path.empty)
+            {
+                mods ~= spkg.recipe.name;
+            }
+            else
+            {
+                auto pkg = loadSubPackageFromDisk(spkg.path);
+                mods ~= pkg.name.subPkgName;
+            }
+        }
+        return mods;
+    }
+
+    private Package loadSubPackageFromDisk(string subpkgPath)
+    {
+        enforce(!isAbsolute(subpkgPath), "Sub package paths must be sub paths of the parent package.");
+        auto path = buildNormalizedPath(_dubPack.path.toString(), subpkgPath);
+        enforce(exists(path) && isDir(path), format!"No Dub package at %s"(path));
+
+        return Package.load(NativePath(path), NativePath.init, _dubPack);
+    }
+
+    private Package loadSubPackage(string modName)
+    {
+        // As subpkg path and name can differ, there is no way to know
+        // which subpackage is modName before actually loading it,
+        // so we possibly have to iterate all.
+        Package pkg;
+
+        // we start with what is cheap and common guess
+        foreach (subPkg; _dubPack.subPackages)
+        {
+            if (subPkg.path.empty)
+            {
+                pkg = new Package(subPkg.recipe, _dubPack.path, _dubPack);
+            }
+            else if (subPkg.path == modName)
+            {
+                pkg = loadSubPackageFromDisk(subPkg.path);
+            }
+        }
+
+        if (pkg)
+        {
+            if (pkg.name.subPkgName == modName)
+                return pkg;
+        }
+
+        foreach (subPkg; _dubPack.subPackages)
+        {
+            pkg = loadSubPackageFromDisk(subPkg.path);
+
+            if (pkg.name.subPkgName == modName)
+                return pkg;
+        }
+        throw new NoSuchPackageModuleException(name, modName);
+    }
+
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(Profile) profile) @system
+    {
+        auto pkg = loadSubPackage(moduleName);
+        return pkgDependencies(pkg, profile);
     }
 
     string[] include() @safe
     {
-        assert(false, "Not implemented. Dub recipes are not meant to be published");
+        assert(false, "Not implemented. Dub recipes are not meant to be published by Dopamine");
     }
 
     @property bool inTreeSrc() const @safe
@@ -126,19 +219,105 @@ class DubRecipe : Recipe
         return ".";
     }
 
+    string moduleSourceDir(string modName) @trusted
+    {
+        foreach (subPkg; _dubPack.subPackages)
+        {
+            if (subPkg.path.empty)
+            {
+                if (subPkg.recipe.name == modName)
+                    return ".";
+                continue;
+            }
+            auto pkg = loadSubPackageFromDisk(subPkg.path);
+            if (pkg.name.subPkgName == modName)
+                return subPkg.path;
+        }
+        throw new NoSuchPackageModuleException(_dubPack.name, modName);
+    }
+
+    @property bool modulesBatchBuild() @safe
+    {
+        return true;
+    }
+
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    {
+        auto pack = loadSubPackage(config.modules[0]);
+        doBuild(pack, dirs, config, depInfos);
+    }
+
     void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
     {
-        import std.process;
+        doBuild(_dubPack, dirs, config, depInfos);
+    }
+
+    private void doBuild(Package pack, BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null)
+    {
+        import dub.internal.vibecompat.data.json;
 
         const platform = config.profile.toDubPlatform();
-        auto bs = _dubPack.getBuildSettings(platform, _defaultConfig);
+        const defaultConfig = pack.configurations.length ? pack.configurations[0] : "library";
+        auto bs = pack.getBuildSettings(platform, defaultConfig);
 
         enforce(
-            bs.targetType == TargetType.staticLibrary || bs.targetType == TargetType.library,
+            bs.targetType == TargetType.staticLibrary
+                || bs.targetType == TargetType.library
+                || bs.targetType == TargetType.sourceLibrary,
             new ErrorLogException(
-                "Only Dub static libraries are supported. %s is a %s",
-                name, bs.targetType
+                "Only Dub static and source libraries are supported. %s is a %s",
+                pack.name, bs.targetType
         ));
+
+        string builtTarget;
+        if (bs.targetType == TargetType.staticLibrary || bs.targetType == TargetType.library)
+        {
+            builtTarget = buildStaticLibrary(bs, pack, dirs, config, depInfos);
+        }
+
+        auto dc = config.profile.toolFor("dc");
+        auto dcf = CompilerFlags.fromTool(dc);
+
+        // generate a pkg-config file
+        const pkgcId = pack.name.replace(":", "_");
+        const pcPath = buildPath(dirs.build, pkgcId ~ ".pc");
+        PkgConfFile pkg;
+        pkg.addOrSetVar("prefix", dirs.install);
+        pkg.addOrSetVar("includedir", "${prefix}/include/d/" ~ pkgcId);
+        pkg.addOrSetVar("libdir", "${prefix}/lib");
+        pkg.name = pack.name;
+        pkg.description = pack.rawRecipe.description;
+        pkg.ver = ver.toString();
+        foreach (k, v; depInfos)
+            pkg.requires ~= format!"%s = %s"(k.replace(':', '_'), v.ver);
+        pkg.cflags = bs.importPaths.map!(p => dcf.importPath("${includedir}/" ~ p))
+            .chain(bs.versions.map!(v => dcf.version_(v)))
+            .array;
+        if (builtTarget)
+            pkg.libs = ["${libdir}/" ~ builtTarget];
+        pkg.writeToFile(pcPath);
+
+        // we drive the installation directly
+        installFile(
+            pcPath,
+            buildPath(dirs.install, "lib", "pkgconfig", pkgcId ~ ".pc")
+        );
+        if (builtTarget)
+            installFile(
+                buildPath(dirs.build, builtTarget),
+                buildPath(dirs.install, "lib", builtTarget)
+            );
+        foreach (src; bs.sourceFiles)
+            installFile(
+                buildPath(dirs.src, src),
+                buildPath(dirs.install, "include", "d", pkgcId, src)
+            );
+    }
+
+    private string buildStaticLibrary(ref BuildSettings bs, Package pack, BuildDirs dirs, const(
+            BuildConfig) config, DepBuildInfo[string] depInfos)
+    {
+        import std.process;
 
         // build pkg-config search path and collect dependencies requirements
         string pkgconfPath = depInfos.byValue()
@@ -153,60 +332,26 @@ class DubRecipe : Recipe
         ];
         foreach (d; depInfos.byKey())
         {
-            auto df = execute([pkgConfigExe, "--cflags", d], pkgconfEnv);
+            auto pkgcId = d.replace(":", "_");
+            auto df = execute([pkgConfigExe, "--cflags", pkgcId], pkgconfEnv);
             enforce(df.status == 0, "pkg-config failed: " ~ df.output);
             bs.dflags ~= df.output.strip().split(" ");
-            auto lf = execute([pkgConfigExe, "--libs", d], pkgconfEnv);
+            auto lf = execute([pkgConfigExe, "--libs", pkgcId], pkgconfEnv);
             enforce(lf.status == 0, "pkg-config failed " ~ lf.output);
             bs.lflags ~= lf.output.strip().split(" ");
         }
 
-        bs.versions ~= "Have_" ~ stripDlangSpecialChars(name);
+        bs.versions ~= "Have_" ~ stripDlangSpecialChars(pack.name);
 
         string[string] ninjaEnv;
         config.profile.collectEnvironment(ninjaEnv);
 
         // we create a ninja file to drive the compilation
-        auto nb = createNinja(bs, dirs, config);
+        auto nb = createNinja(pack, bs, dirs, config);
         nb.writeToFile(buildPath(dirs.build, "build.ninja"));
         runCommand(["ninja"], dirs.build, LogLevel.verbose, ninjaEnv);
 
-        auto dc = config.profile.toolFor("dc");
-        auto dcf = CompilerFlags.fromTool(dc);
-
-        const builtTarget = libraryFileName(name);
-
-        // generate a pkg-config file
-        const pcPath = buildPath(dirs.build, name ~ ".pc");
-        PkgConfFile pkg;
-        pkg.addOrSetVar("prefix", dirs.install);
-        pkg.addOrSetVar("includedir", "${prefix}/include/d/" ~ name);
-        pkg.addOrSetVar("libdir", "${prefix}/lib");
-        pkg.name = name;
-        pkg.description = _dubPack.rawRecipe.description;
-        pkg.ver = ver.toString();
-        foreach (k, v; depInfos)
-            pkg.requires ~= format!"%s = %s"(k, v.ver);
-        pkg.cflags = bs.importPaths.map!(p => dcf.importPath("${includedir}/" ~ p))
-            .chain(bs.versions.map!(v => dcf.version_(v)))
-            .array;
-        pkg.libs = ["${libdir}/" ~ builtTarget];
-        pkg.writeToFile(pcPath);
-
-        // we drive the installation directly
-        installFile(
-            pcPath,
-            buildPath(dirs.install, "lib", "pkgconfig", name ~ ".pc")
-        );
-        installFile(
-            buildPath(dirs.build, builtTarget),
-            buildPath(dirs.install, "lib", builtTarget)
-        );
-        foreach (src; bs.sourceFiles)
-            installFile(
-                buildPath(dirs.root, src),
-                buildPath(dirs.install, "include", "d", name, src)
-            );
+        return libraryFileName(pack.name);
     }
 
     @property bool canStage() const @safe
@@ -221,7 +366,8 @@ class DubRecipe : Recipe
         return installRecurse(src, dest);
     }
 
-    private NinjaBuild createNinja(const ref BuildSettings bs, BuildDirs dirs, const(BuildConfig) config)
+    private NinjaBuild createNinja(Package pack, const ref BuildSettings bs, BuildDirs dirs, const(
+            BuildConfig) config)
     {
         version (Windows)
         {
@@ -235,7 +381,7 @@ class DubRecipe : Recipe
         auto dc = config.profile.toolFor("dc");
         auto dcf = CompilerFlags.fromTool(dc);
 
-        const targetName = libraryFileName(name);
+        const targetName = libraryFileName(pack.name);
 
         NinjaRule dcRule;
         dcRule.name = "compile_D";
@@ -254,8 +400,8 @@ class DubRecipe : Recipe
         ];
         ldRule.description = "Linking $in";
 
-        const rootFromBuild = dirs.root.relativePath(dirs.build);
-        auto compileArgs = dcf.buildType(config.profile.buildType) ~ dcf.compileArgs(bs, rootFromBuild);
+        const srcFromBuild = dirs.src.relativePath(dirs.build);
+        auto compileArgs = dcf.buildType(config.profile.buildType) ~ dcf.compileArgs(bs, srcFromBuild);
         NinjaTarget[] targets;
 
         string[] objects;
@@ -268,7 +414,7 @@ class DubRecipe : Recipe
             NinjaTarget target;
             target.target = ninjaEscape(objFile);
             target.rule = dcRule.name;
-            target.inputs = [ninjaEscape(buildPath(rootFromBuild, src))];
+            target.inputs = [ninjaEscape(buildPath(srcFromBuild, src))];
 
             target.variables["ARGS"] = ninjaQuote(compileArgs);
             target.variables["DEPFILE"] = ninjaQuote(depfile);
@@ -298,6 +444,18 @@ class DubRecipe : Recipe
 }
 
 private:
+
+VersionSpec adaptDubVersionSpec(Dependency dubDep)
+{
+    // Dopamine and dub versions are largely compatible.
+    // Sometimes however, Dependency.versionSpec returns
+    // a single digit in the version spec (e.g ~>1).
+    // We amend that case to make it compatible with VersionSpec.
+    string dd = dubDep.versionSpec;
+    if (dd != "*" && dd.indexOf('.') == -1)
+        dd ~= ".0";
+    return VersionSpec(dd);
+}
 
 static this()
 {
@@ -520,13 +678,14 @@ class LdcCompilerFlags : CompilerFlags
 
 string libraryFileName(string libname)
 {
+    const ln = libname.replace(":", "_");
     version (Windows)
     {
-        return libname ~ ".lib";
+        return ln ~ ".lib";
     }
     else
     {
-        return "lib" ~ libname ~ ".a";
+        return "lib" ~ ln ~ ".a";
     }
 }
 

@@ -23,6 +23,21 @@ enum DepLocation : uint
     network = 2,
 }
 
+@property bool isSystem(in DepLocation loc) @safe
+{
+    return loc == DepLocation.system;
+}
+
+@property bool isCache(in DepLocation loc) @safe
+{
+    return loc == DepLocation.cache;
+}
+
+@property bool isNetwork(in DepLocation loc) @safe
+{
+    return loc == DepLocation.network;
+}
+
 /// An available version of a package
 /// and indication of its location
 struct AvailVersion
@@ -80,6 +95,26 @@ final class DepService
         _sources[DepLocation.network] = network;
     }
 
+    private @property DepSource systemSrc() @safe
+    {
+        return _sources[DepLocation.system];
+    }
+
+    private @property DepSource cacheSrc() @safe
+    {
+        return _sources[DepLocation.cache];
+    }
+
+    private @property DepSource networkSrc() @safe
+    {
+        return _sources[DepLocation.network];
+    }
+
+    private DepSource src(DepLocation location) @safe
+    {
+        return _sources[location];
+    }
+
     /// Get the available versions of a package.
     /// If a version is available in several locations, multiple
     /// entries are returned.
@@ -113,39 +148,74 @@ final class DepService
         return vers;
     }
 
+    RecipeDir getPackOrModuleRecipe(PackageName name, const(AvailVersion) aver, string revision = null) @system
+    {
+        return packRecipe(name.pkgName, aver, revision);
+    }
+
     /// Get the recipe of a package in the specified version (and optional revision)
     /// Throws: ServerDownException, NoSuchPackageException, NoSuchVersionException, NoSuchRevisionException
     ///         or any exception thrown during recipe parsing
     RecipeDir packRecipe(string name, const(AvailVersion) aver, string revision = null) @system
+    in (!PackageName(name).isModule, "Should get the recipe from the super package " ~ PackageName(
+            name)
+        .pkgName ~ " instead of " ~ name)
     in (aver.location != DepLocation.system, "System dependencies have no recipe!")
     in (_sources[aver.location], "No source for requested location")
     out (rdir; rdir.recipe.isDub || rdir.recipe.revision.length)
     {
-        if (revision)
-        {
-            auto rdir = packRecipeMem(name, aver.ver, revision);
-            if (rdir.recipe)
-            {
-                return rdir;
-            }
-        }
+        auto rdir = packRecipeMem(name, aver.ver, revision);
+        if (rdir.recipe)
+            return rdir;
 
-        RecipeDir rdir;
+        const inCache = cacheSrc.hasPackage(name, aver.ver, revision);
 
-        bool inCache = _sources[DepLocation.cache].hasPackage(name, aver.ver, revision);
-
-        if (aver.location == DepLocation.network && inCache)
-            rdir = _sources[DepLocation.cache].depRecipe(name, aver.ver, revision);
-        else if (!inCache && _sources[DepLocation.network])
-            rdir = _sources[DepLocation.network].depRecipe(name, aver.ver, revision);
+        if (aver.location.isNetwork && inCache)
+            rdir = cacheSrc.depRecipe(name, aver.ver, revision);
+        else if (!inCache && networkSrc)
+            rdir = networkSrc.depRecipe(name, aver.ver, revision);
         else
-            rdir = _sources[aver.location].depRecipe(name, aver.ver, revision);
+            rdir = src(aver.location).depRecipe(name, aver.ver, revision);
 
         memRecipe(rdir);
         return rdir;
     }
 
+    const(DepSpec)[] packDependencies(const(Profile) profile, string name, const(AvailVersion) aver, string revision = null) @system
+    {
+        const pkgName = PackageName(name);
+        auto rdir = packRecipeMem(pkgName.pkgName, aver.ver, revision);
+        if (rdir.recipe)
+        {
+            // dfmt off
+            return pkgName.isModule
+                ? rdir.recipe.moduleDependencies(pkgName.modName, profile)
+                : rdir.recipe.dependencies(profile);
+            // dfmt on
+        }
+
+        const inCache = cacheSrc.hasPackage(name, aver.ver, revision);
+
+        if (aver.location.isNetwork && !inCache && networkSrc.hasDepDependencies)
+            return networkSrc.depDependencies(profile, name, aver.ver, revision);
+        else if (aver.location.isNetwork && inCache)
+            rdir = cacheSrc.depRecipe(pkgName.pkgName, aver.ver, revision);
+        else if (aver.location.isNetwork && !inCache)
+            rdir = networkSrc.depRecipe(name, aver.ver, revision);
+        else
+            rdir = src(aver.location).depRecipe(name, aver.ver, revision);
+
+        memRecipe(rdir);
+
+        // dfmt off
+        return pkgName.isModule
+            ? rdir.recipe.moduleDependencies(pkgName.modName, profile)
+            : rdir.recipe.dependencies(profile);
+        // dfmt on
+    }
+
     private void memRecipe(RecipeDir rdir)
+    in (rdir.recipe && (rdir.recipe.revision.length || rdir.recipe.isDub))
     {
         auto recipe = rdir.recipe;
         const id = depId(recipe.name, recipe.ver, recipe.revision);
@@ -153,7 +223,6 @@ final class DepService
     }
 
     private RecipeDir packRecipeMem(string name, const ref Semver ver, string revision)
-    out (rdir; !rdir.recipe || rdir.recipe.revision.length)
     {
         const id = depId(name, ver, revision);
 
@@ -169,7 +238,10 @@ final class DepService
 
         import std.format : format;
 
-        return format("%s/%s/%s", packname, ver, revision);
+        if (revision)
+            return format!"%s/%s/%s"(packname, ver, revision);
+        else
+            return format!"%s/%s"(packname, ver);
     }
 
     private noreturn verOrRevException(string packname, const ref Semver ver, string revision)

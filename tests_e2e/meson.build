@@ -36,6 +36,7 @@ e2e_tests = [
     'build-xlsx-app',
 
     'dub-dep',
+    'dub-vibe-dep',
 
     'stage-lib2',
 
