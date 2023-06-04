@@ -34,7 +34,7 @@ void enforceBuildReady(RecipeDir rdir, BuildId buildId)
         );
     }
 
-    logInfo("%s: %s", info("Build"), success("OK"));
+    logInfo("%s: %s (ID: %s)", info("Build"), success("OK"), color(Color.cyan, buildId));
 }
 
 string buildPackage(

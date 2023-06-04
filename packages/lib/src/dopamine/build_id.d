@@ -9,8 +9,7 @@ import std.algorithm;
 import std.digest.sha;
 import std.path;
 
-// FIXME: make @safe when recipe.revision is @safe
-// FIXME: make const(Recipe) when recipe.revision is const
+@safe:
 
 struct BuildId
 {
@@ -22,7 +21,7 @@ struct BuildId
     ///   config =      The build configuration
     ///   depInfos =    The dependency build information (only the direct dependencies). No sorting is necessary.
     ///   stageDest =   The stage directory. Must be filled only if for recipes that declare `stage = false`
-    this(Recipe recipe, const(BuildConfig) config, DepBuildInfo[] depInfos, string stageDest = null)
+    this(const(Recipe) recipe, const(BuildConfig) config, DepBuildInfo[] depInfos, string stageDest = null)
     in (!stageDest || isAbsolute(stageDest))
     {
         Digest digest;
@@ -57,13 +56,13 @@ struct BuildId
     string uniqueId;
 
     /// ditto
-    @property string toString() const
+    string toString() const pure
     {
         return uniqueId;
     }
 
     /// ditto
-    string opCast(T : string)() const
+    string opCast(T : string)() const pure
     {
         return uniqueId;
     }

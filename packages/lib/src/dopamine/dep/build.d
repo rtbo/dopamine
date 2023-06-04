@@ -154,7 +154,7 @@ in (!stageDest || isAbsolute(stageDest))
 
         if (!rdir.checkBuildReady(bid, reason))
         {
-            logInfo("%s: Building", info(packNameHead));
+            logInfo("%s: Building   (ID: %s)", info(packNameHead), color(Color.cyan, bid));
             mkdirRecurse(bPaths.build);
 
             auto di = collectDepBuildInfos(depNode);
@@ -171,7 +171,7 @@ in (!stageDest || isAbsolute(stageDest))
         }
         else
         {
-            logInfo("%s: Up-to-date", info(packNameHead));
+            logInfo("%s: Up-to-date (ID: %s)", info(packNameHead), color(Color.cyan, bid));
         }
 
         depNode.buildInfo = DepBuildInfo(pkgName.name, depNode.dub, depNode.ver, bid, bPaths.install);
