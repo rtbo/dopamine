@@ -4,6 +4,7 @@ import dopamine.dep.dub;
 import dopamine.api.v1;
 import dopamine.cache;
 import dopamine.log;
+import dopamine.profile;
 import dopamine.recipe;
 import dopamine.recipe.dub;
 import dopamine.registry;
@@ -49,6 +50,18 @@ class NoSuchPackageException : DependencyException
     }
 }
 
+
+/// A package module could not be found
+class NoSuchPackageModuleException : DependencyException
+{
+    this(string pkg, string mod, string file = __FILE__, size_t line = __LINE__) @safe
+    {
+        import std.format : format;
+
+        super(name, format("No such package module: %s:%s", pkg, mod), null, file, line);
+    }
+}
+
 /// A package version could not be found
 class NoSuchVersionException : DependencyException
 {
@@ -88,16 +101,26 @@ interface DepSource
     /// Versions available for a package
     /// Returns: the versions available, or [] if none was found
     /// Throws: NoSystemDependencies
-    Semver[] depAvailVersions(string name) @safe;
+    Semver[] depAvailVersions(string name) @safe
+    in (!PackageName(name).isModule);
+
 
     /// Check if package is present in specified version/revision
-    bool hasPackage(string name, Semver ver, string revision = null) @safe;
+    bool hasPackage(string name, Semver ver, string revision = null) @safe
+    in (!PackageName(name).isModule);
 
     /// Get the recipe of a package
     /// Returns: The RecipeDir with parsed recipe
     /// Throws: NoSuchPackageException, NoSuchVersionException, NoSuchRevisionException
     RecipeDir depRecipe(string name, Semver ver, string rev = null) @system
+    in (!PackageName(name).isModule)
     out (rdir; rdir.recipe !is null);
+
+    /// Whether this source can provide dependencies
+    @property bool hasDepDependencies();
+
+    /// Get the dependencies of a package
+    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null);
 }
 
 final class SystemDepSource : DepSource
@@ -146,6 +169,18 @@ final class SystemDepSource : DepSource
     RecipeDir depRecipe(string name, Semver ver, string rev = null)
     {
         assert(false, "System dependencies do not have recipe");
+    }
+
+    @property bool hasDepDependencies()
+    {
+        // TODO: pkg-config dependencies
+        return false;
+    }
+
+    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    {
+        // TODO: pkg-config dependencies
+        assert(false, "Not implemented");
     }
 }
 
@@ -236,6 +271,16 @@ final class DopCacheDepSource : DepSource
 
         return null;
     }
+
+    @property bool hasDepDependencies()
+    {
+        return false;
+    }
+
+    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    {
+        assert(false, "Not implemented");
+    }
 }
 
 final class DopRegistryDepSource : DepSource
@@ -296,6 +341,16 @@ final class DopRegistryDepSource : DepSource
         _packMem[name] = pack;
         return pack;
     }
+
+    @property bool hasDepDependencies()
+    {
+        return false;
+    }
+
+    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    {
+        assert(false, "Not implemented");
+    }
 }
 
 final class DubCacheDepSource : DepSource
@@ -344,7 +399,17 @@ final class DubCacheDepSource : DepSource
         enforce(filename, new NoSuchVersionException(name, ver));
 
         auto recipe = parseDubRecipe(filename, vDir.dir, ver.toString());
-        return RecipeDir(recipe, vDir.dir);
+        return RecipeDir(recipe, vDir.dir, relativePath(filename, vDir.dir));
+    }
+
+    @property bool hasDepDependencies()
+    {
+        return false;
+    }
+
+    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    {
+        assert(false, "Not implemented");
     }
 }
 
@@ -372,6 +437,7 @@ final class DubRegistryDepSource : DepSource
     }
 
     RecipeDir depRecipe(string name, Semver ver, string revision = null) @system
+    in (!PackageName(name).isModule)
     {
         assert(!revision, "Dub recipes have no revision");
 
@@ -387,11 +453,21 @@ final class DubRegistryDepSource : DepSource
             assert(filename);
 
             auto recipe = parseDubRecipe(filename, dir.dir, ver.toString());
-            return RecipeDir(recipe, dir.dir);
+            return RecipeDir(recipe, dir.dir, relativePath(filename, dir.dir));
         }
         catch (DubRegistryNotFoundException ex)
         {
             throw new NoSuchVersionException(name, ver);
         }
+    }
+
+    @property bool hasDepDependencies()
+    {
+        return true;
+    }
+
+    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    {
+        return _registry.pkgDependencies(name, ver);
     }
 }

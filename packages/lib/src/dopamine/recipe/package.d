@@ -8,6 +8,7 @@ import dopamine.semver;
 import std.file;
 import std.json;
 import std.path;
+import std.string;
 import std.sumtype;
 
 public import dopamine.recipe.dir;
@@ -57,7 +58,7 @@ struct OptionSet
         }
     }
 
-    JSONValue[string] toJSON() const
+    JSONValue[string] toJSON() const @safe
     {
         import std.sumtype : match;
 
@@ -276,17 +277,70 @@ struct Option
     string description;
 }
 
+struct PackageName
+{
+    string name;
+
+    alias name this;
+
+    @property bool isModule() const pure @safe
+    {
+        return name.indexOf(':') != -1;
+    }
+
+    @property string pkgName() const pure @safe
+    {
+        const colon = name.indexOf(':');
+        if (colon == -1)
+            return name;
+        else
+            return name[0 .. colon];
+    }
+
+    @property string modName() const pure @safe
+    {
+        const colon = name.indexOf(':');
+        if (colon == -1)
+            return null;
+        else
+            return name[colon + 1 .. $];
+    }
+
+    string toString() const pure @safe
+    {
+        return name;
+    }
+}
+
 /// A recipe dependency specification
 struct DepSpec
 {
-    string name;
+    PackageName name;
     VersionSpec spec;
     bool dub;
     OptionSet options;
 
-    @property DepSpec dup() const
+    this(string name, VersionSpec spec, bool dub = false, OptionSet options = OptionSet.init) @safe
+    {
+        this.name = PackageName(name);
+        this.spec = spec;
+        this.dub = dub;
+        this.options = options;
+    }
+
+    @property DepSpec dup() const @safe
     {
         return DepSpec(name, spec, dub, options.dup);
+    }
+
+    /// If this spec is for a module, return the spec to the module's package.
+    /// Otherwise, return this.
+    @property const(DepSpec) pkgSpec() const @safe
+    {
+        if (name.isModule)
+            return DepSpec(PackageName(name.pkgName), spec, dub, options.dup);
+        else
+            return this;
     }
 }
 
@@ -313,7 +367,35 @@ struct BuildConfig
     /// the build profile
     const(Profile) profile;
 
+    /// The modules to build
+    const(string)[] modules;
+
+    /// The build options
     OptionSet options;
+
+    this(const(Profile) profile)
+    {
+        this.profile = profile;
+    }
+
+    this(const(Profile) profile, const(string)[] modules)
+    {
+        this.profile = profile;
+        this.modules = modules;
+    }
+
+    this(const(Profile) profile, OptionSet options)
+    {
+        this.profile = profile;
+        this.options = options;
+    }
+
+    this(const(Profile) profile, const(string)[] modules, OptionSet options)
+    {
+        this.profile = profile;
+        this.modules = modules;
+        this.options = options;
+    }
 
     void feedDigest(D)(ref D digest) const
     {
@@ -322,6 +404,9 @@ struct BuildConfig
         import std.sumtype : match;
 
         profile.feedDigest(digest);
+
+        foreach (mod; modules)
+            feedDigestData(digest, mod);
 
         auto names = options.keys;
         sort(names);
@@ -410,11 +495,24 @@ interface Recipe
     @property const(Option[string]) options() const @safe;
 
     /// Whether this recipe has dependencies.
-    /// In case dependencies are only needed for some config cases, true is returned.
+    /// In case dependencies are only needed for some profile cases, true is returned.
     @property bool hasDependencies() const @safe;
 
-    /// Get the dependencies of the package for the given build configuration
+    /// Get the dependencies of the package for the given compiliation profile
     const(DepSpec)[] dependencies(const(Profile) profile) @system;
+
+    /// Whether this recipe has dependencies.
+    /// In case dependencies are only needed for some profile cases, true is returned.
+    final @property bool hasModules() @safe
+    {
+        return modules.length != 0;
+    }
+
+    /// Get the list of modules declared by this recipe
+    @property string[] modules() @safe;
+
+    /// Get the dependencies of the provided module for the given compilation profile.
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(Profile) profile) @system;
 
     /// Get the files to include with the recipe when publishing to registry.
     /// This is relative to the root recipe dir.
@@ -435,6 +533,20 @@ interface Recipe
     /// recipe root directory
     string source() @system
     in (!isLight, "Light recipes have no defined source");
+
+    /// Return the source path of a module (relative to root)
+    /// This value is passed in the `dirs` argument of `buildModule`
+    string moduleSourceDir(string modName) @safe;
+
+    /// Whether this recipe expects modules to be built by batch or one-by-one.
+    /// Batch building means that the they are built by the main `build` function.
+    /// Otherwise they are be built by the `buildModule` function.
+    @property bool modulesBatchBuild() @safe;
+
+    /// Build one module of this recipe.
+    /// The module is specified as unique member of config.modules
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    in (config.modules.length == 1);
 
     /// Build and install the package to the given directory and
     /// with provided config. Info about dependencies is also provided.
@@ -551,10 +663,21 @@ version (unittest)  : final class MockRecipe : Recipe
         return _deps.length != 0;
     }
 
-    /// Get the dependencies of the package for the given build configuration
+    /// Get the dependencies of the package for the given compilation profile
     const(DepSpec)[] dependencies(const(Profile) profile) @system
     {
         return _deps;
+    }
+
+    /// modules not supported yet
+    @property string[] modules() @safe
+    {
+        return [];
+    }
+    /// ditto
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(Profile) profile) @system
+    {
+        return [];
     }
 
     /// Get the files to include with the recipe when publishing to registry.
@@ -583,6 +706,20 @@ version (unittest)  : final class MockRecipe : Recipe
     string source() @system
     {
         return ".";
+    }
+
+    string moduleSourceDir(string modName) @safe
+    {
+        return ".";
+    }
+
+    @property bool modulesBatchBuild() @safe
+    {
+        return true;
+    }
+
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    {
     }
 
     /// Build and install the package to the given directory and

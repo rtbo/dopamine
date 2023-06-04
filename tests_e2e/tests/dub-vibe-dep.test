@@ -1,0 +1,11 @@
+SKIP_NOPROG=meson
+
+RECIPE=dub-vibe-dep
+
+CMD=$DOP profile --discover
+CMD=$DOP resolve
+
+CMD=$DOP build
+EXPECT_MATCH=Recipe: OK - dub-vibe-dep/1.0.0
+EXPECT_DIR=.dop/$DOP_BID-build
+EXPECT_DIR=.dop/$DOP_BID

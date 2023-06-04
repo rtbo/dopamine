@@ -27,21 +27,22 @@ in (!stageDest || isAbsolute(stageDest))
 
     foreach (DagNode depNode; dag.traverseBottomUpResolved())
     {
+        const name = depNode.name.name;
         auto service = depNode.dub ? services.dub : services.dop;
-        auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
+        auto rdir = service.packRecipe(name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
-        auto opts = options.forDependency(depNode.name).union_(depNode.options);
+        auto opts = options.forDependency(name).union_(depNode.options);
         const conf = BuildConfig(prof, opts);
         auto depInfos = collectDirectDepBuildInfos(depNode);
         const buildId = BuildId(rdir.recipe, conf, depInfos, stageDest);
         const bPaths = rdir.buildPaths(buildId);
 
-        depNode.buildInfo = DepBuildInfo(depNode.name, depNode.dub, depNode.ver, buildId, bPaths.install);
+        depNode.buildInfo = DepBuildInfo(name, depNode.dub, depNode.ver, buildId, bPaths.install);
     }
 }
 
 DepBuildInfo[] collectDirectDepBuildInfos(DagNode node)
-in (!node || node.isResolved)
+in (!node || node.isResolved, node ? node.name ~ " isn't resolved" : "node is null")
 {
     if (!node)
         return null;
@@ -50,14 +51,14 @@ in (!node || node.isResolved)
     foreach(de; node.downEdges)
     {
         auto dbi = enforce(de.down.resolvedNode).buildInfo;
-        enforce(!dbi.isNull);
+        enforce(!dbi.isNull, "No build info for dependency " ~ de.down.name);
         res ~= dbi.get;
     }
     return res;
 }
 
 DepBuildInfo[string] collectDepBuildInfos(DagNode node)
-in (!node || node.isResolved)
+in (!node || node.isResolved, node ? node.name ~ " isn't resolved" : "node is null")
 {
     if (!node)
         return null;
@@ -65,7 +66,7 @@ in (!node || node.isResolved)
     DepBuildInfo[string] res;
     foreach (k, v; node.collectDependencies())
     {
-        if (v.location == DepLocation.system)
+        if (v.location.isSystem)
             continue;
 
         assert(!v.buildInfo.isNull);
@@ -98,13 +99,20 @@ in (!stageDest || isAbsolute(stageDest))
 
     foreach (depNode; dag.traverseBottomUpResolved())
     {
-        if (depNode.location == DepLocation.system)
+        if (depNode.location.isSystem)
             continue;
 
         auto service = depNode.dub ? services.dub : services.dop;
-        auto rdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
+
+        const pkgName = depNode.name;
+        const isModule = pkgName.isModule;
+
+        // FIXME: module batch building
+        const mods = isModule ? [pkgName.modName] : null;
+
+        auto rdir = service.packRecipe(pkgName.pkgName, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
-        auto opts = options.forDependency(depNode.name).union_(depNode.options);
+        auto opts = options.forDependency(pkgName.name).union_(depNode.options);
         foreach (c; depNode.optionConflicts)
         {
             enforce(
@@ -112,18 +120,18 @@ in (!stageDest || isAbsolute(stageDest))
                 new ErrorLogException(
                     "Unresolved option conflict for dependency %s: %s.\n" ~
                     "Ensure to set the option %s with the `%s` command.",
-                    info(depNode.name), color(Color.magenta, c),
-                    color(Color.cyan | Color.bright, depNode.name ~ "/" ~ c),
+                    info(pkgName.name), color(Color.magenta, c),
+                    color(Color.cyan | Color.bright, pkgName.name ~ "/" ~ c),
                     info("dop options")
                 )
             );
         }
-        const conf = BuildConfig(prof, opts);
+        const conf = BuildConfig(prof, mods, opts);
         auto depInfos = collectDirectDepBuildInfos(depNode);
         const bid = BuildId(rdir.recipe, conf, depInfos, stageDest);
         const bPaths = rdir.buildPaths(bid);
 
-        const packHumanName = format("%s-%s", depNode.pack.name, depNode.ver);
+        const packHumanName = format("%s-%s", pkgName.name, depNode.ver);
         const packNameHead = format("%*s", maxLen, packHumanName);
 
         mkdirRecurse(rdir.dopPath());
@@ -138,7 +146,10 @@ in (!stageDest || isAbsolute(stageDest))
             rdir.stateFile.write(state);
         }
         enforce(srcDir, "recipe did not return the source code location");
-        srcDir = absolutePath(srcDir, rdir.root);
+        if (isModule)
+            srcDir = buildPath(srcDir, rdir.recipe.moduleSourceDir(pkgName.modName));
+
+        srcDir = buildNormalizedPath(absolutePath(srcDir, rdir.root));
         enforce(exists(srcDir) && isDir(srcDir), "No such source directory: " ~ srcDir);
 
         if (!rdir.checkBuildReady(bid, reason))
@@ -150,7 +161,10 @@ in (!stageDest || isAbsolute(stageDest))
             const bd = BuildDirs(rdir.root, srcDir, bPaths.build, stageDest ? stageDest : bPaths.install);
             auto state = bPaths.stateFile.read();
 
-            rdir.recipe.build(bd, conf, di);
+            if (isModule)
+                rdir.recipe.buildModule(bd, conf, di);
+            else
+                rdir.recipe.build(bd, conf, di);
 
             state.buildTime = Clock.currTime;
             bPaths.stateFile.write(state);
@@ -160,7 +174,7 @@ in (!stageDest || isAbsolute(stageDest))
             logInfo("%s: Up-to-date", info(packNameHead));
         }
 
-        depNode.buildInfo = DepBuildInfo(depNode.name, depNode.dub, depNode.ver, bid, bPaths.install);
+        depNode.buildInfo = DepBuildInfo(pkgName.name, depNode.dub, depNode.ver, bid, bPaths.install);
     }
 
     return collectDepBuildInfos(dag.root.resolvedNode);
@@ -174,11 +188,11 @@ private string[] collectTools(DepDAG dag, DepServices services)
 
     foreach (depNode; dag.traverseTopDownResolved)
     {
-        if (depNode.location == DepLocation.system)
+        if (depNode.location.isSystem)
             continue;
 
         auto service = depNode.dub ? services.dub : services.dop;
-        auto drdir = service.packRecipe(depNode.pack.name, depNode.aver, depNode.revision);
+        auto drdir = service.getPackOrModuleRecipe(depNode.name, depNode.aver, depNode.revision);
         foreach (t; drdir.recipe.tools)
         {
             if (!allTools.canFind(t))

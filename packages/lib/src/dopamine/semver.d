@@ -179,7 +179,6 @@ struct Semver
     string toString() const pure @safe
     {
         import std.format : format;
-        import std.string : join;
 
         auto res = format("%s.%s.%s", major, minor, patch);
 
@@ -209,7 +208,7 @@ struct Semver
 
     size_t toHash() const pure nothrow @safe
     {
-        // exclude metadata from hash to be consiste with opEqual
+        // exclude metadata from hash to be consistent with opEqual
         auto hash = _major.hashOf();
         hash = _minor.hashOf(hash);
         hash = _patch.hashOf(hash);
@@ -289,6 +288,12 @@ struct Semver
     bool opCast(T : bool)() const pure nothrow @safe
     {
         return _not_init;
+    }
+
+    Semver opCast(T : Semver)() const pure nothrow @safe
+    {
+        // const casting is safe because no mutable aliasing
+        return this;
     }
 }
 

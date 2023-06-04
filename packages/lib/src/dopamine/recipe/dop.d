@@ -335,6 +335,18 @@ final class DopRecipe : Recipe
         return readDependencies(L);
     }
 
+    /// modules not supported yet
+    @property string[] modules() @safe
+    {
+        return [];
+    }
+
+    /// ditto
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(Profile) profile) @system
+    {
+        return [];
+    }
+
     string[] include() @system
     {
         if (_included)
@@ -390,6 +402,21 @@ final class DopRecipe : Recipe
         }
 
         return L.luaPop!string();
+    }
+
+    string moduleSourceDir(string modName) @safe
+    {
+        return ".";
+    }
+
+    @property bool modulesBatchBuild() @safe
+    {
+        return true;
+    }
+
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    {
+        assert(false, "unimplemented");
     }
 
     void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
