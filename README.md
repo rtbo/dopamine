@@ -2,23 +2,23 @@
 
 Package manager for compiled languages.
 
-Dopamine is still under development and cannot be used yet.
+Dopamine PM is a tool for developers that helps to download and build dependencies in a predictible way.
+
+Dopamine is still under development and cannot be used yet in production.
 
 ## Goals
 
-- Easy C / C++ / D interoperability (support for other languages can be brought later)
+- Ease interoperability of C / C++ / D
 - Build-system agnosticity
-- highly flexible package recipe
-- Possibility to consume Dub packages as dependency
-- Possibility to package 3rdparty code (packages not aware of Dopamine)
-- Allows to look-up for installed dependency before downloading and build
-- Lock dependency versions for a deterministic libraries/application dependencies
-- Reduce compilation time by uploading/downloading built packages
-- Make cross-compilation just as easy as compilation for the local system
+- Highly flexible package recipe
+- Consume DUB packages as dependency
+- Drop-in replacement of `dub` client
+- Ease to package 3rdparty code without patching (packages not aware of Dopamine)
+- Allows to look-up for system-installed dependency before downloading and build
+- Lock dependency versions for deterministic dependencies
+- Reduce compilation time by uploading/downloading pre-built packages
 
 ## Design
-
-This is still largely in progress, but in a nutshell:
 
  - The `dop` command line tool provide commands for all aspects of building and packaging.
     - Setup compilation profile
@@ -27,19 +27,18 @@ This is still largely in progress, but in a nutshell:
     - Build (using the build system provided by the source package)
     - Package/publish
     - Upload a build
-    - ...
-    - See the [client spec](https://github.com/rtbo/dopamine/blob/main/client/SPEC.md) for more details.
+    - See the [client spec](https://github.com/rtbo/dopamine/blob/main/packages/client/SPEC.md) for more details.
 
  - Recipes are Lua scripts.
     - Recipes provide some descriptive fields and functions for:
+        - package metadata
         - downloading source (if the source is not packaged with the recipe)
         - patch (if needed)
         - build
-        - package (ideally this is done by the install command of the build system)
     - Most of recipes tasks are helped by a comprehensive `dop` lua library, pre-loaded by the client.
     - Thanks to Lua's functional flexibility, most recipes can look purely declarative
 
- - Dependencies are resolved with a DAG. See [dag.d](https://github.com/rtbo/dopamine/blob/main/lib/src/dopamine/dep/dag.d).
+ - Dependencies are resolved with a DAG. See [dag.d](https://github.com/rtbo/dopamine/blob/main/packages/lib/src/dopamine/dep/dag.d).
 
  - Compilation profiles are saved in INI files, that can be saved user-wide and reused at will
     - The `dop` client provide helpers to edit them, but can also be done by hand.
@@ -49,6 +48,8 @@ This is still largely in progress, but in a nutshell:
     - This identifier allows to upload a built package
     - A consumer can consume this pre-built package as dependency if the same ID is computed.
     - If no build is found, the recipe is used to build the package (and optionally upload it after the build).
+
+ - A part of the design is inspired by [conan](https://conan.io)
 
 ## Example of Recipe
 
@@ -108,7 +109,7 @@ function build(dirs, config, dep_infos)
 end
 ```
 
-## Build
+## Build dopamine
 
 Dopamine is developed and built with `meson`.
 You need the following tools:

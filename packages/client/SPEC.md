@@ -31,43 +31,59 @@ The following table contains paths, that may be referred to in the next sections
 
 | Symbol        | Path                  | Description                                 |
 | ------------- | ----------------      | -------------------------------             |
-| `$USR_DIR`    | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine |
-|               | `$USR_DIR/profiles`   | Local cache for profiles                    |
-|               | `$USR_DIR/packages`   | Local package cache                         |
+| `$DOP_HOME`    | Linux: `~/.dopamine`<br>Windows: `%LOCALAPPDATA%\Dopamine` | Local storage for Dopmaine |
+|               | `$DOP_HOME/profiles`   | Local cache for profiles                    |
+|               | `$DOP_HOME/recipes`   | Local cache for package recipes                         |
+|               | `$DOP_HOME/src`   | Local cache for package sources                         |
+|               | `$DOP_HOME/cache`   | Local built package cache                         |
+|               | `$DOP_HOME/dub/src`   | Local cache for DUB packages
+|               | `$DOP_HOME/dub/cache`   | Local cache for DUB built packages
 | `$PKG`        |                       | Refer to a package directory (aka. recipe directory) |
 |               | `$PKG/dopamine.lua`   | Package recipe file.
-| `$DOP`        | `$PKG/.dop`           | Package working directory for `dop`         |
+|               | `$PKG/.dop`           | Package working directory for `dop`         |
 |               | `$PKG/dop.lock`       | Dependency lock file                        |
-| `$CONFIG`     | `$DOP/[config hash]`  | Working directory for a config              |
+|               | `$PKG/.dop/[build-id]`  | Working directory for a config              |
 
 ## Recipe file
 
 Each package is decribed by a recipe file, which is a Lua script named `dopamine.lua` located at the package root.
-There can be 2 sorts of recipe:
+There can be 3 sorts of recipe:
 - A dependencies recipe (aka. light recipes).
     - This kind of recipe is used to install dependencies locally.
     - It is not meant to package a piece of software.
     - Expresses dependencies through the `dependencies` global variable.
 - A package recipe.
     - Is a complete recipe that provide data and functions to build and package a piece of software.
-    - It can express dependencies.
-    - Recipe is defined by returning a table with various fields
-    - Some fields are mandatory in the recipe table for the package to be published:
+    - Recipe is defined by global variables:
+      - The following are mandatory for a package to be published:
         - `name`
         - `version` (Semver compliant)
         - `license`
         - `build` function
-        - TBD
-    - When a recipe function is executed, it receives the recipe table as first argument
+        - `tools` list the tools whose version impacts the build-id
+          - e.g. `cc`, `dc`
+      - Others are optional:
+        - `authors`
+        - `copyright`
+        - `dependencies`
+        - `source`
+- DUB recipes
+    - DUB recipes are valid Dopamine recipes (although not fully supported at the moment)
 
-Depending on the execution context, the current directory is not always the same.
+When a recipe or one of its function is executed, the current directory is set as follow:
 | Execution context | Current directory |
 | ----------------- | ----------------- |
-| Recipe evaluation | $PKG              |
-| `source` function | $PKG              |
-| `build`  function | $CONFIG           |
+| Recipe evaluation | `$PKG`            |
+| `source` function | `$PKG`            |
+| `build`  function | `$CONFIG`         |
 
-### dop Lua library
+## Package revision
+
+Each Dopamine recipe has a revision, allowing more than
+one recipe for a package version.
+Indeed, the `version` of a recipe always refers to the packaged source code `version`, not to the recipe code version.
+
+## dop Lua library
 In order to help packaging, a `dop` Lua library is provided by the client.
 It is implicitely imported and available in every recipe
 ```lua
@@ -77,7 +93,7 @@ Recipes may import other libraries, but the `dop` library is the only one that i
 It contains functions to run commands, concatenate paths, perform various file system operations, compute checksums...<br>
 Documentation TBD, see `lib/src/dopamine/lua` source folder.
 
-### Lock files
+## Lock files
 
 Lock files are used to ensure atomicity and exclusive access to a package and also to keep track of the
 state of the package between successive invocations of `dop`.
@@ -87,15 +103,16 @@ state of the package between successive invocations of `dop`.
 
 | Command      | Description                                      |
 | ------------ | ------------------------------------------------ |
+| `search`     | Search for packages on Dopamine's registry.      |
+| `login`      | Login with a token obtained on the registry.     |
 | `profile`    | Get, set or adjust the compilation profile.      |
-| `options`    | Get, set or adjust the package build options.    |
+| `options`    | Get, set or adjust the package options.          |
 | `resolve`    | Resolve an and lock dependencies.                |
-| `depinstall` | Install dependencies.                            |
 | `source`     | Download package source.                         |
 | `build`      | Build package with selected compilation profile. |
 | `stage`      | Stage a package in a specified directory.        |
 | `package`    | Package binary for distribution.                 |
-| `cache`      | Add a package in the local cache.                |
+| `revision`   | Get the revision of a package.                   |
 | `publish`    | Publish a package recipe on a repository.        |
 | `upload`     | Upload a built package to a repository.          |
 
@@ -119,10 +136,11 @@ The selected profile of a package is saved in `$PACKDIR/.dop/profile.ini`
   - Use only the languages of the current recipe
 - `dop profile --add-missing` :white_check_mark:
   - Add missing languages to the compilation profile
-- `dop profile --set-[lang] [compiler]` :white_check_mark:
-  - Change compiler for language `[lang]`
-  - `[compiler]` is optional and can be a command (e.g. `dmd`) or a path
-  - If `[compiler]` is omitted, the default for `[lang]` is picked.
+- `dop profile --set-[tool] [tool_exe]` :white_check_mark:
+  - Change a tool executable
+  - e.g. `dop profile --set-dc dmd`
+  - `[tool_exe]` is optional and can be a command (e.g. `dmd`) or a path
+  - If `[tool_exe]` is omitted, the default for `[tool]` is picked.
 - `dop profile --release` :white_check_mark:
   - Set profile in Release mode
 - `dop profile --debug` :white_check_mark:
