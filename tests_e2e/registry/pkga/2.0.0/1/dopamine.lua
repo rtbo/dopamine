@@ -3,16 +3,15 @@ version = '2.0.0'
 tools = { 'cc' }
 
 function build(dirs, config)
-    local profile = config.profile
-    local meson = dop.Meson:new(profile)
-
-    dop.mkdir { dirs.build, recurse = true }
-
-    meson:setup { build_dir = dirs.build, install_dir = dirs.install }
-    dop.from_dir(dirs.build, function()
-        meson:compile()
-        meson:install()
-    end)
-
-    return true
+    local meson = dop.Meson:new(config.profile)
+    meson:setup({
+        build_dir = '.',
+        src_dir = dirs.src,
+        install_dir = dirs.install,
+        defs = {
+            default_library = 'static'
+        }
+    })
+    meson:compile()
+    meson:install()
 end
