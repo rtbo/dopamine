@@ -11,6 +11,7 @@ import dopamine.semver;
 import std.exception;
 import std.file;
 import std.path;
+import std.range;
 
 void ensureDepBuildInfos(
     DepDAG dag,
@@ -94,8 +95,8 @@ in (!stageDest || isAbsolute(stageDest))
 
     const maxLen = dag.traverseTopDownResolved()
         .map!(dn => dn.pack.name.length + dn.ver.toString().length + 1)
+        .chain(only(0)) // in case of empty deps
         .maxElement();
-
 
     foreach (depNode; dag.traverseBottomUpResolved())
     {
@@ -211,7 +212,7 @@ private void enforceHasTools(const(Profile) profile, const(string)[] tools, Reci
 
     if (!profile.hasAllTools(tools))
     {
-        string msg = format("Profile %s misses the following languages to build the dependencies of %s-%s:", profile
+        string msg = format("Profile %s misses the following tools to build the dependencies of %s-%s:", profile
                 .name, recipe.name, recipe.ver);
         foreach (t; tools)
         {
