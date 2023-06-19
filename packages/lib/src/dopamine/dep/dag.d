@@ -328,8 +328,8 @@ struct DepDAG
     ///
     /// Params:
     ///   recipe = Recipe from the root package
-    ///   profile = Compilation profile. It is needed here because packages may declare
-    ///             different depedencies for different profiles.
+    ///   config = Build configuration. It is needed here because packages may declare
+    ///            different depedencies for different configs.
     ///   service = The dependency service to fetch available versions and recipes.
     ///   heuristics = The heuristics to select the dependencies.
     ///   preFilter = Whether or not to apply a first stage of compatibility and heuristics filtering.
@@ -340,7 +340,7 @@ struct DepDAG
     /// Returns: a [DepDAG] ready for the next phase
     static DepDAG prepare(
         RecipeDir rdir,
-        Profile profile,
+        const(BuildConfig) config,
         DepServices services,
         const Heuristics heuristics = Heuristics.init,
         Flag!"preFilter" preFilter = Yes.preFilter) @system
@@ -431,12 +431,12 @@ struct DepDAG
             const(DepSpec)[] deps;
             if (pack is root)
             {
-                deps = rdir.recipe.dependencies(profile);
+                deps = rdir.recipe.dependencies(config);
             }
             else
             {
                 auto service = rinfo.dub ? services.dub : services.dop;
-                deps = service.packDependencies(profile, rinfo.name, aver);
+                deps = service.packDependencies(config, rinfo.name, aver);
             }
 
             foreach (dep; deps)
@@ -1353,6 +1353,12 @@ class UnresolvedDepException : Exception
 version (unittest)
 {
     import unit_threaded.assertions;
+
+    BuildConfig mockConfigLinux()
+    {
+        auto profile = mockProfileLinux();
+        return BuildConfig(profile, [], OptionSet.init);
+    }
 }
 
 @("Test general graph utility")
@@ -1363,16 +1369,16 @@ unittest
     import std.typecons : No, Yes;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
     // preferSystem (default): b is a leave
-    //auto leaves = DepDAG.prepare(packE.recipe("1.0.0"), profile, services).collectLeaves();
-    auto dagSys = DepDAG.prepare(packE.recipe("1.0.0"), profile, services);
+    //auto leaves = DepDAG.prepare(packE.recipe("1.0.0"), config, services).collectLeaves();
+    auto dagSys = DepDAG.prepare(packE.recipe("1.0.0"), config, services);
     dagSys.resolve();
     auto leaves = dagSys.collectResolvedLeaves();
     leaves.map!(l => l.name).should ~ ["a", "b"];
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, Heuristics.preferCache);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), config, services, Heuristics.preferCache);
 
     string[] names = dag.traverseTopDown(Yes.root).map!(p => p.name.name).array;
     assert(names.length == 5);
@@ -1418,11 +1424,11 @@ unittest
     import std.typecons : Yes;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
     const heuristics = Heuristics.preferSystem;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1442,11 +1448,11 @@ unittest
     import std.typecons : Yes;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
     const heuristics = Heuristics.preferCache;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1466,11 +1472,11 @@ unittest
     import std.typecons : Yes;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
     const heuristics = Heuristics.preferLocal;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1490,11 +1496,11 @@ unittest
     import std.typecons : Yes;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
     const heuristics = Heuristics.pickHighest;
 
-    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics);
+    auto dag = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics);
     dag.resolve();
 
     AvailVersion[string] resolvedVersions;
@@ -1515,13 +1521,13 @@ unittest
     import std.typecons : No, Yes;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
     const heuristics = Heuristics.preferSystem;
 
-    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics, Yes.preFilter);
+    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics, Yes.preFilter);
     dag1.resolve();
 
-    auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics, No.preFilter);
+    auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics, No.preFilter);
     dag2.resolve();
 
     static struct NodeData
@@ -1571,9 +1577,9 @@ unittest
         TestPackVersion("1.0.1", [], DepLocation.cache)
     ], ["cc"]);
     auto services = buildMockDepServices([]);
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
-    auto dag = DepDAG.prepare(pack.recipe("1.0.1"), profile, services);
+    auto dag = DepDAG.prepare(pack.recipe("1.0.1"), config, services);
     dag.resolve();
 
     auto arr = dag.traverseTopDownResolved().array;
@@ -1592,10 +1598,10 @@ unittest
     import std.exception : assertThrown;
 
     auto services = buildMockDepServices(testPackUnresolvable());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
     auto recipe = packNotResolvable.recipe("1.0.0");
-    auto dag = DepDAG.prepare(recipe, profile, services);
+    auto dag = DepDAG.prepare(recipe, config, services);
 
     assertThrown!UnresolvedDepException(dag.resolve());
 }
@@ -1606,10 +1612,10 @@ unittest
     import std.file : write;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
 
     auto recipe = packE.recipe("1.0.0");
-    auto dag = DepDAG.prepare(recipe, profile, services);
+    auto dag = DepDAG.prepare(recipe, config, services);
     dag.resolve();
 
     auto json = dag.toJson();
@@ -1899,10 +1905,10 @@ unittest
     import unit_threaded.assertions;
 
     auto services = buildMockDepServices(testPackBase());
-    auto profile = mockProfileLinux();
+    auto config = mockConfigLinux();
     const heuristics = Heuristics.preferSystem;
 
-    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics, Yes.preFilter);
+    auto dag1 = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics, Yes.preFilter);
     dag1.resolve();
     dag1.traverseTopDownResolved(No.root).map!(n => n.name).should == [
         "b", "d", "c", "a"
@@ -1912,7 +1918,7 @@ unittest
             "e", "b", "d", "c", "a"
     ];
 
-    auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), profile, services, heuristics, No.preFilter);
+    auto dag2 = DepDAG.prepare(packE.recipe("1.0.0"), config, services, heuristics, No.preFilter);
     dag2.resolve();
     dag2.traverseTopDownResolved(No.root).map!(n => n.name).should == [
         "b", "d", "c", "a"
@@ -2445,7 +2451,7 @@ final class MockDepSource : DepSource
         return false;
     }
 
-    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null)
     {
         assert(false, "Not implemented");
     }

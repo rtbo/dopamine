@@ -120,7 +120,7 @@ interface DepSource
     @property bool hasDepDependencies();
 
     /// Get the dependencies of a package
-    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null);
+    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null);
 }
 
 final class SystemDepSource : DepSource
@@ -177,7 +177,7 @@ final class SystemDepSource : DepSource
         return false;
     }
 
-    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null)
     {
         // TODO: pkg-config dependencies
         assert(false, "Not implemented");
@@ -277,7 +277,7 @@ final class DopCacheDepSource : DepSource
         return false;
     }
 
-    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null)
     {
         assert(false, "Not implemented");
     }
@@ -347,7 +347,7 @@ final class DopRegistryDepSource : DepSource
         return false;
     }
 
-    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null)
     {
         assert(false, "Not implemented");
     }
@@ -407,7 +407,7 @@ final class DubCacheDepSource : DepSource
         return false;
     }
 
-    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null)
     {
         assert(false, "Not implemented");
     }
@@ -466,7 +466,7 @@ final class DubRegistryDepSource : DepSource
         return true;
     }
 
-    const(DepSpec)[] depDependencies(const(Profile) profile, string name, Semver ver, string rev = null)
+    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null)
     {
         return _registry.pkgDependencies(name, ver);
     }

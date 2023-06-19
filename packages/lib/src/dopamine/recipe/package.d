@@ -498,8 +498,8 @@ interface Recipe
     /// In case dependencies are only needed for some profile cases, true is returned.
     @property bool hasDependencies() const @safe;
 
-    /// Get the dependencies of the package for the given compiliation profile
-    const(DepSpec)[] dependencies(const(Profile) profile) @system;
+    /// Get the dependencies of the package for the given build config
+    const(DepSpec)[] dependencies(const(BuildConfig) config) @system;
 
     /// Whether this recipe has dependencies.
     /// In case dependencies are only needed for some profile cases, true is returned.
@@ -511,8 +511,8 @@ interface Recipe
     /// Get the list of modules declared by this recipe
     @property string[] modules() @safe;
 
-    /// Get the dependencies of the provided module for the given compilation profile.
-    @property const(DepSpec)[] moduleDependencies(string moduleName, const(Profile) profile) @system;
+    /// Get the dependencies of the provided module for the given build config
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(BuildConfig) config) @system;
 
     /// Get the files to include with the recipe when publishing to registry.
     /// This is relative to the root recipe dir.
@@ -664,7 +664,7 @@ version (unittest)  : final class MockRecipe : Recipe
     }
 
     /// Get the dependencies of the package for the given compilation profile
-    const(DepSpec)[] dependencies(const(Profile) profile) @system
+    const(DepSpec)[] dependencies(const(BuildConfig) config) @system
     {
         return _deps;
     }
@@ -675,7 +675,7 @@ version (unittest)  : final class MockRecipe : Recipe
         return [];
     }
     /// ditto
-    @property const(DepSpec)[] moduleDependencies(string moduleName, const(Profile) profile) @system
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(BuildConfig) config) @system
     {
         return [];
     }

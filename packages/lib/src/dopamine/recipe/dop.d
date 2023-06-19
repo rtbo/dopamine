@@ -305,7 +305,7 @@ final class DopRecipe : Recipe
         return hasFunction("dependencies") || _dependencies.length != 0;
     }
 
-    const(DepSpec)[] dependencies(const(Profile) profile) @system
+    const(DepSpec)[] dependencies(const(BuildConfig) config) @system
     {
         if (!hasFunction("dependencies"))
             return _dependencies;
@@ -317,7 +317,7 @@ final class DopRecipe : Recipe
 
         assert(lua_type(L, funcPos) == LUA_TFUNCTION);
 
-        luaPushProfile(L, profile);
+        pushConfig(L, config, _options);
 
         const cwd = getcwd();
         chdir(_rootDir);
@@ -342,7 +342,7 @@ final class DopRecipe : Recipe
     }
 
     /// ditto
-    @property const(DepSpec)[] moduleDependencies(string moduleName, const(Profile) profile) @system
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(BuildConfig) config) @system
     {
         return [];
     }
@@ -865,12 +865,6 @@ void pushConfig(lua_State* L, const(BuildConfig) config, Option[string] optionDe
 
 void pushDepInfos(lua_State* L, DepBuildInfo[string] depInfos) @trusted
 {
-    if (!depInfos)
-    {
-        lua_pushnil(L);
-        return;
-    }
-
     lua_createtable(L, 0, cast(int) depInfos.length);
     const depInfosInd = lua_gettop(L);
     foreach (k, di; depInfos)

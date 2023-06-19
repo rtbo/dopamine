@@ -50,6 +50,7 @@ int resolveMain(string[] args)
     bool pickHighest;
     bool noNetwork;
     bool noSystem;
+    string[] optionOverrides;
 
     auto helpInfo = getopt(args,
         "force|f", "Resolve dependencies and overwrite lock file", &force,
@@ -59,6 +60,7 @@ int resolveMain(string[] args)
         "pick-highest", "Resolve dependencies using the `pickHighest` mode", &pickHighest,
         "no-network|N", "Resolve dependencies without using network", &noNetwork,
         "no-system", "Resolve dependencies without using system installed packages", &noSystem,
+        "option|o", "Override option", &optionOverrides,
     );
 
     if (helpInfo.helpWanted)
@@ -83,7 +85,13 @@ int resolveMain(string[] args)
     );
     auto profile = Profile.loadFromFile(rdir.profileFile);
 
-    // FIXME: add options to modify existing lock file
+    auto options = rdir.readOptionFile();
+    foreach(oo; optionOverrides)
+    {
+        parseOptionSpec(options, oo);
+    }
+
+    const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
 
     if (rdir.hasDepsLockFile && !force)
     {
@@ -107,7 +115,7 @@ int resolveMain(string[] args)
 
     try
     {
-        auto dag = DepDAG.prepare(rdir, profile, services, heuristics);
+        auto dag = DepDAG.prepare(rdir, config, services, heuristics);
         dag.resolve();
 
         auto json = dag.toJson();
