@@ -177,7 +177,8 @@ int luaDopNativeModule(lua_State* L) nothrow
         "checksum": &luaChecksum,
         "create_archive": &luaCreateArchive,
         "extract_archive": &luaExtractArchive,
-        "priv_read_pkgconf_file": &luaPrivReadPkgConfFile,
+        "priv_pkgconf_read_file": &luaPrivPkgConfReadFile,
+        "priv_pkgconf_argv_split": &luaPrivPkgConfArgvSplit,
     ];
     // dfmt on
 
@@ -1020,7 +1021,7 @@ int luaExtractArchive(lua_State* L) nothrow
     });
 }
 
-int luaPrivReadPkgConfFile(lua_State* L) nothrow
+int luaPrivPkgConfReadFile(lua_State* L) nothrow
 {
     import dopamine.pkgconf;
 
@@ -1076,4 +1077,30 @@ int luaPrivReadPkgConfFile(lua_State* L) nothrow
 
         return 1;
     });
+}
+
+extern(C) nothrow int pkgconf_argv_split(const char *src, int *argc, char ***argv);
+extern(C) nothrow void pkgconf_argv_free(char **argv);
+
+int luaPrivPkgConfArgvSplit(lua_State* L) nothrow
+{
+    size_t sz;
+    const(char)* str = luaL_checklstring(L, 1, &sz);
+
+    int argc;
+    char **argv;
+
+    if (pkgconf_argv_split(str, &argc, &argv) != 0)
+        luaL_argerror(L, 1, "Failed to split args from Pkg-config file");
+
+    lua_newtable(L);
+    const int tblIdx = lua_gettop(L);
+    for(int idx; idx < argc; ++idx)
+    {
+        lua_pushstring(L, argv[idx]);
+        lua_rawseti(L, tblIdx, idx+1);
+    }
+    pkgconf_argv_free(argv);
+
+    return 1;
 }
