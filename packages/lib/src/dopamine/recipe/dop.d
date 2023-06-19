@@ -324,7 +324,7 @@ final class DopRecipe : Recipe
         scope (exit)
             chdir(cwd);
 
-        if (lua_pcall(L, nargs, /* nresults = */ 1, 0) != LUA_OK)
+        if (luaProtectedCall(L, nargs, /* nresults = */ 1) != LUA_OK)
         {
             throw new Exception("Cannot get dependencies: " ~ luaPop!string(L));
         }
@@ -368,7 +368,7 @@ final class DopRecipe : Recipe
         scope (exit)
             chdir(cwd);
 
-        if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        if (luaProtectedCall(L, 0, 1) != LUA_OK)
         {
             throw new Exception("Cannot get files included with recipe: " ~ luaPop!string(L));
         }
@@ -396,7 +396,7 @@ final class DopRecipe : Recipe
         scope (exit)
             chdir(cwd);
 
-        if (lua_pcall(L, /* nargs = */ 0, /* nresults = */ 1, 0) != LUA_OK)
+        if (luaProtectedCall(L, /* nargs = */ 0, /* nresults = */ 1) != LUA_OK)
         {
             throw new Exception("Cannot get source: " ~ luaPop!string(L));
         }
@@ -435,7 +435,7 @@ final class DopRecipe : Recipe
         scope (exit)
             chdir(cwd);
 
-        if (lua_pcall(L, /* nargs = */ 3, /* nresults = */ 0, 0) != LUA_OK)
+        if (luaProtectedCall(L, /* nargs = */ 3, /* nresults = */ 0) != LUA_OK)
         {
             throw new Exception("Cannot build recipe: " ~ luaPop!string(L));
         }
@@ -465,7 +465,7 @@ final class DopRecipe : Recipe
             scope (exit)
                 chdir(cwd);
 
-            if (lua_pcall(L, 2, 0, 0) != LUA_OK)
+            if (luaProtectedCall(L, 2, 0) != LUA_OK)
             {
                 throw new Exception("Cannot stage recipe: " ~ luaPop!string(L));
             }
