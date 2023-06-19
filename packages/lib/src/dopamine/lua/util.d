@@ -108,6 +108,31 @@ void luaAddPrefixToPath(lua_State* L, string prefix)
     lua_pop(L, 1);
 }
 
+/// Same as lua_pcall, but add stack trace in the error message
+int luaProtectedCall(lua_State* L, int nargs, int nret)
+{
+    // calculate stack position for message handler
+    int hpos = lua_gettop( L ) - nargs;
+    int ret = 0;
+    // push custom error message handler
+    lua_pushcfunction( L, &backtraceMsgHandler );
+    // move it before function and arguments
+    lua_insert( L, hpos );
+    // call lua_pcall function with custom handler
+    ret = lua_pcall( L, nargs, nret, hpos );
+    // remove custom error message handler from stack
+    lua_remove( L, hpos );
+    // pass return value of lua_pcall
+    return ret;
+}
+
+private extern(C) int backtraceMsgHandler(lua_State* L) nothrow
+{
+    // Create traceback appended to error string
+    luaL_traceback(L, L, lua_tostring(L, 1), 1);
+    return 1;
+}
+
 enum isLuaScalar(T) = (isSomeString!T || isNumeric!T || is(T == bool));
 
 void luaPush(T)(lua_State* L, T value) nothrow if (isLuaScalar!T)
@@ -331,7 +356,7 @@ void luaPushArray(T)(lua_State* L, const(T)[] arr)
 }
 
 // some debugging functions
-
+/// Print the values on the Lua stack (to not mixup with the call stack trace)
 void luaPrintStack(lua_State* L, File output)
 {
     import std.string : fromStringz;
