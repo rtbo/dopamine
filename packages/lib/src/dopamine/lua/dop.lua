@@ -180,8 +180,15 @@ local pc_lst_fields = {
     'conflicts',
 }
 
+local pc_argv_fields = {
+    'cflags',
+    'cflags.private',
+    'libs',
+    'libs.private',
+}
+
 function PkgConfFile:parse(path)
-    local parsed = dop_native.priv_read_pkgconf_file(path)
+    local parsed = dop_native.priv_pkgconf_read_file(path)
     setmetatable(parsed, self)
     setmetatable(parsed.vars, vars_mt)
     return parsed
@@ -199,12 +206,15 @@ function PkgConfFile:new(options)
     if options.version == nil then
         error('Version field is required by PkgConfig', -2)
     end
+    if options.description == nil then
+        error('Description field is required by PkgConfig', -2)
+    end
 
     if options.vars.prefix == nil then
         io.stderr:write('Warning: PkgConfFile without prefix variable')
     end
 
-    for k, _ in pairs(options) do
+    for k, o in pairs(options) do
         if k == 'vars' then
             goto continue
         end
@@ -220,6 +230,11 @@ function PkgConfFile:new(options)
         end
         error('Unknown pkg-config field: ' .. k, -2)
         ::continue::
+        for _, s in ipairs(pc_argv_fields) do
+            if k == s and type(o) == 'string' then
+                options[k] = dop_native.priv_pkgconf_argv_split(o)
+            end
+        end
     end
 
     return options
@@ -232,6 +247,55 @@ function PkgConfFile:expand(value)
         if num == 0 then
             return value
         end
+    end
+end
+
+local function translate_msvc_libs(pc, field)
+    local libflags = pc[field]
+    local msvc = {}
+    local libpaths = {}
+    local libs = {}
+    for _, flag in ipairs(libflags) do
+        local libpath = flag:match('-L(.+)')
+        if libpath then
+            table.insert(libpaths, libpath)
+            goto continue
+        end
+        local lib = flag:match('-l(.+)')
+        if lib then
+            table.insert(libs, lib)
+            goto continue
+        end
+        table.insert(msvc, flag)
+        ::continue::
+    end
+    for _, lib in ipairs(libs) do
+        local flag = nil
+        local elib = pc:expand(lib)
+
+        if dop.is_file(lib) then
+            flag = elib
+        else
+            for _, libpath in ipairs(libpaths) do
+                local elibpath = pc:expand(libpath)
+                local path = find_libfile_win(elibpath, elib)
+                if path then
+                    flag = libpath .. '/' .. dop.base_name(path)
+                    break
+                end
+            end
+        end
+        table.insert(msvc, flag or lib .. '.lib')
+    end
+    return msvc
+end
+
+function PkgConfFile:translate_msvc()
+    if self.libs then
+        self.libs = translate_msvc_libs(self, 'libs')
+    end
+    if self['libs.private'] then
+        self['libs.private'] = translate_msvc_libs(self, 'libs.private')
     end
 end
 
@@ -302,46 +366,6 @@ function dop.pkg_config_path(dep_infos)
         end
     end
     return table.concat(path, dop.path_sep)
-end
-
-local function translate_msvc_libs(pc, field)
-    local libflags = pc[field]
-    local msvc = {}
-    local libpaths = {}
-    local libs = {}
-    for _, flag in ipairs(libflags) do
-        local libpath = flag:match('-L(.+)')
-        if libpath then
-            table.insert(libpaths, libpath)
-            goto continue
-        end
-        local lib = flag:match('-l(.+)')
-        if lib then
-            table.insert(libs, lib)
-            goto continue
-        end
-        table.insert(msvc, flag)
-        ::continue::
-    end
-    for _, lib in ipairs(libs) do
-        local flag = nil
-        local elib = pc:expand(lib)
-
-        if dop.is_file(lib) then
-            flag = elib
-        else
-            for _, libpath in ipairs(libpaths) do
-                local elibpath = pc:expand(libpath)
-                local path = find_libfile_win(elibpath, elib)
-                if path then
-                    flag = libpath .. '/' .. dop.base_name(path)
-                    break
-                end
-            end
-        end
-        table.insert(msvc, flag or lib .. '.lib')
-    end
-    return msvc
 end
 
 local function translate_pkgconf_msvc(path)
