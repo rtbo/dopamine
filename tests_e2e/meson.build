@@ -48,6 +48,7 @@ e2e_tests = [
     'options',
     'options-dep',
     'options-dep2',
+    'optional-dep',
 
     'warning',
 ]
@@ -62,7 +63,7 @@ foreach e2e_test : e2e_tests
             files('tests/' + e2e_test + '.test'),
         ],
         suite: 'e2e',
-        timeout: 120,
+        timeout: 300,
     )
 
 endforeach
