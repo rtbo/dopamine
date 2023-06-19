@@ -1,0 +1,14 @@
+SKIP_NOPROG=meson
+
+RECIPE=app2
+CACHE=base
+REGISTRY=base
+
+CMD=$DOP profile --discover
+CMD=$DOP resolve
+CMD=$DOP source
+
+CMD=$DOP build
+EXPECT_MATCH=Recipe: OK - app2/1.0.0
+EXPECT_DIR=.dop/$DOP_BID-build
+EXPECT_EXE=.dop/$DOP_BID-build/bin/app2
