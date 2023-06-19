@@ -8,7 +8,7 @@ if host_machine.system() == 'windows'
     cflags_pkgc = ['-DIS_DLL']
 endif
 
-pkga_lib = library('pkga', ['pkga.h', 'pkga.c'],
+pkga_lib = library('pkga', files(['pkga.h', 'pkga.c']),
     install: true,
     include_directories: ['.'],
     c_args: cflags,
