@@ -180,8 +180,8 @@ final class DepService
         memRecipe(rdir);
         return rdir;
     }
-
-    const(DepSpec)[] packDependencies(const(Profile) profile, string name, const(AvailVersion) aver, string revision = null) @system
+ 
+    const(DepSpec)[] packDependencies(const(BuildConfig) config, string name, const(AvailVersion) aver, string revision = null) @system
     {
         const pkgName = PackageName(name);
         auto rdir = packRecipeMem(pkgName.pkgName, aver.ver, revision);
@@ -189,15 +189,15 @@ final class DepService
         {
             // dfmt off
             return pkgName.isModule
-                ? rdir.recipe.moduleDependencies(pkgName.modName, profile)
-                : rdir.recipe.dependencies(profile);
+                ? rdir.recipe.moduleDependencies(pkgName.modName, config)
+                : rdir.recipe.dependencies(config);
             // dfmt on
         }
 
         const inCache = cacheSrc.hasPackage(name, aver.ver, revision);
 
         if (aver.location.isNetwork && !inCache && networkSrc.hasDepDependencies)
-            return networkSrc.depDependencies(profile, name, aver.ver, revision);
+            return networkSrc.depDependencies(config, name, aver.ver, revision);
         else if (aver.location.isNetwork && inCache)
             rdir = cacheSrc.depRecipe(pkgName.pkgName, aver.ver, revision);
         else if (aver.location.isNetwork && !inCache)
@@ -209,8 +209,8 @@ final class DepService
 
         // dfmt off
         return pkgName.isModule
-            ? rdir.recipe.moduleDependencies(pkgName.modName, profile)
-            : rdir.recipe.dependencies(profile);
+            ? rdir.recipe.moduleDependencies(pkgName.modName, config)
+            : rdir.recipe.dependencies(config);
         // dfmt on
     }
 

@@ -1,0 +1,19 @@
+RECIPE=optional-dep
+REGISTRY=base
+
+CMD=$DOP profile --discover
+CMD=$DOP resolve
+CMD=$DOP source
+
+CMD=$DOP -v build
+
+CMD=".dop/$DOP_BID/bin/optional-dep"
+EXPECT_MATCH=1
+
+CMD=$DOP options pkgb=true
+CMD=$DOP profile --discover
+CMD=$DOP resolve --force
+CMD=$DOP build
+CMD=".dop/$DOP_BID/bin/optional-dep"
+EXPECT_MATCH=3
+
