@@ -305,7 +305,12 @@ final class DopRecipe : Recipe
         return hasFunction("dependencies") || _dependencies.length != 0;
     }
 
-    const(DepSpec)[] dependencies(const(BuildConfig) config) @system
+    @property bool hasDynDependencies() const @safe
+    {
+        return hasFunction("dependencies");
+    }
+
+    const(DepSpec)[] dependencies(const(ResolveConfig) config) @system
     {
         if (!hasFunction("dependencies"))
             return _dependencies;
@@ -317,7 +322,7 @@ final class DopRecipe : Recipe
 
         assert(lua_type(L, funcPos) == LUA_TFUNCTION);
 
-        pushConfig(L, config, _options);
+        pushResolveConfig(L, config, _options);
 
         const cwd = getcwd();
         chdir(_rootDir);
@@ -342,7 +347,7 @@ final class DopRecipe : Recipe
     }
 
     /// ditto
-    @property const(DepSpec)[] moduleDependencies(string moduleName, const(BuildConfig) config) @system
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(ResolveConfig) config) @system
     {
         return [];
     }
@@ -427,7 +432,7 @@ final class DopRecipe : Recipe
         enforce(lua_type(L, -1) == LUA_TFUNCTION, "package recipe is missing a build function");
 
         pushBuildDirs(L, dirs);
-        pushConfig(L, config, _options);
+        pushBuildConfig(L, config, _options);
         pushDepInfos(L, depInfos);
 
         const cwd = getcwd();
@@ -830,7 +835,49 @@ void pushBuildDirs(lua_State* L, BuildDirs dirs) @trusted
     luaSetTable(L, ind, "install", dirs.install);
 }
 
-void pushConfig(lua_State* L, const(BuildConfig) config, Option[string] optionDecls) @trusted
+void pushResolveConfig(lua_State* L, const(ResolveConfig) config, Option[string] optionDecls) @trusted
+{
+    import std.sumtype : match;
+
+    lua_createtable(L, 0, 2);
+    const ind = lua_gettop(L);
+
+    lua_pushliteral(L, "host");
+    lua_createtable(L, 0, 2);
+    const hostInd = lua_gettop(L);
+    luaSetTable(L, hostInd, "os", config.hostInfo.os.toConfig);
+    luaSetTable(L, hostInd, "arch", config.hostInfo.arch.toConfig);
+    lua_settable(L, ind); // host table
+
+    luaSetTable(L, ind, "build_type", config.buildType.toConfig);
+
+    lua_pushliteral(L, "modules");
+    luaPushArray(L, config.modules);
+    lua_settable(L, ind);
+
+    OptionVal[string] options;
+    foreach (name, decl; optionDecls)
+        options[name] = decl.defaultValue;
+    foreach (name, val; config.options)
+        options[name] = val;
+
+    lua_pushliteral(L, "options");
+    lua_createtable(L, 0, cast(int) options.length);
+    const optInd = lua_gettop(L);
+    foreach (name, val; options)
+    {
+        luaPush(L, name);
+        val.match!(
+            (bool val) => luaPush(L, val),
+            (int val) => luaPush(L, val),
+            (string val) => luaPush(L, val),
+        );
+        lua_settable(L, optInd);
+    }
+    lua_settable(L, ind);
+}
+
+void pushBuildConfig(lua_State* L, const(BuildConfig) config, Option[string] optionDecls) @trusted
 {
     import std.sumtype : match;
 
@@ -839,6 +886,10 @@ void pushConfig(lua_State* L, const(BuildConfig) config, Option[string] optionDe
 
     lua_pushliteral(L, "profile");
     luaPushProfile(L, config.profile);
+    lua_settable(L, ind);
+
+    lua_pushliteral(L, "modules");
+    luaPushArray(L, config.modules);
     lua_settable(L, ind);
 
     OptionVal[string] options;

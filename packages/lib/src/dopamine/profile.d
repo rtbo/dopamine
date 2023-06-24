@@ -172,6 +172,16 @@ struct HostInfo
         return _os;
     }
 
+    HostInfo withArch(Arch arch) const
+    {
+        return HostInfo(arch, _os);
+    }
+
+    HostInfo withOs(OS os) const
+    {
+        return HostInfo(_arch, os);
+    }
+
     private void feedDigest(D)(ref D digest) const
     if (isDigest!D)
     {
@@ -193,6 +203,31 @@ struct HostInfo
         app.put(format("arch=%s\n", _arch.toConfig()));
         app.put(format("os=%s\n", _os.toConfig()));
     }
+}
+
+@property Arch currentArch()
+{
+    version(X86_64)
+        return Arch.x86_64;
+    else version(X86)
+        return Arch.x86;
+    else
+        static assert(false, "Unsupported architecture");
+}
+
+@property OS currentOs()
+{
+    version(linux)
+        return OS.linux;
+    else version(Windows)
+        return OS.windows;
+    else
+        static assert(false, "Unsupported OS");
+}
+
+@property HostInfo currentHostInfo()
+{
+    return HostInfo(currentArch, currentOs);
 }
 
 /// A tool necessary to build the recipe and for which
@@ -711,37 +746,6 @@ class ToolVersionParseException : Exception
 private:
 
 import dopamine.util;
-
-HostInfo currentHostInfo()
-{
-    version (X86_64)
-    {
-        const arch = Arch.x86_64;
-    }
-    else version (X86)
-    {
-        const arch = Arch.x86;
-    }
-    else
-    {
-        static assert(false, "unsupported architecture");
-    }
-
-    version (Windows)
-    {
-        const os = OS.windows;
-    }
-    else version (linux)
-    {
-        const os = OS.linux;
-    }
-    else
-    {
-        static assert(false, "unsupported OS");
-    }
-
-    return HostInfo(arch, os);
-}
 
 Tool detectTool(string id)
 {

@@ -180,8 +180,8 @@ final class DepService
         memRecipe(rdir);
         return rdir;
     }
- 
-    const(DepSpec)[] packDependencies(const(BuildConfig) config, string name, const(AvailVersion) aver, string revision = null) @system
+
+    const(DepSpec)[] packDependencies(const(ResolveConfig) config, string name, const(AvailVersion) aver, string revision = null) @system
     {
         const pkgName = PackageName(name);
         auto rdir = packRecipeMem(pkgName.pkgName, aver.ver, revision);

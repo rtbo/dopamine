@@ -78,7 +78,7 @@ void enforceRecipeIntegrity(RecipeDir rdir,
     DepBuildInfo[string] depBuildInfos;
     DepBuildInfo[] directDepBuildInfos;
 
-    const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
+    const resolveConfig = ResolveConfig(profile, [], options);
 
     if (recipe.hasDependencies)
     {
@@ -87,7 +87,7 @@ void enforceRecipeIntegrity(RecipeDir rdir,
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;
 
-        auto dag = DepDAG.prepare(rdir, config, services, heuristics);
+        auto dag = DepDAG.prepare(rdir, resolveConfig, services, heuristics);
         dag.resolve();
         auto json = dag.toJson();
         write(rdir.depsLockFile, json.toPrettyString());
@@ -100,7 +100,8 @@ void enforceRecipeIntegrity(RecipeDir rdir,
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
     const srcDir = recipe.inTreeSrc ? rdir.root : recipe.source();
 
-    const buildId = BuildId(recipe, config, directDepBuildInfos);
+    const buildConfig = BuildConfig(profile.subset(recipe.tools), options.forRoot());
+    const buildId = BuildId(recipe, buildConfig, directDepBuildInfos);
     const bPaths = rdir.buildPaths(buildId);
 
     const bdirs = BuildDirs(rdir.root, rdir.path(srcDir), bPaths.build, bPaths.install);
@@ -108,7 +109,7 @@ void enforceRecipeIntegrity(RecipeDir rdir,
     mkdirRecurse(bPaths.build);
 
     logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
-    recipe.build(bdirs, config, depBuildInfos);
+    recipe.build(bdirs, buildConfig, depBuildInfos);
 }
 
 int publishMain(string[] args)

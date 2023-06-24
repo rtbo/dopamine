@@ -328,8 +328,7 @@ struct DepDAG
     ///
     /// Params:
     ///   recipe = Recipe from the root package
-    ///   config = Build configuration. It is needed here because packages may declare
-    ///            different depedencies for different configs.
+    ///   config = The dependency resolution configuration
     ///   service = The dependency service to fetch available versions and recipes.
     ///   heuristics = The heuristics to select the dependencies.
     ///   preFilter = Whether or not to apply a first stage of compatibility and heuristics filtering.
@@ -340,7 +339,7 @@ struct DepDAG
     /// Returns: a [DepDAG] ready for the next phase
     static DepDAG prepare(
         RecipeDir rdir,
-        const(BuildConfig) config,
+        const(ResolveConfig) config,
         DepServices services,
         const Heuristics heuristics = Heuristics.init,
         Flag!"preFilter" preFilter = Yes.preFilter) @system
@@ -1354,10 +1353,9 @@ version (unittest)
 {
     import unit_threaded.assertions;
 
-    BuildConfig mockConfigLinux()
+    ResolveConfig mockConfigLinux()
     {
-        auto profile = mockProfileLinux();
-        return BuildConfig(profile, [], OptionSet.init);
+        return ResolveConfig(HostInfo(Arch.x86_64, OS.linux), BuildType.debug_, [], OptionSet.init);
     }
 }
 
@@ -2451,7 +2449,7 @@ final class MockDepSource : DepSource
         return false;
     }
 
-    const(DepSpec)[] depDependencies(const(BuildConfig) config, string name, Semver ver, string rev = null)
+    const(DepSpec)[] depDependencies(const(ResolveConfig) config, string name, Semver ver, string rev = null)
     {
         assert(false, "Not implemented");
     }

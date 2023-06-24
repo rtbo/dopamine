@@ -114,7 +114,12 @@ class DubRecipe : Recipe
         return (() @trusted => _dubPack.rawRecipe.buildSettings.dependencies.length > 0)();
     }
 
-    private const(DepSpec)[] pkgDependencies(Package pkg, const(BuildConfig) config)
+    @property bool hasDynDependencies() const @safe
+    {
+        return false;
+    }
+
+    private const(DepSpec)[] pkgDependencies(Package pkg, const(ResolveConfig) config)
     {
         const name = _dubPack.name;
         const defaultConfig = pkg.configurations.length ? pkg.configurations[0] : "library";
@@ -130,7 +135,7 @@ class DubRecipe : Recipe
             .array;
     }
 
-    const(DepSpec)[] dependencies(const(BuildConfig) config) @system
+    const(DepSpec)[] dependencies(const(ResolveConfig) config) @system
     {
         return pkgDependencies(_dubPack, config);
     }
@@ -198,7 +203,7 @@ class DubRecipe : Recipe
         throw new NoSuchPackageModuleException(name, modName);
     }
 
-    @property const(DepSpec)[] moduleDependencies(string moduleName, const(BuildConfig) config) @system
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(ResolveConfig) config) @system
     {
         auto pkg = loadSubPackage(moduleName);
         return pkgDependencies(pkg, config);
