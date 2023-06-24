@@ -343,7 +343,7 @@ string[] luaReadStringArray(lua_State* L, int ind) nothrow
     return arr;
 }
 
-/// Push a string array on the stack
+/// Push an array on the stack
 void luaPushArray(T)(lua_State* L, const(T)[] arr)
 {
     lua_createtable(L, cast(int) arr.length, 0);
