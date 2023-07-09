@@ -283,6 +283,12 @@ unittest
     assert(VersionSpec("<1.2.3").matchVersion("1.2.2"));
     assert(!VersionSpec("<1.2.3").matchVersion("1.2.4"));
 
+    assert(VersionSpec("==1.2.3").matchVersion("1.2.3"));
+    assert(!VersionSpec("==1.2.3").matchVersion("1.2.4"));
+    assert(!VersionSpec("==1.2.3").matchVersion("1.2.2"));
+    assert(!VersionSpec("==1.2.3").matchVersion("1.2.3-beta"));
+
+    // same as '=='
     assert(VersionSpec("1.2.3").matchVersion("1.2.3"));
     assert(!VersionSpec("1.2.3").matchVersion("1.2.4"));
     assert(!VersionSpec("1.2.3").matchVersion("1.2.2"));
