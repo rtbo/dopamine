@@ -293,35 +293,20 @@ class ExpectVersion : Expect
 
     override string expect(ref RunResult res)
     {
-        import vibe.data.json : parseJsonString;
+        import dopamine.dep.resolve : DepGraph;
+        import std.algorithm : canFind;
+        import std.json : parseJSON;
 
         auto lockpath = res.filepath("dop.lock");
         auto jsonStr = cast(string) read(lockpath);
-        auto json = parseJsonString(jsonStr);
-        foreach (jpack; json["packages"])
-        {
-            if (jpack["name"] != pkgname)
-                continue;
+        auto json = parseJSON(jsonStr);
+        auto dag = DepGraph.fromJson(json);
 
-            foreach (jver; jpack["versions"])
-            {
-                if (jver["status"] == "resolved")
-                {
-                    if (jver["version"] == ver)
-                    {
-                        return null;
-                    }
-                    else
-                    {
-                        return format(
-                            "%s was resolved to v%s (expected v%s)",
-                            pkgname, jver["version"].get!string, ver
-                        );
-                    }
-                }
-            }
-            return "could not find a resolved version for " ~ pkgname;
+        if (dag.traverseTopDown(Yes.root).canFind!(n => n.name == pkgname && n.ver == ver))
+        {
+            return null;
         }
+
         return "could not find package " ~ pkgname ~ " in dop.lock";
     }
 }

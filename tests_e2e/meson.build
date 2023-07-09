@@ -10,7 +10,7 @@ e2e_driver_src = files([
 
 e2e_driver_exe = executable('e2e-driver', e2e_driver_src,
     install: false,
-    dependencies: [vibed_http_dep, jwt_dep],
+    dependencies: [vibed_http_dep, jwt_dep, dop_dep],
     d_module_versions: dop_registry_storage_versions,
 )
 

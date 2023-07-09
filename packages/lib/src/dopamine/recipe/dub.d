@@ -131,7 +131,7 @@ class DubRecipe : Recipe
                     dd.name,
                     (dd.name.isModule && dd.name.pkgName == name) ?
                     VersionSpec("==" ~ _dubPack.version_.toString()) : adaptDubVersionSpec(dd.spec),
-                    true))
+                    DepKind.dub))
             .array;
     }
 
@@ -246,18 +246,18 @@ class DubRecipe : Recipe
         return true;
     }
 
-    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     {
         auto pack = loadSubPackage(config.modules[0]);
         doBuild(pack, dirs, config, depInfos);
     }
 
-    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     {
         doBuild(_dubPack, dirs, config, depInfos);
     }
 
-    private void doBuild(Package pack, BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null)
+    private void doBuild(Package pack, BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos)
     {
         import dub.internal.vibecompat.data.json;
 
@@ -293,7 +293,7 @@ class DubRecipe : Recipe
         pkg.name = pack.name;
         pkg.description = pack.rawRecipe.description;
         pkg.ver = ver.toString();
-        foreach (k, v; depInfos)
+        foreach (k, v; depInfos.dub)
             pkg.requires ~= format!"%s = %s"(k.replace(':', '_'), v.ver);
         pkg.cflags = bs.importPaths.map!(p => dcf.importPath("${includedir}/" ~ p))
             .chain(bs.versions.map!(v => dcf.version_(v)))
@@ -320,12 +320,12 @@ class DubRecipe : Recipe
     }
 
     private string buildStaticLibrary(ref BuildSettings bs, Package pack, BuildDirs dirs, const(
-            BuildConfig) config, DepBuildInfo[string] depInfos)
+            BuildConfig) config, DepGraphBuildInfo depInfos)
     {
         import std.process;
 
         // build pkg-config search path and collect dependencies requirements
-        string pkgconfPath = depInfos.byValue()
+        string pkgconfPath = depInfos.dub.byValue()
             .map!(d => d.installDir)
             .filter!(d => d.length > 0)
             .map!(d => buildPath(d, "lib", "pkgconfig"))
@@ -335,7 +335,8 @@ class DubRecipe : Recipe
         auto pkgconfEnv = [
             "PKG_CONFIG_PATH": pkgconfPath,
         ];
-        foreach (d; depInfos.byKey())
+
+        foreach (d; depInfos.dub.byKey())
         {
             auto pkgcId = d.replace(":", "_");
             auto df = execute([pkgConfigExe, "--cflags", pkgcId], pkgconfEnv);

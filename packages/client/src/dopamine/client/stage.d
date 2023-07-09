@@ -9,7 +9,7 @@ import dopamine.client.utils;
 import dopamine.build_id;
 import dopamine.cache;
 import dopamine.dep.build;
-import dopamine.dep.dag;
+import dopamine.dep.resolve;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
@@ -29,11 +29,12 @@ void stagePackage(
     Profile profile,
     string absDest,
     OptionSet options,
-    DagNode dnode)
+    DepGraphBuildInfo dgbi,
+    const(DgNode) dnode)
 in (isAbsolute(absDest))
 {
     const config = BuildConfig(profile.subset(rdir.recipe.tools), options.forRoot());
-    const buildId = BuildId(rdir.recipe, config, collectDirectDepBuildInfos(dnode), absDest);
+    const buildId = BuildId(rdir.recipe, config, dgbi.nodeDirectDepBuildInfos(dnode), absDest);
     const bPaths = rdir.buildPaths(buildId);
     acquireBuildLockFile(bPaths);
 
@@ -42,7 +43,7 @@ in (isAbsolute(absDest))
         string reason;
         if (!rdir.checkBuildReady(buildId, reason))
         {
-            buildPackage(rdir, config, dnode, absDest);
+            buildPackage(rdir, config, dgbi, dnode, absDest);
         }
         return;
     }
@@ -92,7 +93,8 @@ int stageMain(string[] args)
         parseOptionSpec(options, oo);
     }
 
-    DagNode rootNode;
+    DepGraphBuildInfo dgbi;
+    Rebindable!(const(DgNode)) rootNode;
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
@@ -101,21 +103,21 @@ int stageMain(string[] args)
             buildDubDepService(homeDubCacheDir(), null),
         );
 
-        ensureDepBuildInfos(dag, recipe, profile, services, options.forDependencies(), absDest);
+        dgbi = calcDepBuildInfos(dag, rdir.recipe, profile, services, options.forDependencies(), absDest);
 
-        foreach (dn; dag.traverseTopDownResolved())
+        foreach (dn; dag.traverseTopDown())
         {
-            auto service = dn.dub ? services.dub : services.dop;
-            auto drdir = service.packRecipe(dn.pack.name, dn.aver, dn.revision);
+            auto service = services[dn.kind];
+            auto drdir = service.packRecipe(dn.name, dn.aver, dn.revision);
             auto dprof = profile.subset(drdir.recipe.tools);
 
-            stagePackage(drdir, dprof, absDest, options.forDependency(dn.name), dn);
+            stagePackage(drdir, dprof, absDest, options.forDependency(dn.name), dgbi.nodeDeepDepBuildInfos(dn), dn);
         }
 
-        rootNode = dag.root.resolvedNode;
+        rootNode = dag.root;
     }
 
-    stagePackage(rdir, profile.subset(recipe.tools), absDest, options.forRoot(), rootNode);
+    stagePackage(rdir, profile.subset(recipe.tools), absDest, options.forRoot(), dgbi, rootNode);
 
     logInfo("Stage: %s - %s", success("OK"), info(dest));
 

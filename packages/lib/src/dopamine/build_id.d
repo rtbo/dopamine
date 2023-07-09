@@ -33,11 +33,11 @@ struct BuildId
 
         config.feedDigest(digest);
 
-        depInfos.sort!((a, b) { return a.name == b.name ? a.dub < b.dub : a.name < b.name; });
+        depInfos.sort!((a, b) { return a.kind == b.kind ? a.name < b.name : a.kind < b.kind; });
         foreach (depInfo; depInfos)
         {
             feedDigestData(digest, depInfo.name);
-            feedDigestData(digest, depInfo.dub);
+            feedDigestData(digest, depInfo.kind);
             feedDigestData(digest, depInfo.buildId.toString());
         }
 

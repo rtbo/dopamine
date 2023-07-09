@@ -12,13 +12,14 @@ include = {
     'meson.build',
 }
 
-function build(dirs, config, deps)
+function build(dirs, config, dep_infos)
     local profile = config.profile
     local meson = dop.Meson:new(profile)
+    local pkga = dep_infos.dop.pkga;
 
     local env = {
         PKG_CONFIG_PATH = dop.path(
-            deps['pkga'].install_dir,
+            pkga.install_dir,
             'lib',
             'pkgconfig'
         ),

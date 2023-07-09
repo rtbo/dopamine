@@ -27,6 +27,7 @@ if get_option('enable_test')
 
     dop_client_test_src = files([
         'src/dopamine/client/profile.d',
+        'src/dopamine/client/resolve.d',
         'src/dopamine/client/utils.d',
     ])
 

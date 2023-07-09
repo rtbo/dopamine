@@ -3,7 +3,7 @@ module dopamine.client.resolve;
 import dopamine.client.utils;
 
 import dopamine.cache;
-import dopamine.dep.dag;
+import dopamine.dep.resolve;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.recipe;
@@ -16,7 +16,7 @@ import std.getopt;
 import std.stdio;
 import std.typecons;
 
-DepDAG enforceResolved(RecipeDir rdir)
+DepGraph enforceResolved(RecipeDir rdir)
 in(rdir.hasRecipeFile)
 {
     import std.file : read, timeLastModified;
@@ -38,7 +38,15 @@ in(rdir.hasRecipeFile)
     const fname = rdir.depsLockFile;
     const content = cast(const(char)[])read(fname);
     auto json = parseJSON(content);
-    return DepDAG.fromJson(json);
+    return DepGraph.fromJson(json);
+}
+
+/// Enforce that the loaded profile is compatible with the locked dependencies.
+/// That is if dependencies depend on ResolveConfig, and used ResolveConfig is
+/// compatible with profile
+void enforceDepsCompatibleWithProfile(DepGraph dag, const(Profile) profile)
+{
+    // TODO
 }
 
 int resolveMain(string[] args)
@@ -140,9 +148,7 @@ int resolveMain(string[] args)
 
     try
     {
-        auto dag = DepDAG.prepare(rdir, config, services, heuristics);
-        dag.resolve();
-
+        auto dag = resolveDependencies(rdir, config, services, heuristics);
         auto json = dag.toJson();
 
         import std.file : write;
@@ -150,7 +156,7 @@ int resolveMain(string[] args)
         write(rdir.depsLockFile, json.toPrettyString());
 
         logInfo("%s: %s", info("Dependency resolution"), success("OK"));
-        foreach (dep; dag.traverseTopDownResolved())
+        foreach (dep; dag.traverseTopDown())
         {
             logInfo("    %s/%s%s%s - from %s", dep.name, dep.ver,
                 dep.revision ? "/" : "", dep.revision, dep.location);

@@ -11,6 +11,8 @@ import std.file;
 import std.json;
 import std.path;
 
+@safe:
+
 /// Content of the main state for the package dir state
 struct PkgState
 {
@@ -61,7 +63,7 @@ struct RecipeDir
         _recFile = recFile;
     }
 
-    static RecipeDir fromDir(string root)
+    static RecipeDir fromDir(string root) @system
     in (isAbsolute(root))
     {
         Recipe recipe;
@@ -162,12 +164,12 @@ struct RecipeDir
     OptionSet readOptionFile() const
     {
         auto json = readJsonOptions();
-        return OptionSet(json);
+        return OptionSet.fromJson(json);
     }
 
     void writeOptionFile(const(OptionSet) opts) const
     {
-        writeJsonOptions(opts.toJSON());
+        writeJsonOptions(opts.toJson());
     }
 
     void clearOptionFile() const
@@ -180,32 +182,32 @@ struct RecipeDir
     OptionSet mergeOptionFile(return scope OptionSet opts) const
     {
         auto json = readJsonOptions();
-        opts = opts.union_(OptionSet(json));
-        writeJsonOptions(opts.toJSON());
+        opts = opts.union_(OptionSet.fromJson(json));
+        writeJsonOptions(opts.toJson());
         return opts;
     }
 
-    private JSONValue[string] readJsonOptions() const
+    private JSONValue readJsonOptions() const
     {
         const p = optionFile();
         if (!exists(p) || !isFile(p))
-            return null;
+            return JSONValue.init;
         auto json = cast(const(char)[]) read(p);
-        return parseJSON(json).objectNoRef;
+        return parseJSON(json);
     }
 
-    private void writeJsonOptions(JSONValue[string] json) const
+    private void writeJsonOptions(JSONValue json) const
     {
         import std.string : representation;
 
         mkdirRecurse(dopPath());
-        const str = JSONValue(json).toPrettyString();
+        const str = json.toPrettyString();
         write(optionFile, str.representation);
     }
 
     /// Get the recipe of this directory.
     /// May be null if the directory has no recipe.
-    @property inout(Recipe) recipe() inout
+    @property inout(Recipe) recipe() inout @safe
     {
         return _recipe;
     }
@@ -265,7 +267,7 @@ struct RecipeDir
         return PkgStateFile(dopPath("state.json"));
     }
 
-    string checkSourceReady(out string reason)
+    string checkSourceReady(out string reason) @system
     out (dir; !dir || !std.path.isAbsolute(dir))
     {
         if (!recipe)

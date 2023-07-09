@@ -10,6 +10,5 @@ EXPECT_MATCH=^Recipe: OK$
 EXPECT_MATCH=Dependency resolution: OK
 EXPECT_MATCH=pkgb/2.0.0/1
 EXPECT_FILE=dop.lock
-EXPECT_MATCH[dop.lock]="pickHighest"
 EXPECT_VERSION[pkga]=2.0.0
 EXPECT_VERSION[pkgb]=2.0.0

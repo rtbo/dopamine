@@ -3,7 +3,7 @@ module dopamine.lua.util;
 import dopamine.c.lua;
 
 import std.exception;
-import std.stdio;
+import std.stdio : File;
 import std.string;
 import std.traits;
 

@@ -419,12 +419,12 @@ final class DopRecipe : Recipe
         return true;
     }
 
-    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     {
         assert(false, "unimplemented");
     }
 
-    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     {
         assert(buildNormalizedPath(dirs.root) == buildNormalizedPath(_rootDir));
 
@@ -527,7 +527,7 @@ DepSpec[] readDependencies(lua_State* L) @trusted
                 const ver = luaGetTable!string(L, -1, "version", null);
                 dep.spec = VersionSpec(enforce(ver,
                         format("'version' not specified for '%s' dependency", dep.name)));
-                dep.dub = luaGetTable!bool(L, -1, "dub", false);
+                dep.kind = luaGetTable!bool(L, -1, "dub", false) ? DepKind.dub : DepKind.dop;
                 if (lua_getfield(L, -1, "options") == LUA_TTABLE)
                 {
                     lua_pushnil(L);
@@ -914,21 +914,36 @@ void pushBuildConfig(lua_State* L, const(BuildConfig) config, Option[string] opt
     lua_settable(L, ind);
 }
 
-void pushDepInfos(lua_State* L, DepBuildInfo[string] depInfos) @trusted
+void pushDepInfos(lua_State* L, DepGraphBuildInfo dgbi) @trusted
 {
-    lua_createtable(L, 0, cast(int) depInfos.length);
-    const depInfosInd = lua_gettop(L);
-    foreach (k, di; depInfos)
-    {
-        lua_pushlstring(L, k.ptr, k.length);
+    import std.conv : to;
 
-        lua_createtable(L, 0, 2);
-        luaSetTable(L, -1, "name", di.name);
-        luaSetTable(L, -1, "dub", di.dub);
-        luaSetTable(L, -1, "version", di.ver.toString());
-        luaSetTable(L, -1, "build_id", di.buildId.toString());
-        luaSetTable(L, -1, "install_dir", di.installDir);
+    lua_createtable(L, 0, 2);
+    const depInfosInd = lua_gettop(L);
+
+    void pushTable(string name, DepBuildInfo[string] deps)
+    {
+        lua_pushlstring(L, name.ptr, name.length);
+        lua_createtable(L, cast(int)deps.length, 0);
+        const tableInd = lua_gettop(L);
+
+        foreach (k, di; deps)
+        {
+            lua_pushlstring(L, k.ptr, k.length);
+
+            lua_createtable(L, 0, 5);
+            luaSetTable(L, -1, "name", di.name);
+            luaSetTable(L, -1, "kind", di.kind.to!string);
+            luaSetTable(L, -1, "version", di.ver.toString());
+            luaSetTable(L, -1, "build_id", di.buildId.toString());
+            luaSetTable(L, -1, "install_dir", di.installDir);
+
+            lua_settable(L, tableInd);
+        }
 
         lua_settable(L, depInfosInd);
     }
+
+    pushTable("dop", dgbi.dop);
+    pushTable("dub", dgbi.dub);
 }

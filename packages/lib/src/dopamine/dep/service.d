@@ -87,7 +87,7 @@ final class DepService
     /// Build a DepService that will operate over the 3 provided
     /// sources, one for each of the `DepLocation` fields.
     /// Each can be null, but at least one must be non-null.
-    this(DepSource system, DepSource cache, DepSource network)
+    this(DepSource system, DepSource cache, DepSource network) @safe
     {
         assert(system || cache || network);
         _sources[DepLocation.system] = system;
@@ -315,4 +315,15 @@ struct DepServices
 {
     DepService dop;
     DepService dub;
+
+    DepService opIndex(DepKind kind) @safe
+    {
+        final switch (kind)
+        {
+        case DepKind.dop:
+            return dop;
+        case DepKind.dub:
+            return dub;
+        }
+    }
 }
