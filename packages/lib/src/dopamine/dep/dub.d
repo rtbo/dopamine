@@ -143,7 +143,7 @@ final class DubRegistry
                 catch (Exception ex)
                     throw new IgnoreDubPkgVersion();
             }
-            res ~= DepSpec(k, spec, true);
+            res ~= DepSpec(k, spec, DepKind.dub);
         }
         return res;
     }
@@ -337,7 +337,6 @@ class DubPackageCache
 unittest
 {
     import std.array;
-    import std.stdio;
 
     auto dir = tempPath(null, "dub-cache");
 

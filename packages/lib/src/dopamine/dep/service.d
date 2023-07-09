@@ -87,7 +87,7 @@ final class DepService
     /// Build a DepService that will operate over the 3 provided
     /// sources, one for each of the `DepLocation` fields.
     /// Each can be null, but at least one must be non-null.
-    this(DepSource system, DepSource cache, DepSource network)
+    this(DepSource system, DepSource cache, DepSource network) @safe
     {
         assert(system || cache || network);
         _sources[DepLocation.system] = system;
@@ -180,8 +180,8 @@ final class DepService
         memRecipe(rdir);
         return rdir;
     }
- 
-    const(DepSpec)[] packDependencies(const(BuildConfig) config, string name, const(AvailVersion) aver, string revision = null) @system
+
+    const(DepSpec)[] packDependencies(const(ResolveConfig) config, string name, const(AvailVersion) aver, string revision = null) @system
     {
         const pkgName = PackageName(name);
         auto rdir = packRecipeMem(pkgName.pkgName, aver.ver, revision);
@@ -315,4 +315,15 @@ struct DepServices
 {
     DepService dop;
     DepService dub;
+
+    DepService opIndex(DepKind kind) @safe
+    {
+        final switch (kind)
+        {
+        case DepKind.dop:
+            return dop;
+        case DepKind.dub:
+            return dub;
+        }
+    }
 }

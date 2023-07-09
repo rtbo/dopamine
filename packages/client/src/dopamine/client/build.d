@@ -8,7 +8,7 @@ import dopamine.client.utils;
 import dopamine.build_id;
 import dopamine.cache;
 import dopamine.dep.build;
-import dopamine.dep.dag;
+import dopamine.dep.resolve;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.paths;
@@ -40,12 +40,13 @@ void enforceBuildReady(RecipeDir rdir, BuildId buildId)
 string buildPackage(
     RecipeDir rdir,
     const(BuildConfig) config,
-    DagNode dnode,
+    DepGraphBuildInfo dgbi,
+    const(DgNode) dnode,
     string stageDest = null)
 {
     const srcDir = enforceSourceReady(rdir);
 
-    auto dbi = collectDirectDepBuildInfos(dnode);
+    auto dbi = dgbi.nodeDirectDepBuildInfos(dnode);
     const buildId = BuildId(rdir.recipe, config, dbi, stageDest);
     const bPaths = rdir.buildPaths(buildId);
 
@@ -57,7 +58,7 @@ string buildPackage(
 
     mkdirRecurse(bPaths.build);
 
-    rdir.recipe.build(bdirs, config, collectDepBuildInfos(dnode));
+    rdir.recipe.build(bdirs, config, dgbi.nodeDeepDepBuildInfos(dnode));
 
     BuildState state = bPaths.stateFile.read();
     state.buildTime = Clock.currTime;
@@ -110,8 +111,8 @@ int buildMain(string[] args)
         parseOptionSpec(options, oo);
     }
 
-    DepBuildInfo[string] depInfos;
-    DagNode rootNode;
+    DepGraphBuildInfo depInfos;
+    Rebindable!(const(DgNode)) rootNode;
     if (recipe.hasDependencies)
     {
         auto dag = enforceResolved(rdir);
@@ -120,11 +121,11 @@ int buildMain(string[] args)
             buildDubDepService(),
         );
         depInfos = buildDependencies(dag, recipe, profile, services, options.forDependencies());
-        rootNode = dag.root.resolvedNode;
+        rootNode = dag.root;
     }
 
     const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
-    const buildId = BuildId(recipe, config, collectDirectDepBuildInfos(rootNode));
+    const buildId = BuildId(recipe, config, depInfos.nodeDirectDepBuildInfos(rootNode));
 
     // undocumented env var used to dump the build-id hash in a file.
     // Used by end-to-end tests to locate the build directory
@@ -147,7 +148,7 @@ int buildMain(string[] args)
 
     destroy(lock);
 
-    const dir = buildPackage(rdir, config, rootNode);
+    const dir = buildPackage(rdir, config, depInfos, rootNode);
 
     logInfo("%s: %s - %s", info("Build"), success("OK"), dir);
 

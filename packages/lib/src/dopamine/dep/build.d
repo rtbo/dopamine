@@ -1,7 +1,7 @@
 module dopamine.dep.build;
 
 import dopamine.build_id;
-import dopamine.dep.dag;
+import dopamine.dep.resolve;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.profile;
@@ -13,77 +13,85 @@ import std.file;
 import std.path;
 import std.range;
 
-void ensureDepBuildInfos(
-    DepDAG dag,
+DepGraphBuildInfo calcDepBuildInfos(
+    DepGraph dag,
     Recipe recipe,
     const(Profile) profile,
     DepServices services,
     OptionSet options,
-    string stageDest=null)
-in (dag.resolved)
+    string stageDest = null)
 in (!stageDest || isAbsolute(stageDest))
 {
     const tools = collectTools(dag, services);
     enforceHasTools(profile, tools, recipe);
 
-    foreach (DagNode depNode; dag.traverseBottomUpResolved())
+    DepGraphBuildInfo res;
+
+    foreach (const(DgNode) depNode; dag.traverseBottomUp())
     {
-        const name = depNode.name.name;
-        auto service = depNode.dub ? services.dub : services.dop;
+        const name = depNode.name;
+        const kind = depNode.kind;
+
+        auto service = services[depNode.kind];
         auto rdir = service.packRecipe(name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
         auto opts = options.forDependency(name).union_(depNode.options);
         const conf = BuildConfig(prof, opts);
-        auto depInfos = collectDirectDepBuildInfos(depNode);
+        auto depInfos = res.nodeDirectDepBuildInfos(depNode);
         const buildId = BuildId(rdir.recipe, conf, depInfos, stageDest);
         const bPaths = rdir.buildPaths(buildId);
 
-        depNode.buildInfo = DepBuildInfo(name, depNode.dub, depNode.ver, buildId, bPaths.install);
+        res[kind, name] = DepBuildInfo(name, depNode.kind, depNode.ver, buildId, bPaths.install);
     }
+
+    return res;
 }
 
-DepBuildInfo[] collectDirectDepBuildInfos(DagNode node)
-in (!node || node.isResolved, node ? node.name ~ " isn't resolved" : "node is null")
+DepGraphBuildInfo nodeDeepDepBuildInfos(DepGraphBuildInfo dgbi, const(DgNode) node)
+{
+    if (!node)
+        return DepGraphBuildInfo.init;
+
+    DepGraphBuildInfo res;
+
+    foreach (dep; dgTraverseTopDown(node, No.root))
+    {
+        if (dep.location.isSystem)
+            continue;
+
+        auto dbi = enforce(
+            dep.name in dgbi[dep.kind],
+            "No bbuild info for dependency " ~ dep.name);
+
+        res[dep.kind, dep.name] = *dbi;
+    }
+
+    return res;
+}
+
+DepBuildInfo[] nodeDirectDepBuildInfos(DepGraphBuildInfo dgbi, const(DgNode) node)
 {
     if (!node)
         return null;
 
     DepBuildInfo[] res;
-    foreach(de; node.downEdges)
+    foreach (de; node.downEdges)
     {
-        auto dbi = enforce(de.down.resolvedNode).buildInfo;
-        enforce(!dbi.isNull, "No build info for dependency " ~ de.down.name);
-        res ~= dbi.get;
+        auto dbi = enforce(
+            de.down.name in dgbi[de.down.kind],
+            "No build info for dependency " ~ de.down.name);
+        res ~= *dbi;
     }
     return res;
 }
 
-DepBuildInfo[string] collectDepBuildInfos(DagNode node)
-in (!node || node.isResolved, node ? node.name ~ " isn't resolved" : "node is null")
-{
-    if (!node)
-        return null;
-
-    DepBuildInfo[string] res;
-    foreach (k, v; node.collectDependencies())
-    {
-        if (v.location.isSystem)
-            continue;
-
-        assert(!v.buildInfo.isNull);
-        res[k] = v.buildInfo.get;
-    }
-    return res;
-}
-
-DepBuildInfo[string] buildDependencies(
-    DepDAG dag,
+DepGraphBuildInfo buildDependencies(
+    DepGraph dag,
     Recipe recipe,
     const(Profile) profile,
     DepServices services,
     OptionSet options,
-    string stageDest=null)
-in (dag.resolved)
+    string stageDest = null)
 in (!stageDest || isAbsolute(stageDest))
 {
     import std.algorithm : map, maxElement;
@@ -93,17 +101,19 @@ in (!stageDest || isAbsolute(stageDest))
     const tools = collectTools(dag, services);
     enforceHasTools(profile, tools, recipe);
 
-    const maxLen = dag.traverseTopDownResolved()
-        .map!(dn => dn.pack.name.length + dn.ver.toString().length + 1)
+    const maxLen = dag.traverseTopDown()
+        .map!(dn => dn.name.length + dn.ver.toString().length + 1)
         .chain(only(0)) // in case of empty deps
         .maxElement();
 
-    foreach (depNode; dag.traverseBottomUpResolved())
+    DepGraphBuildInfo res;
+
+    foreach (depNode; dag.traverseBottomUp())
     {
         if (depNode.location.isSystem)
             continue;
 
-        auto service = depNode.dub ? services.dub : services.dop;
+        auto service = services[depNode.kind];
 
         const pkgName = depNode.name;
         const isModule = pkgName.isModule;
@@ -124,11 +134,11 @@ in (!stageDest || isAbsolute(stageDest))
                     info(pkgName.name), color(Color.magenta, c),
                     color(Color.cyan | Color.bright, pkgName.name ~ "/" ~ c),
                     info("dop options")
-                )
+            )
             );
         }
         const conf = BuildConfig(prof, mods, opts);
-        auto depInfos = collectDirectDepBuildInfos(depNode);
+        auto depInfos = res.nodeDirectDepBuildInfos(depNode);
         const bid = BuildId(rdir.recipe, conf, depInfos, stageDest);
         const bPaths = rdir.buildPaths(bid);
 
@@ -158,8 +168,9 @@ in (!stageDest || isAbsolute(stageDest))
             logInfo("%s: Building   (ID: %s)", info(packNameHead), color(Color.cyan, bid));
             mkdirRecurse(bPaths.build);
 
-            auto di = collectDepBuildInfos(depNode);
-            const bd = BuildDirs(rdir.root, srcDir, bPaths.build, stageDest ? stageDest : bPaths.install);
+            auto di = res.nodeDeepDepBuildInfos(depNode);
+            const bd = BuildDirs(rdir.root, srcDir, bPaths.build, stageDest ? stageDest
+                    : bPaths.install);
             auto state = bPaths.stateFile.read();
 
             if (isModule)
@@ -175,24 +186,27 @@ in (!stageDest || isAbsolute(stageDest))
             logInfo("%s: Up-to-date (ID: %s)", info(packNameHead), color(Color.cyan, bid));
         }
 
-        depNode.buildInfo = DepBuildInfo(pkgName.name, depNode.dub, depNode.ver, bid, bPaths.install);
+        logInfo("Adding %s dep %s", depNode.kind, depNode.name);
+
+        res[depNode.kind, depNode.name] = DepBuildInfo(pkgName.name, depNode.kind, depNode.ver, bid, bPaths
+                .install);
     }
 
-    return collectDepBuildInfos(dag.root.resolvedNode);
+    return res;
 }
 
-private string[] collectTools(DepDAG dag, DepServices services)
+private string[] collectTools(DepGraph dag, DepServices services)
 {
     import std.algorithm : canFind, sort;
 
     string[] allTools;
 
-    foreach (depNode; dag.traverseTopDownResolved)
+    foreach (depNode; dag.traverseTopDown)
     {
         if (depNode.location.isSystem)
             continue;
 
-        auto service = depNode.dub ? services.dub : services.dop;
+        auto service = services[depNode.kind];
         auto drdir = service.getPackOrModuleRecipe(depNode.name, depNode.aver, depNode.revision);
         foreach (t; drdir.recipe.tools)
         {

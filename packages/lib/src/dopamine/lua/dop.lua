@@ -359,8 +359,16 @@ function PkgConfFile:write(filename)
 end
 
 function dop.pkg_config_path(dep_infos)
+    if not dep_infos then
+        return ''
+    end
     local path = {}
-    for k, v in pairs(dep_infos) do
+    for k, v in pairs(dep_infos.dop) do
+        if v.install_dir then
+            table.insert(path, dop.path(v.install_dir, 'lib', 'pkgconfig'))
+        end
+    end
+    for k, v in pairs(dep_infos.dub) do
         if v.install_dir then
             table.insert(path, dop.path(v.install_dir, 'lib', 'pkgconfig'))
         end

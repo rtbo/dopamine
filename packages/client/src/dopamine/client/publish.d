@@ -7,7 +7,7 @@ import dopamine.api.v1;
 import dopamine.build_id;
 import dopamine.cache;
 import dopamine.dep.build;
-import dopamine.dep.dag;
+import dopamine.dep.resolve;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.profile;
@@ -75,10 +75,10 @@ void enforceRecipeIntegrity(RecipeDir rdir,
 
     recipe.revision = revision;
 
-    DepBuildInfo[string] depBuildInfos;
-    DepBuildInfo[] directDepBuildInfos;
+    DepGraphBuildInfo dgbi;
+    DepBuildInfo[] directDbi;
 
-    const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
+    const resolveConfig = ResolveConfig(profile, [], options);
 
     if (recipe.hasDependencies)
     {
@@ -87,20 +87,20 @@ void enforceRecipeIntegrity(RecipeDir rdir,
         heuristics.mode = Heuristics.Mode.pickHighest;
         heuristics.system = Heuristics.System.disallow;
 
-        auto dag = DepDAG.prepare(rdir, config, services, heuristics);
-        dag.resolve();
+        auto dag = resolveDependencies(rdir, resolveConfig, services, heuristics);
         auto json = dag.toJson();
         write(rdir.depsLockFile, json.toPrettyString());
 
-        depBuildInfos = buildDependencies(dag, recipe, profile, services, options.forDependencies());
-        directDepBuildInfos = collectDirectDepBuildInfos(dag.root.resolvedNode);
+        dgbi = buildDependencies(dag, recipe, profile, services, options.forDependencies());
+        directDbi = nodeDirectDepBuildInfos(dgbi, dag.root);
     }
 
     if (!recipe.inTreeSrc)
         logInfo("%s-%s: Fetching source code", info(recipe.name), info(recipe.ver));
     const srcDir = recipe.inTreeSrc ? rdir.root : recipe.source();
 
-    const buildId = BuildId(recipe, config, directDepBuildInfos);
+    const buildConfig = BuildConfig(profile.subset(recipe.tools), options.forRoot());
+    const buildId = BuildId(recipe, buildConfig, directDbi);
     const bPaths = rdir.buildPaths(buildId);
 
     const bdirs = BuildDirs(rdir.root, rdir.path(srcDir), bPaths.build, bPaths.install);
@@ -108,7 +108,7 @@ void enforceRecipeIntegrity(RecipeDir rdir,
     mkdirRecurse(bPaths.build);
 
     logInfo("%s-%s: Building", info(recipe.name), info(recipe.ver));
-    recipe.build(bdirs, config, depBuildInfos);
+    recipe.build(bdirs, buildConfig, dgbi);
 }
 
 int publishMain(string[] args)

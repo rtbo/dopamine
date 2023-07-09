@@ -3,7 +3,7 @@ module dopamine.lua.util;
 import dopamine.c.lua;
 
 import std.exception;
-import std.stdio;
+import std.stdio : File;
 import std.string;
 import std.traits;
 
@@ -343,7 +343,7 @@ string[] luaReadStringArray(lua_State* L, int ind) nothrow
     return arr;
 }
 
-/// Push a string array on the stack
+/// Push an array on the stack
 void luaPushArray(T)(lua_State* L, const(T)[] arr)
 {
     lua_createtable(L, cast(int) arr.length, 0);

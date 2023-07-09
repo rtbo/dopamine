@@ -3,7 +3,7 @@ module dopamine.client.resolve;
 import dopamine.client.utils;
 
 import dopamine.cache;
-import dopamine.dep.dag;
+import dopamine.dep.resolve;
 import dopamine.dep.service;
 import dopamine.log;
 import dopamine.recipe;
@@ -16,7 +16,7 @@ import std.getopt;
 import std.stdio;
 import std.typecons;
 
-DepDAG enforceResolved(RecipeDir rdir)
+DepGraph enforceResolved(RecipeDir rdir)
 in(rdir.hasRecipeFile)
 {
     import std.file : read, timeLastModified;
@@ -38,7 +38,15 @@ in(rdir.hasRecipeFile)
     const fname = rdir.depsLockFile;
     const content = cast(const(char)[])read(fname);
     auto json = parseJSON(content);
-    return DepDAG.fromJson(json);
+    return DepGraph.fromJson(json);
+}
+
+/// Enforce that the loaded profile is compatible with the locked dependencies.
+/// That is if dependencies depend on ResolveConfig, and used ResolveConfig is
+/// compatible with profile
+void enforceDepsCompatibleWithProfile(DepGraph dag, const(Profile) profile)
+{
+    // TODO
 }
 
 int resolveMain(string[] args)
@@ -51,6 +59,9 @@ int resolveMain(string[] args)
     bool noNetwork;
     bool noSystem;
     string[] optionOverrides;
+    string buildTypeOverride;
+    string osOverride;
+    string archOverride;
 
     auto helpInfo = getopt(args,
         "force|f", "Resolve dependencies and overwrite lock file", &force,
@@ -61,6 +72,9 @@ int resolveMain(string[] args)
         "no-network|N", "Resolve dependencies without using network", &noNetwork,
         "no-system", "Resolve dependencies without using system installed packages", &noSystem,
         "option|o", "Override option", &optionOverrides,
+        "build-type", "Override profile build-type", &buildTypeOverride,
+        "os", "Override profile OS", &osOverride,
+        "arch", "Override profile architecture", &archOverride,
     );
 
     if (helpInfo.helpWanted)
@@ -78,12 +92,31 @@ int resolveMain(string[] args)
         return 0;
     }
 
+    // specify default config
+    HostInfo hostInfo = currentHostInfo;
+    BuildType buildType = BuildType.debug_;
+
+    // if a profile file is already there, read it
+    if (rdir.hasProfileFile)
+    {
+        auto profile = Profile.loadFromFile(rdir.profileFile);
+        hostInfo = profile.hostInfo;
+        buildType = profile.buildType;
+    }
+
+    // apply overrides
+    if (buildTypeOverride.length)
+        buildType = fromConfig!BuildType(buildTypeOverride);
+    if (osOverride.length)
+        hostInfo = hostInfo.withOs(fromConfig!OS(osOverride));
+    if (archOverride.length)
+        hostInfo = hostInfo.withArch(fromConfig!Arch(archOverride));
+
     enforce(rdir.hasProfileFile, new ErrorLogException(
             "A compilation profile is needed to resolve dependencies. You may try %s.",
             info("dop profile default")
         )
     );
-    auto profile = Profile.loadFromFile(rdir.profileFile);
 
     auto options = rdir.readOptionFile();
     foreach(oo; optionOverrides)
@@ -91,7 +124,7 @@ int resolveMain(string[] args)
         parseOptionSpec(options, oo);
     }
 
-    const config = BuildConfig(profile.subset(recipe.tools), options.forRoot());
+    const config = ResolveConfig(hostInfo, buildType, [], options);
 
     if (rdir.hasDepsLockFile && !force)
     {
@@ -115,9 +148,7 @@ int resolveMain(string[] args)
 
     try
     {
-        auto dag = DepDAG.prepare(rdir, config, services, heuristics);
-        dag.resolve();
-
+        auto dag = resolveDependencies(rdir, config, services, heuristics);
         auto json = dag.toJson();
 
         import std.file : write;
@@ -125,7 +156,7 @@ int resolveMain(string[] args)
         write(rdir.depsLockFile, json.toPrettyString());
 
         logInfo("%s: %s", info("Dependency resolution"), success("OK"));
-        foreach (dep; dag.traverseTopDownResolved())
+        foreach (dep; dag.traverseTopDown())
         {
             logInfo("    %s/%s%s%s - from %s", dep.name, dep.ver,
                 dep.revision ? "/" : "", dep.revision, dep.location);

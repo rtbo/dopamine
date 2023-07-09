@@ -1,5 +1,6 @@
 module dopamine.client.profile;
 
+import dopamine.client.resolve;
 import dopamine.client.utils;
 
 import dopamine.log;
@@ -75,7 +76,6 @@ int profileMain(string[] args)
     {
         return usage(0);
     }
-
 
     // Recipe is needed only in a few situations,
     // so we load it only if available.
@@ -192,6 +192,14 @@ int profileMain(string[] args)
         profile = profile.withBuildType(newBt);
     }
 
+    if (!opt.ignoreLockedDeps)
+    {
+        // TODO check compatibility with locked dependencies of:
+        //  - tools
+        //  - host info
+        //  - build type
+    }
+
     if (opt.exportName)
     {
         if (opt.exportName != profile.basename)
@@ -268,6 +276,7 @@ private struct ProfileOptions
     SetTool[] setTools;
     bool setDebug;
     bool setRelease;
+    bool ignoreLockedDeps;
     string exportName;
     string profileName;
 
@@ -322,6 +331,10 @@ private struct ProfileOptions
             else if (arg == "--add-missing")
             {
                 opt.addMissing = true;
+            }
+            else if (arg == "--ignore-locked-deps")
+            {
+                opt.ignoreLockedDeps = true;
             }
             else if (arg.startsWith("--set-"))
             {
@@ -411,6 +424,11 @@ unittest
     opt = ProfileOptions.parse(["--add-missing"]);
     assert(opt.isWrite);
     assert(opt.addMissing);
+
+    opt = ProfileOptions.parse(["--discover", "--ignore-locked-deps"]);
+    assert(opt.isWrite);
+    assert(opt.discover);
+    assert(opt.ignoreLockedDeps);
 
     opt = ProfileOptions.parse(["--set-dc"]);
     assert(opt.isWrite);

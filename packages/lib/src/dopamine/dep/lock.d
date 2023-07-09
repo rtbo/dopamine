@@ -3,12 +3,13 @@ module dopamine.dep.lock;
 
 package:
 
-import dopamine.dep.dag;
-import dopamine.dep.service;
+import dopamine.dep.resolve;
 import dopamine.dep.spec;
-import dopamine.recipe : DepSpec, OptionSet;
+import dopamine.dep.service;
+import dopamine.recipe : DepSpec, DepKind, OptionSet, ResolveConfig;
 import dopamine.semver;
 
+import std.algorithm;
 import std.conv;
 import std.exception;
 import std.format;
@@ -18,113 +19,94 @@ import std.traits;
 import std.typecons;
 
 /// Current version of the lock file format
-enum lockVer = 1;
+enum currentLockVersion = 1;
 
-/// Serialize a dependency DAG to JSON
-JSONValue dagToJson(ref DepDAG dag,
-    Flag!"emitAllVersions" emitAllVersions = Yes.emitAllVersions,
-    int ver = lockVer) @safe
-in (emitAllVersions || dag.resolved)
+/// Serialize a dependency graph to JSON
+JSONValue depGraphToJson(DepGraph dag,
+    int ver = currentLockVersion) @safe
 {
     enforce(ver == 1, "Unsupported lock file format");
 
-    return dagToJsonV1(dag, emitAllVersions);
+    return depGraphToJsonV1(dag);
 }
 
-private JSONValue dagToJsonV1(ref DepDAG dag,
-    Flag!"emitAllVersions" emitAllVersions) @safe
+private JSONValue depGraphToJsonV1(DepGraph dag) @safe
 {
+    JSONValue nodeToJson(const(DgNode) node) @safe
+    {
+        JSONValue[string] jnode;
+
+        jnode["name"] = node.name;
+        jnode["kind"] = node.kind.to!string;
+        jnode["version"] = node.ver.toString();
+
+        if (node.aver.location.isSystem)
+            jnode["system"] = true;
+
+        if (node.revision)
+            jnode["revision"] = node.revision;
+
+        JSONValue[] jdeps;
+        foreach (dep; node.deps)
+            jdeps ~= dep.toJson();
+        if (jdeps.length)
+            jnode["dependencies"] = jdeps;
+
+        if (node.options)
+            jnode["options"] = node.options.toJson();
+
+        return JSONValue(jnode);
+    }
+
+    JSONValue edgeToJson(const(DgEdge) edge) @safe
+    {
+        JSONValue[string] jedge;
+
+        jedge["up"] = [
+            "name": edge.up.name,
+            "kind": edge.up.kind.to!string,
+        ];
+        jedge["down"] = [
+            "name": edge.down.name,
+            "kind": edge.down.kind.to!string,
+        ];
+        jedge["spec"] = edge.spec.toString();
+
+        return JSONValue(jedge);
+    }
+
     JSONValue[string] dagDict;
 
     dagDict["dopamine-lock-version"] = 1;
 
-    JSONValue[string] heur;
-    heur["mode"] = dag.heuristics.mode.to!string;
-    heur["system"] = dag.heuristics.system.to!string;
-    heur["system-list"] = JSONValue(dag.heuristics.systemList);
-    dagDict["heuristics"] = heur;
+    dagDict["config"] = dag.config.toJson();
 
-    JSONValue[] packs;
-    foreach (pack; dag.traverseTopDown(Yes.root))
+    JSONValue[] jnodes;
+    JSONValue[] jedges;
+
+    foreach (const(DgNode) node; dag.traverseTopDown(Yes.root))
     {
-        JSONValue[string] packDict;
+        auto jnode = nodeToJson(node);
 
-        packDict["name"] = pack.name;
-        packDict["dub"] = pack.dub;
+        if (node is dag.root)
+            dagDict["root"] = jnode;
+        else
+            jnodes ~= jnode;
 
-        JSONValue[] vers;
-
-        foreach (aver; pack.allVersions)
-        {
-            JSONValue[string] verDict;
-
-            verDict["version"] = aver.ver.to!string();
-            verDict["location"] = aver.location.to!string();
-
-            auto n = pack.getNode(aver);
-
-            if (n)
-            {
-                if (n.options.length)
-                {
-                    verDict["options"] = JSONValue(n.options.toJSON());
-                }
-                if (n.optionConflicts.length)
-                {
-                    verDict["optionConflicts"] = JSONValue(n.optionConflicts);
-                }
-            }
-
-            string status;
-
-            if (n is null && !emitAllVersions)
-                continue;
-            if (n && n is pack.resolvedNode)
-            {
-                status = "resolved";
-            }
-            else if (n)
-            {
-                status = "compatible";
-            }
-            else
-            {
-                status = "removed";
-            }
-            verDict["status"] = status;
-
-            if (n !is null)
-            {
-                if (n.revision)
-                {
-                    verDict["revision"] = n.revision;
-                }
-
-                JSONValue[] deps;
-                foreach (e; n.downEdges)
-                {
-                    deps ~= JSONValue([
-                        "name": e.down.name,
-                        "spec": e.spec.to!string(),
-                    ]);
-                }
-                verDict["dependencies"] = deps;
-            }
-            vers ~= JSONValue(verDict);
-        }
-        packDict["versions"] = vers;
-        packs ~= JSONValue(packDict);
+        node.downEdges.each!(e => jedges ~= edgeToJson(e));
     }
-    dagDict["packages"] = packs;
+
+    dagDict["nodes"] = jnodes;
+    dagDict["edges"] = jedges;
 
     return JSONValue(dagDict);
 }
 
-DepDAG jsonToDag(JSONValue json) @safe
+DepGraph jsonToDepGraph(JSONValue json) @safe
 {
     enforce(json["dopamine-lock-version"].integer == 1, "Unsupported dependency lock format");
 
-    return jsonToDagV1(json);
+    return jsonToDepGraphV1(json);
 }
 
 private T safeJsonGet(T)(JSONValue val, T def = T.init)
@@ -146,104 +128,74 @@ private T safeJsonGet(T)(JSONValue val, T def = T.init)
 }
 
 /// Deserialize a dependency DAG from JSON
-private DepDAG jsonToDagV1(JSONValue json) @trusted
+private DepGraph jsonToDepGraphV1(JSONValue json) @trusted
 {
     import std.algorithm : map;
     import std.array : array;
 
-    static struct Dep
+    DgNode nodeFromJson(JSONValue jn)
     {
-        string pack;
-        AvailVersion aver;
-        string down;
-        VersionSpec spec;
-    }
+        auto node = new DgNode;
 
-    Heuristics heuristics;
-    JSONValue jheur = json["heuristics"];
-    heuristics.mode = jheur["mode"].str.to!(Heuristics.Mode);
-    heuristics.system = jheur["system"].str.to!(Heuristics.System);
-    heuristics.systemList = jheur["system-list"].array.map!(jv => jv.str).array;
+        auto jnode = jn.objectNoRef;
+        node._name = jnode["name"].str;
+        node._kind = jnode["kind"].str.to!DepKind;
 
-    DagPack root;
-    DagPack[string] packs;
-    Dep[] deps;
+        // FIXME: location from service
+        auto location = DepLocation.cache;
+        if (auto js = "system" in jnode)
+            if (js.boolean)
+                location = DepLocation.system;
+        node._aver = AvailVersion(Semver(jnode["version"].str), location);
 
-    foreach (jpack; json["packages"].array)
-    {
-        const name = jpack["name"].str;
-        const dub = safeJsonGet!bool(jpack["dub"]);
+        if (auto jr = "revision" in jnode)
+            node._revision = jr.str;
 
-        DagPack p = new DagPack(name, dub);
-
-        AvailVersion[] allVers;
-        DagNode[] nodes;
-
-        foreach (jver; jpack["versions"].array)
+        if (auto jd = "dependencies" in jnode)
         {
-            AvailVersion aver;
-            aver.ver = Semver(jver["version"].str);
-            aver.location = jver["location"].str.to!DepLocation;
-
-            allVers ~= aver;
-
-            const status = jver["status"].str;
-
-            if (status == "resolved" || status == "compatible")
-            {
-                DagNode node = new DagNode(p, aver);
-                nodes ~= node;
-                if (status == "resolved")
-                {
-                    p.resolvedNode = node;
-                }
-
-                if (const(JSONValue)* jrev = "revision" in jver)
-                {
-                    node.revision = jrev.str;
-                }
-
-                if (const(JSONValue)* jopts = "options" in jver)
-                {
-                    node.options = OptionSet(jopts.objectNoRef);
-                }
-                if (const(JSONValue)* jconflicts = "optionConflicts" in jver)
-                {
-                    foreach (jc; jconflicts.arrayNoRef)
-                        node.optionConflicts ~= jc.str;
-                }
-            }
-            if (const(JSONValue)* jdeps = "dependencies" in jver)
-            {
-                foreach (jdep; jdeps.array)
-                {
-                    Dep dep;
-                    dep.pack = p.name;
-                    dep.aver = aver;
-                    dep.down = jdep["name"].str;
-                    dep.spec = VersionSpec(jdep["spec"].str);
-                    deps ~= dep;
-                }
-            }
+            foreach (jdep; jd.arrayNoRef)
+                node._deps ~= DepSpec.fromJson(jdep);
         }
 
-        p._allVersions = allVers;
-        p.nodes = nodes;
-        packs[p.name] = p;
+        if (auto jo = "options" in jnode)
+            node._options = OptionSet.fromJson(*jo);
 
-        if (root is null)
-        {
-            root = p;
-        }
+        return node;
     }
 
-    foreach (d; deps)
+    const config = ResolveConfig.fromJson(json["config"]);
+
+    DgNode[string] nodes;
+
+    auto root = nodeFromJson(json["root"]);
+    nodes[packKey(root)] = root;
+
+    foreach (jn; json["nodes"].arrayNoRef)
     {
-        auto up = packs[d.pack].getNode(d.aver);
-        enforce(up, format("Can't find node %s in package %s", d.aver, d.pack));
-        auto down = packs[d.down];
-        DagEdge.create(up, down, d.spec);
+        auto node = nodeFromJson(jn);
+        const key = packKey(node);
+        assert(!(key in nodes));
+        nodes[key] = node;
     }
 
-    return DepDAG(root, heuristics);
+    foreach (je; json["edges"].arrayNoRef)
+    {
+        auto edge = new DgEdge;
+        auto jup = je["up"];
+        auto jdown = je["down"];
+        const upKey = packKey(jup["name"].str, jup["kind"].str.to!DepKind);
+        const downKey = packKey(jdown["name"].str, jdown["kind"].str.to!DepKind);
+        const spec = VersionSpec(je["spec"].str);
+
+        auto up = nodes[upKey];
+        auto down = nodes[downKey];
+
+        edge._up = up;
+        up._downEdges ~= edge;
+        edge._down = down;
+        down._upEdges ~= edge;
+        edge._spec = spec;
+    }
+
+    return DepGraph(root, config);
 }

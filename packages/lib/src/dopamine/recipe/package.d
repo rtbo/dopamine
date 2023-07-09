@@ -32,35 +32,45 @@ struct OptionSet
         _opts = opts;
     }
 
-    this(const(JSONValue[string]) json) @trusted
+    static OptionSet fromJson(JSONValue json) @trusted
     {
         import std.conv : to;
 
-        foreach (string key, const ref JSONValue val; json)
+        if (json.type == JSONType.null_)
+            return OptionSet.init;
+
+        OptionVal[string] opts;
+
+        foreach (string key, const ref JSONValue val; json.objectNoRef)
         {
             switch (val.type)
             {
             case JSONType.true_:
-                _opts[key] = OptionVal(true);
+                opts[key] = OptionVal(true);
                 break;
             case JSONType.false_:
-                _opts[key] = OptionVal(false);
+                opts[key] = OptionVal(false);
                 break;
             case JSONType.integer:
-                _opts[key] = OptionVal(val.get!int);
+                opts[key] = OptionVal(val.get!int);
                 break;
             case JSONType.string:
-                _opts[key] = OptionVal(val.get!string);
+                opts[key] = OptionVal(val.get!string);
                 break;
             default:
                 throw new Exception("Invalid JSON option type: " ~ val.type.to!string);
             }
         }
+
+        return OptionSet(opts);
     }
 
-    JSONValue[string] toJSON() const @safe
+    JSONValue toJson() const @safe
     {
         import std.sumtype : match;
+
+        if (!_opts.length)
+            return JSONValue.init;
 
         JSONValue[string] json;
 
@@ -73,7 +83,12 @@ struct OptionSet
             );
         }
 
-        return json;
+        return JSONValue(json);
+    }
+
+    bool opCast(T : bool)() const @safe
+    {
+        return _opts.length > 0;
     }
 
     OptionVal get(string key, lazy OptionVal def) const @safe
@@ -312,35 +327,94 @@ struct PackageName
     }
 }
 
+/// A kind of dependency
+enum DepKind
+{
+    dop,
+    dub,
+}
+
+@property bool isDop(DepKind kind) @safe
+{
+    return kind == DepKind.dop;
+}
+
+@property bool isDub(DepKind kind) @safe
+{
+    return kind == DepKind.dub;
+}
+
 /// A recipe dependency specification
 struct DepSpec
 {
+    import std.typecons;
+
     PackageName name;
     VersionSpec spec;
-    bool dub;
+    DepKind kind;
     OptionSet options;
 
-    this(string name, VersionSpec spec, bool dub = false, OptionSet options = OptionSet.init) @safe
+    this(string name, VersionSpec spec, DepKind kind = DepKind.dop, OptionSet options = OptionSet
+            .init) @safe
     {
         this.name = PackageName(name);
         this.spec = spec;
-        this.dub = dub;
+        this.kind = kind;
         this.options = options;
+    }
+
+    @property bool dub() const @safe
+    {
+        return kind.isDub;
     }
 
     @property DepSpec dup() const @safe
     {
-        return DepSpec(name, spec, dub, options.dup);
+        return DepSpec(name, spec, kind, options.dup);
     }
 
-    /// If this spec is for a module, return the spec to the module's package.
+    /// If this spec is for a module, return the spec to the super package.
     /// Otherwise, return this.
     @property const(DepSpec) pkgSpec() const @safe
     {
         if (name.isModule)
-            return DepSpec(PackageName(name.pkgName), spec, dub, options.dup);
+            return DepSpec(PackageName(name.pkgName), spec, kind, options.dup);
         else
             return this;
+    }
+
+    static DepSpec fromJson(JSONValue json) @safe
+    {
+        import std.conv : to;
+
+        auto jdep = json.objectNoRef;
+        OptionSet options;
+        if (auto jo = "options" in jdep)
+            options = OptionSet.fromJson(*jo);
+
+        return DepSpec(
+            jdep["name"].str,
+            VersionSpec(jdep["spec"].str),
+        jdep["kind"].str.to!DepKind,
+        options
+        );
+    }
+
+    /// Serialize to JSON.
+    /// Name is not included because the returned JSON value is typically stored
+    /// in a dict for which the key is the dependency name.
+    JSONValue toJson() const @safe
+    {
+        import std.conv : to;
+
+        JSONValue[string] json;
+        json["name"] = name.toString();
+        json["spec"] = spec.toString();
+        json["kind"] = kind.to!string;
+        if (options)
+            json["options"] = options.toJson();
+
+        return JSONValue(json);
     }
 }
 
@@ -358,6 +432,60 @@ struct BuildDirs
         assert(src.isAbsolute);
         assert(build.isAbsolute);
         assert(install.isAbsolute);
+    }
+}
+
+/// Configuration for dependency resolution
+struct ResolveConfig
+{
+    HostInfo hostInfo;
+    BuildType buildType;
+    const(string)[] modules;
+    OptionSet options;
+
+    this(HostInfo hostInfo, BuildType buildType, const(string)[] modules, OptionSet options) @safe
+    {
+        this.hostInfo = hostInfo;
+        this.buildType = buildType;
+        this.modules = modules;
+        this.options = options;
+    }
+
+    this(const(Profile) profile, const(string)[] modules, OptionSet options) @safe
+    {
+        this.hostInfo = profile.hostInfo;
+        this.buildType = profile.buildType;
+        this.modules = modules;
+        this.options = options;
+    }
+
+    static ResolveConfig fromJson(JSONValue json) @safe
+    {
+        import std.algorithm : map;
+        import std.array : array;
+
+        const arch = fromConfig!Arch(json["arch"].str);
+        const os = fromConfig!OS(json["os"].str);
+        const buildType = fromConfig!BuildType(json["buildType"].str);
+        const modules = json["modules"].arrayNoRef.map!(j => j.str).array;
+        auto options = OptionSet.fromJson(json["options"]);
+
+        return ResolveConfig(HostInfo(arch, os), buildType, modules, options);
+    }
+
+    JSONValue toJson() const @safe
+    {
+        import std.algorithm : map;
+        import std.array : array;
+
+        JSONValue[string] json;
+        json["arch"] = this.hostInfo.arch.toConfig;
+        json["os"] = this.hostInfo.os.toConfig;
+        json["buildType"] = this.buildType.toConfig;
+        json["modules"] = this.modules.map!(m => JSONValue(m)).array;
+        json["options"] = this.options.toJson();
+
+        return JSONValue(json);
     }
 }
 
@@ -426,8 +554,8 @@ struct DepBuildInfo
 {
     /// The name of the dependency package
     string name;
-    /// Whether it is a DUB dependency
-    bool dub;
+    /// The kind of dependency (whether it is a Dopamine or DUB dependency)
+    DepKind kind;
     /// The version of the dependency package
     Semver ver;
     /// The build-id of the dependency package
@@ -436,12 +564,69 @@ struct DepBuildInfo
     string installDir;
 }
 
+/// A struct that hold the build info for a complete dependency graph.
+/// As there can be name collisions between different dependency providers
+/// in the same graph, there is one map per provider.
+struct DepGraphBuildInfo
+{
+    /// Build-info of regular (aka. dopamine) packages
+    DepBuildInfo[string] dop;
+    /// Build-info of DUB packages
+    DepBuildInfo[string] dub;
+
+    bool opCast(T: bool)() const
+    {
+        return dop.length > 0 || dub.length > 0;
+    }
+
+    DepBuildInfo[string] opIndex(DepKind kind)
+    {
+        final switch (kind)
+        {
+        case DepKind.dop:
+            return dop;
+        case DepKind.dub:
+            return dub;
+        }
+    }
+
+    DepBuildInfo opIndexAssign(DepBuildInfo value, DepKind kind, string name)
+    {
+        final switch (kind)
+        {
+        case DepKind.dop:
+            return dop[name] = value;
+        case DepKind.dub:
+            return dub[name] = value;
+        }
+    }
+
+    DepBuildInfo opIndex(DepKind kind, string name)
+    {
+        return opIndex(kind)[name];
+    }
+
+
+}
+
 enum RecipeType
 {
     /// A genuine dopamine recipe
     dop,
     /// A recipe for Dub
     dub,
+}
+
+@property DepKind toDepKind(RecipeType type) @safe
+{
+    // not sure a one to one map will last forever
+    final switch (type)
+    {
+    case RecipeType.dop:
+        return DepKind.dop;
+    case RecipeType.dub:
+        return DepKind.dub;
+    }
 }
 
 interface Recipe
@@ -498,8 +683,11 @@ interface Recipe
     /// In case dependencies are only needed for some profile cases, true is returned.
     @property bool hasDependencies() const @safe;
 
-    /// Get the dependencies of the package for the given build config
-    const(DepSpec)[] dependencies(const(BuildConfig) config) @system;
+    /// Whether the dependencies of this recipe depend on the resolution configuration (`ResolveConfig`).
+    @property bool hasDynDependencies() const @safe;
+
+    /// Get the dependencies of the package for the given configuration.
+    const(DepSpec)[] dependencies(const(ResolveConfig) config) @system;
 
     /// Whether this recipe has dependencies.
     /// In case dependencies are only needed for some profile cases, true is returned.
@@ -511,8 +699,8 @@ interface Recipe
     /// Get the list of modules declared by this recipe
     @property string[] modules() @safe;
 
-    /// Get the dependencies of the provided module for the given build config
-    @property const(DepSpec)[] moduleDependencies(string moduleName, const(BuildConfig) config) @system;
+    /// Get the dependencies of the provided module for the given configuration
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(ResolveConfig) config) @system;
 
     /// Get the files to include with the recipe when publishing to registry.
     /// This is relative to the root recipe dir.
@@ -545,14 +733,14 @@ interface Recipe
 
     /// Build one module of this recipe.
     /// The module is specified as unique member of config.modules
-    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     in (config.modules.length == 1);
 
     /// Build and install the package to the given directory and
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     in (!isLight, "Light recipes do not build");
 
     /// Whether this recipe can stage an installation to another
@@ -567,7 +755,11 @@ interface Recipe
     in (canStage, "Recipe can't stage");
 }
 
-version (unittest)  : final class MockRecipe : Recipe
+// dfmt off
+version (unittest):
+// dfmt on
+
+final class MockRecipe : Recipe
 {
     private string _name;
     private Semver _ver;
@@ -576,7 +768,7 @@ version (unittest)  : final class MockRecipe : Recipe
     private DepSpec[] _deps;
     private string[] _tools;
 
-    this(string name, Semver ver, RecipeType type, string rev, DepSpec[] deps, string[] tools)
+    this(string name, Semver ver, RecipeType type, string rev, DepSpec[] deps, string[] tools) @safe
     {
         _name = name;
         _ver = ver;
@@ -663,8 +855,13 @@ version (unittest)  : final class MockRecipe : Recipe
         return _deps.length != 0;
     }
 
-    /// Get the dependencies of the package for the given compilation profile
-    const(DepSpec)[] dependencies(const(BuildConfig) config) @system
+    @property bool hasDynDependencies() const @safe
+    {
+        return false;
+    }
+
+    /// Get the dependencies of the package for the given configuration
+    const(DepSpec)[] dependencies(const(ResolveConfig) config) @system
     {
         return _deps;
     }
@@ -675,7 +872,7 @@ version (unittest)  : final class MockRecipe : Recipe
         return [];
     }
     /// ditto
-    @property const(DepSpec)[] moduleDependencies(string moduleName, const(BuildConfig) config) @system
+    @property const(DepSpec)[] moduleDependencies(string moduleName, const(ResolveConfig) config) @system
     {
         return [];
     }
@@ -718,7 +915,7 @@ version (unittest)  : final class MockRecipe : Recipe
         return true;
     }
 
-    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void buildModule(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     {
     }
 
@@ -726,7 +923,7 @@ version (unittest)  : final class MockRecipe : Recipe
     /// with provided config. Info about dependencies is also provided.
     /// The current directory (as returned by `getcwd`) must be the
     /// build directory (where to build object files or any intermediate file before installation).
-    void build(BuildDirs dirs, const(BuildConfig) config, DepBuildInfo[string] depInfos = null) @system
+    void build(BuildDirs dirs, const(BuildConfig) config, DepGraphBuildInfo depInfos) @system
     {
     }
 

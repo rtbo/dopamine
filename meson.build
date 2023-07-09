@@ -67,7 +67,7 @@ vibed_data_dep = dependency('vibe-d:data',
 if get_option('enable_test')
     ut_assertions_dep = dependency('unit-threaded:assertions',
         method: 'dub',
-        version: '2.0.3',
+        version: '2.1.6',
     )
     stupid_gen_exe = executable('stupid_gen', 'tools/stupid_gen.d',
         d_import_dirs: include_directories('tools'),
