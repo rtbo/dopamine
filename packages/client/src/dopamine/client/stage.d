@@ -107,7 +107,7 @@ int stageMain(string[] args)
 
         foreach (dn; dag.traverseTopDown())
         {
-            auto service = services[dn.kind];
+            auto service = services[dn.provider];
             auto drdir = service.packRecipe(dn.name, dn.aver, dn.revision);
             auto dprof = profile.subset(drdir.recipe.tools);
 

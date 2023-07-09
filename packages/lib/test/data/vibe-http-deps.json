@@ -10,265 +10,265 @@
     "edges": [
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:http"
             },
             "spec": "~>0.9.6",
             "up": {
-                "kind": "dop",
+                "provider": "dop",
                 "name": "dub-vibe-dep"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:inet"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:http"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:tls"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:http"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:crypto"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:http"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "diet-ng"
             },
             "spec": "~>1.2",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:http"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:textfilter"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:http"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:data"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:inet"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:textfilter"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:inet"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:stream"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:inet"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-core"
             },
             "spec": ">=1.0.0 <3.0.0-0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:inet"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:utils"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:data"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:utils"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:textfilter"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-core"
             },
             "spec": ">=1.0.0 <3.0.0-0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:textfilter"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:stream"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:tls"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "openssl"
             },
             "spec": "~>3.1",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:tls"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "openssl-static"
             },
             "spec": "~>1.0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:tls"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:utils"
             },
             "spec": "==0.9.6",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:stream"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-core"
             },
             "spec": ">=1.0.0 <3.0.0-0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:stream"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "stdx-allocator"
             },
             "spec": "~>2.77.0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:utils"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-core"
             },
             "spec": ">=1.0.0 <3.0.0-0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:crypto"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "mir-linux-kernel"
             },
             "spec": "~>1.0.0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:crypto"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "eventcore"
             },
             "spec": "~>0.9.17",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-core"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "stdx-allocator"
             },
             "spec": "~>2.77.0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-core"
             }
         },
         {
             "down": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "taggedalgebraic"
             },
             "spec": ">=0.10.12 <0.12.0-0",
             "up": {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "eventcore"
             }
         }
@@ -277,215 +277,215 @@
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:inet",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:tls",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:crypto",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "diet-ng",
                     "spec": "~>1.2"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:textfilter",
                     "spec": "==0.9.6"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:http",
             "version": "0.9.6"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:data",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:textfilter",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:stream",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-core",
                     "spec": ">=1.0.0 <3.0.0-0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:inet",
             "version": "0.9.6"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:utils",
                     "spec": "==0.9.6"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:data",
             "version": "0.9.6"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:utils",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-core",
                     "spec": ">=1.0.0 <3.0.0-0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:textfilter",
             "version": "0.9.6"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:stream",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "openssl",
                     "spec": "~>3.1"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "openssl-static",
                     "spec": "~>1.0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:tls",
             "version": "0.9.6"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-d:utils",
                     "spec": "==0.9.6"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-core",
                     "spec": ">=1.0.0 <3.0.0-0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:stream",
             "version": "0.9.6"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "stdx-allocator",
                     "spec": "~>2.77.0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:utils",
             "version": "0.9.6"
         },
         {
-            "kind": "dub",
+            "provider": "dub",
             "name": "openssl",
             "version": "3.3.0"
         },
         {
-            "kind": "dub",
+            "provider": "dub",
             "name": "openssl-static",
             "version": "1.0.2+3.0.8"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "vibe-core",
                     "spec": ">=1.0.0 <3.0.0-0"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "mir-linux-kernel",
                     "spec": "~>1.0.0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-d:crypto",
             "version": "0.9.6"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "eventcore",
                     "spec": "~>0.9.17"
                 },
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "stdx-allocator",
                     "spec": "~>2.77.0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "vibe-core",
             "version": "2.2.0"
         },
         {
             "dependencies": [
                 {
-                    "kind": "dub",
+                    "provider": "dub",
                     "name": "taggedalgebraic",
                     "spec": ">=0.10.12 <0.12.0-0"
                 }
             ],
-            "kind": "dub",
+            "provider": "dub",
             "name": "eventcore",
             "version": "0.9.25"
         },
         {
-            "kind": "dub",
+            "provider": "dub",
             "name": "taggedalgebraic",
             "version": "0.11.22"
         },
         {
-            "kind": "dub",
+            "provider": "dub",
             "name": "stdx-allocator",
             "version": "2.77.5"
         },
         {
-            "kind": "dub",
+            "provider": "dub",
             "name": "mir-linux-kernel",
             "version": "1.0.1"
         },
         {
-            "kind": "dub",
+            "provider": "dub",
             "name": "diet-ng",
             "version": "1.8.1"
         }
@@ -493,12 +493,12 @@
     "root": {
         "dependencies": [
             {
-                "kind": "dub",
+                "provider": "dub",
                 "name": "vibe-d:http",
                 "spec": "~>0.9.6"
             }
         ],
-        "kind": "dop",
+        "provider": "dop",
         "name": "dub-vibe-dep",
         "version": "1.0.0"
     }

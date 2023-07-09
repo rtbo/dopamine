@@ -131,7 +131,7 @@ class DubRecipe : Recipe
                     dd.name,
                     (dd.name.isModule && dd.name.pkgName == name) ?
                     VersionSpec("==" ~ _dubPack.version_.toString()) : adaptDubVersionSpec(dd.spec),
-                    DepKind.dub))
+                    DepProvider.dub))
             .array;
     }
 

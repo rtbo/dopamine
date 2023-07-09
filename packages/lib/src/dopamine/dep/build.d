@@ -30,9 +30,9 @@ in (!stageDest || isAbsolute(stageDest))
     foreach (const(DgNode) depNode; dag.traverseBottomUp())
     {
         const name = depNode.name;
-        const kind = depNode.kind;
+        const provider = depNode.provider;
 
-        auto service = services[depNode.kind];
+        auto service = services[depNode.provider];
         auto rdir = service.packRecipe(name, depNode.aver, depNode.revision);
         const prof = profile.subset(rdir.recipe.tools);
         auto opts = options.forDependency(name).union_(depNode.options);
@@ -41,7 +41,7 @@ in (!stageDest || isAbsolute(stageDest))
         const buildId = BuildId(rdir.recipe, conf, depInfos, stageDest);
         const bPaths = rdir.buildPaths(buildId);
 
-        res[kind, name] = DepBuildInfo(name, depNode.kind, depNode.ver, buildId, bPaths.install);
+        res[provider, name] = DepBuildInfo(name, depNode.provider, depNode.ver, buildId, bPaths.install);
     }
 
     return res;
@@ -60,10 +60,10 @@ DepGraphBuildInfo nodeDeepDepBuildInfos(DepGraphBuildInfo dgbi, const(DgNode) no
             continue;
 
         auto dbi = enforce(
-            dep.name in dgbi[dep.kind],
+            dep.name in dgbi[dep.provider],
             "No bbuild info for dependency " ~ dep.name);
 
-        res[dep.kind, dep.name] = *dbi;
+        res[dep.provider, dep.name] = *dbi;
     }
 
     return res;
@@ -78,7 +78,7 @@ DepBuildInfo[] nodeDirectDepBuildInfos(DepGraphBuildInfo dgbi, const(DgNode) nod
     foreach (de; node.downEdges)
     {
         auto dbi = enforce(
-            de.down.name in dgbi[de.down.kind],
+            de.down.name in dgbi[de.down.provider],
             "No build info for dependency " ~ de.down.name);
         res ~= *dbi;
     }
@@ -113,7 +113,7 @@ in (!stageDest || isAbsolute(stageDest))
         if (depNode.location.isSystem)
             continue;
 
-        auto service = services[depNode.kind];
+        auto service = services[depNode.provider];
 
         const pkgName = depNode.name;
         const isModule = pkgName.isModule;
@@ -186,9 +186,9 @@ in (!stageDest || isAbsolute(stageDest))
             logInfo("%s: Up-to-date (ID: %s)", info(packNameHead), color(Color.cyan, bid));
         }
 
-        logInfo("Adding %s dep %s", depNode.kind, depNode.name);
+        logInfo("Adding %s dep %s", depNode.provider, depNode.name);
 
-        res[depNode.kind, depNode.name] = DepBuildInfo(pkgName.name, depNode.kind, depNode.ver, bid, bPaths
+        res[depNode.provider, depNode.name] = DepBuildInfo(pkgName.name, depNode.provider, depNode.ver, bid, bPaths
                 .install);
     }
 
@@ -206,7 +206,7 @@ private string[] collectTools(DepGraph dag, DepServices services)
         if (depNode.location.isSystem)
             continue;
 
-        auto service = services[depNode.kind];
+        auto service = services[depNode.provider];
         auto drdir = service.getPackOrModuleRecipe(depNode.name, depNode.aver, depNode.revision);
         foreach (t; drdir.recipe.tools)
         {

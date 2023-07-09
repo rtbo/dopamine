@@ -6,7 +6,7 @@ package:
 import dopamine.dep.resolve;
 import dopamine.dep.spec;
 import dopamine.dep.service;
-import dopamine.recipe : DepSpec, DepKind, OptionSet, ResolveConfig;
+import dopamine.recipe : DepSpec, DepProvider, OptionSet, ResolveConfig;
 import dopamine.semver;
 
 import std.algorithm;
@@ -37,7 +37,7 @@ private JSONValue depGraphToJsonV1(DepGraph dag) @safe
         JSONValue[string] jnode;
 
         jnode["name"] = node.name;
-        jnode["kind"] = node.kind.to!string;
+        jnode["provider"] = node.provider.to!string;
         jnode["version"] = node.ver.toString();
 
         if (node.aver.location.isSystem)
@@ -64,11 +64,11 @@ private JSONValue depGraphToJsonV1(DepGraph dag) @safe
 
         jedge["up"] = [
             "name": edge.up.name,
-            "kind": edge.up.kind.to!string,
+            "provider": edge.up.provider.to!string,
         ];
         jedge["down"] = [
             "name": edge.down.name,
-            "kind": edge.down.kind.to!string,
+            "provider": edge.down.provider.to!string,
         ];
         jedge["spec"] = edge.spec.toString();
 
@@ -139,7 +139,7 @@ private DepGraph jsonToDepGraphV1(JSONValue json) @trusted
 
         auto jnode = jn.objectNoRef;
         node._name = jnode["name"].str;
-        node._kind = jnode["kind"].str.to!DepKind;
+        node._provider = jnode["provider"].str.to!DepProvider;
 
         // FIXME: location from service
         auto location = DepLocation.cache;
@@ -183,8 +183,8 @@ private DepGraph jsonToDepGraphV1(JSONValue json) @trusted
         auto edge = new DgEdge;
         auto jup = je["up"];
         auto jdown = je["down"];
-        const upKey = packKey(jup["name"].str, jup["kind"].str.to!DepKind);
-        const downKey = packKey(jdown["name"].str, jdown["kind"].str.to!DepKind);
+        const upKey = packKey(jup["name"].str, jup["provider"].str.to!DepProvider);
+        const downKey = packKey(jdown["name"].str, jdown["provider"].str.to!DepProvider);
         const spec = VersionSpec(je["spec"].str);
 
         auto up = nodes[upKey];

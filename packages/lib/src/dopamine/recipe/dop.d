@@ -527,7 +527,7 @@ DepSpec[] readDependencies(lua_State* L) @trusted
                 const ver = luaGetTable!string(L, -1, "version", null);
                 dep.spec = VersionSpec(enforce(ver,
                         format("'version' not specified for '%s' dependency", dep.name)));
-                dep.kind = luaGetTable!bool(L, -1, "dub", false) ? DepKind.dub : DepKind.dop;
+                dep.provider = luaGetTable!bool(L, -1, "dub", false) ? DepProvider.dub : DepProvider.dop;
                 if (lua_getfield(L, -1, "options") == LUA_TTABLE)
                 {
                     lua_pushnil(L);
@@ -933,7 +933,7 @@ void pushDepInfos(lua_State* L, DepGraphBuildInfo dgbi) @trusted
 
             lua_createtable(L, 0, 5);
             luaSetTable(L, -1, "name", di.name);
-            luaSetTable(L, -1, "kind", di.kind.to!string);
+            luaSetTable(L, -1, "provider", di.provider.to!string);
             luaSetTable(L, -1, "version", di.ver.toString());
             luaSetTable(L, -1, "build_id", di.buildId.toString());
             luaSetTable(L, -1, "install_dir", di.installDir);

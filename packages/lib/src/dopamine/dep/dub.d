@@ -143,7 +143,7 @@ final class DubRegistry
                 catch (Exception ex)
                     throw new IgnoreDubPkgVersion();
             }
-            res ~= DepSpec(k, spec, DepKind.dub);
+            res ~= DepSpec(k, spec, DepProvider.dub);
         }
         return res;
     }
