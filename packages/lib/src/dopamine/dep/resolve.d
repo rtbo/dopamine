@@ -412,12 +412,6 @@ public:
         return _revision;
     }
 
-    /// The dependencies specified by this package
-    @property const(DepSpec)[] deps() const
-    {
-        return _deps;
-    }
-
     /// The options for this node coming from the top of the graph.
     @property const(OptionSet) options() const
     {
@@ -457,7 +451,6 @@ package(dopamine.dep):
     DepProvider _provider;
     AvailVersion _aver;
     string _revision;
-    const(DepSpec)[] _deps;
     OptionSet _options;
     string[] _optionConflicts;
 
@@ -475,7 +468,6 @@ package(dopamine.dep):
         _provider = node.pack.provider;
         _aver = node.aver;
         _revision = node.revision;
-        _deps = node.deps;
         _options = node.options.dup;
         _optionConflicts = node.optionConflicts.dup;
     }
@@ -950,12 +942,6 @@ public:
         return _revision;
     }
 
-    /// The dependencies specified by this package
-    @property const(DepSpec)[] deps() const
-    {
-        return _deps;
-    }
-
     /// The options for this node coming from the top of the graph.
     /// This field is populated only once the graph is resolved.
     @property const(OptionSet) options() const
@@ -990,7 +976,6 @@ private:
     string _revision;
     OptionSet _options;
     string[] _optionConflicts;
-    const(DepSpec)[] _deps;
     IgEdge[] _downEdges;
 
     /// The DgNode created for this IgNode
@@ -1139,17 +1124,18 @@ IgPack igPrepare(RecipeDir rootRdir,
             return;
         visited ~= node;
 
+        const(DepSpec)[] deps;
         if (pack is root)
         {
-            node._deps = rootRdir.recipe.dependencies(config);
+            deps = rootRdir.recipe.dependencies(config);
         }
         else
         {
             auto service = services[rinfo.provider];
-            node._deps = service.packDependencies(config, rinfo.name, aver);
+            deps = service.packDependencies(config, rinfo.name, aver);
         }
 
-        foreach (dep; node.deps)
+        foreach (dep; deps)
         {
             auto service = services[dep.provider];
 
