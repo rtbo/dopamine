@@ -316,13 +316,13 @@ struct DepServices
     DepService dop;
     DepService dub;
 
-    DepService opIndex(DepKind kind) @safe
+    DepService opIndex(DepProvider provider) @safe
     {
-        final switch (kind)
+        final switch (provider)
         {
-        case DepKind.dop:
+        case DepProvider.dop:
             return dop;
-        case DepKind.dub:
+        case DepProvider.dub:
             return dub;
         }
     }

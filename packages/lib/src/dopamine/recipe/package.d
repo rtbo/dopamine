@@ -327,21 +327,21 @@ struct PackageName
     }
 }
 
-/// A kind of dependency
-enum DepKind
+/// A provider of dependency
+enum DepProvider
 {
     dop,
     dub,
 }
 
-@property bool isDop(DepKind kind) @safe
+@property bool isDop(DepProvider provider) @safe
 {
-    return kind == DepKind.dop;
+    return provider == DepProvider.dop;
 }
 
-@property bool isDub(DepKind kind) @safe
+@property bool isDub(DepProvider provider) @safe
 {
-    return kind == DepKind.dub;
+    return provider == DepProvider.dub;
 }
 
 /// A recipe dependency specification
@@ -351,26 +351,21 @@ struct DepSpec
 
     PackageName name;
     VersionSpec spec;
-    DepKind kind;
+    DepProvider provider;
     OptionSet options;
 
-    this(string name, VersionSpec spec, DepKind kind = DepKind.dop, OptionSet options = OptionSet
+    this(string name, VersionSpec spec, DepProvider provider = DepProvider.dop, OptionSet options = OptionSet
             .init) @safe
     {
         this.name = PackageName(name);
         this.spec = spec;
-        this.kind = kind;
+        this.provider = provider;
         this.options = options;
-    }
-
-    @property bool dub() const @safe
-    {
-        return kind.isDub;
     }
 
     @property DepSpec dup() const @safe
     {
-        return DepSpec(name, spec, kind, options.dup);
+        return DepSpec(name, spec, provider, options.dup);
     }
 
     /// If this spec is for a module, return the spec to the super package.
@@ -378,7 +373,7 @@ struct DepSpec
     @property const(DepSpec) pkgSpec() const @safe
     {
         if (name.isModule)
-            return DepSpec(PackageName(name.pkgName), spec, kind, options.dup);
+            return DepSpec(PackageName(name.pkgName), spec, provider, options.dup);
         else
             return this;
     }
@@ -395,7 +390,7 @@ struct DepSpec
         return DepSpec(
             jdep["name"].str,
             VersionSpec(jdep["spec"].str),
-        jdep["kind"].str.to!DepKind,
+        jdep["provider"].str.to!DepProvider,
         options
         );
     }
@@ -410,7 +405,7 @@ struct DepSpec
         JSONValue[string] json;
         json["name"] = name.toString();
         json["spec"] = spec.toString();
-        json["kind"] = kind.to!string;
+        json["provider"] = provider.to!string;
         if (options)
             json["options"] = options.toJson();
 
@@ -554,8 +549,8 @@ struct DepBuildInfo
 {
     /// The name of the dependency package
     string name;
-    /// The kind of dependency (whether it is a Dopamine or DUB dependency)
-    DepKind kind;
+    /// The provider of dependency (whether it is a Dopamine or DUB dependency)
+    DepProvider provider;
     /// The version of the dependency package
     Semver ver;
     /// The build-id of the dependency package
@@ -579,31 +574,31 @@ struct DepGraphBuildInfo
         return dop.length > 0 || dub.length > 0;
     }
 
-    DepBuildInfo[string] opIndex(DepKind kind)
+    DepBuildInfo[string] opIndex(DepProvider provider)
     {
-        final switch (kind)
+        final switch (provider)
         {
-        case DepKind.dop:
+        case DepProvider.dop:
             return dop;
-        case DepKind.dub:
+        case DepProvider.dub:
             return dub;
         }
     }
 
-    DepBuildInfo opIndexAssign(DepBuildInfo value, DepKind kind, string name)
+    DepBuildInfo opIndexAssign(DepBuildInfo value, DepProvider provider, string name)
     {
-        final switch (kind)
+        final switch (provider)
         {
-        case DepKind.dop:
+        case DepProvider.dop:
             return dop[name] = value;
-        case DepKind.dub:
+        case DepProvider.dub:
             return dub[name] = value;
         }
     }
 
-    DepBuildInfo opIndex(DepKind kind, string name)
+    DepBuildInfo opIndex(DepProvider provider, string name)
     {
-        return opIndex(kind)[name];
+        return opIndex(provider)[name];
     }
 
 
@@ -617,15 +612,15 @@ enum RecipeType
     dub,
 }
 
-@property DepKind toDepKind(RecipeType type) @safe
+@property DepProvider toDepProvider(RecipeType type) @safe
 {
     // not sure a one to one map will last forever
     final switch (type)
     {
     case RecipeType.dop:
-        return DepKind.dop;
+        return DepProvider.dop;
     case RecipeType.dub:
-        return DepKind.dub;
+        return DepProvider.dub;
     }
 }
 

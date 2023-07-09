@@ -6,7 +6,7 @@ package:
 import dopamine.dep.resolve;
 import dopamine.dep.spec;
 import dopamine.dep.service;
-import dopamine.recipe : DepSpec, DepKind, OptionSet, ResolveConfig;
+import dopamine.recipe : DepSpec, DepProvider, OptionSet, ResolveConfig;
 import dopamine.semver;
 
 import std.algorithm;
@@ -34,70 +34,48 @@ private JSONValue depGraphToJsonV1(DepGraph dag) @safe
 {
     JSONValue nodeToJson(const(DgNode) node) @safe
     {
-        JSONValue[string] jnode;
+        JSONValue[string] jpack;
 
-        jnode["name"] = node.name;
-        jnode["kind"] = node.kind.to!string;
-        jnode["version"] = node.ver.toString();
+        jpack["name"] = node.name;
+        jpack["provider"] = node.provider.to!string;
+        jpack["version"] = node.ver.toString();
 
         if (node.aver.location.isSystem)
-            jnode["system"] = true;
+            jpack["system"] = true;
 
         if (node.revision)
-            jnode["revision"] = node.revision;
+            jpack["revision"] = node.revision;
 
         JSONValue[] jdeps;
-        foreach (dep; node.deps)
-            jdeps ~= dep.toJson();
+        foreach (edge; node.downEdges)
+        {
+            JSONValue[string] jdep;
+            jdep["name"] = edge.down.name;
+            jdep["provider"] = edge.down.provider.to!string;
+            jdep["spec"] = edge.spec.toString();
+            jdeps ~= JSONValue(jdep);
+        }
         if (jdeps.length)
-            jnode["dependencies"] = jdeps;
+            jpack["dependencies"] = jdeps;
 
         if (node.options)
-            jnode["options"] = node.options.toJson();
+            jpack["options"] = node.options.toJson();
 
-        return JSONValue(jnode);
-    }
+        if (node is dag.root)
+            jpack["root"] = true;
 
-    JSONValue edgeToJson(const(DgEdge) edge) @safe
-    {
-        JSONValue[string] jedge;
-
-        jedge["up"] = [
-            "name": edge.up.name,
-            "kind": edge.up.kind.to!string,
-        ];
-        jedge["down"] = [
-            "name": edge.down.name,
-            "kind": edge.down.kind.to!string,
-        ];
-        jedge["spec"] = edge.spec.toString();
-
-        return JSONValue(jedge);
+        return JSONValue(jpack);
     }
 
     JSONValue[string] dagDict;
 
     dagDict["dopamine-lock-version"] = 1;
-
     dagDict["config"] = dag.config.toJson();
 
-    JSONValue[] jnodes;
-    JSONValue[] jedges;
-
-    foreach (const(DgNode) node; dag.traverseTopDown(Yes.root))
-    {
-        auto jnode = nodeToJson(node);
-
-        if (node is dag.root)
-            dagDict["root"] = jnode;
-        else
-            jnodes ~= jnode;
-
-        node.downEdges.each!(e => jedges ~= edgeToJson(e));
-    }
-
-    dagDict["nodes"] = jnodes;
-    dagDict["edges"] = jedges;
+    auto jpacks = dag.traverseTopDown(Yes.root)
+        .map!(n => nodeToJson(n))
+        .array;
+    dagDict["packages"] = JSONValue(jpacks);
 
     return JSONValue(dagDict);
 }
@@ -139,7 +117,7 @@ private DepGraph jsonToDepGraphV1(JSONValue json) @trusted
 
         auto jnode = jn.objectNoRef;
         node._name = jnode["name"].str;
-        node._kind = jnode["kind"].str.to!DepKind;
+        node._provider = jnode["provider"].str.to!DepProvider;
 
         // FIXME: location from service
         auto location = DepLocation.cache;
@@ -151,12 +129,6 @@ private DepGraph jsonToDepGraphV1(JSONValue json) @trusted
         if (auto jr = "revision" in jnode)
             node._revision = jr.str;
 
-        if (auto jd = "dependencies" in jnode)
-        {
-            foreach (jdep; jd.arrayNoRef)
-                node._deps ~= DepSpec.fromJson(jdep);
-        }
-
         if (auto jo = "options" in jnode)
             node._options = OptionSet.fromJson(*jo);
 
@@ -165,36 +137,48 @@ private DepGraph jsonToDepGraphV1(JSONValue json) @trusted
 
     const config = ResolveConfig.fromJson(json["config"]);
 
+    DgNode root;
     DgNode[string] nodes;
 
-    auto root = nodeFromJson(json["root"]);
-    nodes[packKey(root)] = root;
-
-    foreach (jn; json["nodes"].arrayNoRef)
+    foreach (jn; json["packages"].arrayNoRef)
     {
         auto node = nodeFromJson(jn);
         const key = packKey(node);
         assert(!(key in nodes));
         nodes[key] = node;
+        if (auto r = "root" in jn)
+        {
+            if (r.boolean)
+                root = node;
+        }
     }
 
-    foreach (je; json["edges"].arrayNoRef)
+    foreach (jup; json["packages"].arrayNoRef)
     {
-        auto edge = new DgEdge;
-        auto jup = je["up"];
-        auto jdown = je["down"];
-        const upKey = packKey(jup["name"].str, jup["kind"].str.to!DepKind);
-        const downKey = packKey(jdown["name"].str, jdown["kind"].str.to!DepKind);
-        const spec = VersionSpec(je["spec"].str);
+        if (auto jdeps = "dependencies" in jup)
+        {
+            const upKey = packKey(jup["name"].str, jup["provider"].str.to!DepProvider);
+            auto up = nodes[upKey];
 
-        auto up = nodes[upKey];
-        auto down = nodes[downKey];
-
-        edge._up = up;
-        up._downEdges ~= edge;
-        edge._down = down;
-        down._upEdges ~= edge;
-        edge._spec = spec;
+            foreach (jdown; jdeps.arrayNoRef)
+            {
+                const downKey = packKey(jdown["name"].str, jdown["provider"].str.to!DepProvider);
+                auto down = nodes[downKey];
+                auto edge = new DgEdge;
+                edge._spec = VersionSpec(jdown["spec"].str);
+                edge._up = up;
+                up._downEdges ~= edge;
+                edge._down = down;
+                down._upEdges ~= edge;
+                enforce(
+                    edge._spec.matchVersion(down.ver),
+                    new Exception(
+                        format!"Corrupted lock file: %s dependency specification %s %s doesn't match version %s "(
+                        up.name, down.name, edge._spec.toString(), down.ver
+                    )
+                ));
+            }
+        }
     }
 
     return DepGraph(root, config);

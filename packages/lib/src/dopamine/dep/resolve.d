@@ -382,10 +382,10 @@ public:
         return _name;
     }
 
-    /// The kind of this package
-    @property DepKind kind() const pure
+    /// The provider of this package
+    @property DepProvider provider() const pure
     {
-        return _kind;
+        return _provider;
     }
 
     /// The package version and location of this node
@@ -410,12 +410,6 @@ public:
     @property string revision() const pure
     {
         return _revision;
-    }
-
-    /// The dependencies specified by this package
-    @property const(DepSpec)[] deps() const
-    {
-        return _deps;
     }
 
     /// The options for this node coming from the top of the graph.
@@ -454,10 +448,9 @@ public:
 package(dopamine.dep):
 
     PackageName _name;
-    DepKind _kind;
+    DepProvider _provider;
     AvailVersion _aver;
     string _revision;
-    const(DepSpec)[] _deps;
     OptionSet _options;
     string[] _optionConflicts;
 
@@ -472,10 +465,9 @@ package(dopamine.dep):
     this(const(IgNode) node)
     {
         _name = PackageName(node.pack.name);
-        _kind = node.pack.kind;
+        _provider = node.pack.provider;
         _aver = node.aver;
         _revision = node.revision;
-        _deps = node.deps;
         _options = node.options.dup;
         _optionConflicts = node.optionConflicts.dup;
     }
@@ -644,7 +636,7 @@ void dgToDot(O)(const(DgNode) root, ref O output)
         foreach (node; root.dgTraverseTopDown(Yes.root))
         {
             string label = node.name.name;
-            if (node.kind.isDub)
+            if (node.provider.isDub)
                 label ~= " (DUB)";
             label ~= format!"\\n%s (%s)"(node.ver, node.aver.location);
             line(`%s [label="%s"]`, key(node), label);
@@ -781,9 +773,9 @@ public:
         return _name;
     }
 
-    @property DepKind kind() const
+    @property DepProvider provider() const
     {
-        return _kind;
+        return _provider;
     }
 
     @property const(AvailVersion)[] compatVersions() const
@@ -830,7 +822,7 @@ public:
 private:
 
     string _name;
-    DepKind _kind;
+    DepProvider _provider;
     // versions compatible with current resolution level
     AvailVersion[] _compatVersions;
 
@@ -849,15 +841,15 @@ private:
     // The node eventually resolved for this package
     IgNode _resolvedNode;
 
-    this(string name, DepKind kind)
+    this(string name, DepProvider provider)
     {
         _name = name;
-        _kind = kind;
+        _provider = provider;
     }
 
     static IgPack makeRoot(const(Recipe) recipe)
     {
-        auto root = new IgPack(recipe.name, recipe.type.toDepKind);
+        auto root = new IgPack(recipe.name, recipe.type.toDepProvider);
         root.addCompatVersions([AvailVersion(recipe.ver, DepLocation.cache)]);
         return root;
     }
@@ -926,10 +918,10 @@ public:
         return _pack.name;
     }
 
-    /// The kind of this package
-    @property DepKind kind() const
+    /// The provider of this package
+    @property DepProvider provider() const
     {
-        return _pack.kind;
+        return _pack.provider;
     }
 
     /// The package version and location of this node
@@ -948,12 +940,6 @@ public:
     @property string revision() const
     {
         return _revision;
-    }
-
-    /// The dependencies specified by this package
-    @property const(DepSpec)[] deps() const
-    {
-        return _deps;
     }
 
     /// The options for this node coming from the top of the graph.
@@ -990,7 +976,6 @@ private:
     string _revision;
     OptionSet _options;
     string[] _optionConflicts;
-    const(DepSpec)[] _deps;
     IgEdge[] _downEdges;
 
     /// The DgNode created for this IgNode
@@ -1048,19 +1033,19 @@ private:
     }
 }
 
-/// Package unique id from name and kind.
+/// Package unique id from name and provider.
 /// Used in intermediate graph preparation.
-package(dopamine.dep) string packKey(string name, DepKind kind) pure @safe
+package(dopamine.dep) string packKey(string name, DepProvider provider) pure @safe
 {
     import std.format : format;
 
-    return format!"%s__%s"(kind, name);
+    return format!"%s__%s"(provider, name);
 }
 
 /// ditto
 package(dopamine.dep) string packKey(const(DgNode) node) pure @safe
 {
-    return packKey(node.name.name, node.kind);
+    return packKey(node.name.name, node.provider);
 }
 
 /// First phase of dependency resolution.
@@ -1080,14 +1065,14 @@ IgPack igPrepare(RecipeDir rootRdir,
 
     IgPack preparePack(const(DepSpec) dep)
     {
-        auto service = services[dep.kind];
+        auto service = services[dep.provider];
 
         const superName = dep.name.pkgName;
-        const superId = packKey(superName, dep.kind);
+        const superId = packKey(superName, dep.provider);
         auto superPack = packs.get(superId, null);
         if (!superPack)
         {
-            superPack = new IgPack(superName, dep.kind);
+            superPack = new IgPack(superName, dep.provider);
             superPack.versionsCached = service.packAvailVersions(dep.name);
             packs[superId] = superPack;
         }
@@ -1100,11 +1085,11 @@ IgPack igPrepare(RecipeDir rootRdir,
         else
         {
             // sub-module
-            const id = packKey(dep.name, dep.kind);
+            const id = packKey(dep.name, dep.provider);
             pack = packs.get(id, null);
             if (!pack)
             {
-                pack = new IgPack(dep.name, dep.kind);
+                pack = new IgPack(dep.name, dep.provider);
                 pack.superPack = superPack;
                 superPack.modPacks ~= pack;
                 packs[id] = pack;
@@ -1128,7 +1113,7 @@ IgPack igPrepare(RecipeDir rootRdir,
     struct RecipeInfo
     {
         string name;
-        DepKind kind;
+        DepProvider provider;
     }
 
     void doPackVersion(RecipeInfo rinfo, IgPack pack, AvailVersion aver)
@@ -1139,19 +1124,20 @@ IgPack igPrepare(RecipeDir rootRdir,
             return;
         visited ~= node;
 
+        const(DepSpec)[] deps;
         if (pack is root)
         {
-            node._deps = rootRdir.recipe.dependencies(config);
+            deps = rootRdir.recipe.dependencies(config);
         }
         else
         {
-            auto service = services[rinfo.kind];
-            node._deps = service.packDependencies(config, rinfo.name, aver);
+            auto service = services[rinfo.provider];
+            deps = service.packDependencies(config, rinfo.name, aver);
         }
 
-        foreach (dep; node.deps)
+        foreach (dep; deps)
         {
-            auto service = services[dep.kind];
+            auto service = services[dep.provider];
 
             auto ip = preparePack(dep);
             IgEdge.create(node, ip, dep.spec);
@@ -1169,12 +1155,12 @@ IgPack igPrepare(RecipeDir rootRdir,
                     continue;
                 }
 
-                doPackVersion(RecipeInfo(dep.name, dep.kind), ip, dv);
+                doPackVersion(RecipeInfo(dep.name, dep.provider), ip, dv);
             }
         }
     }
 
-    const rootInfo = RecipeInfo(rootRdir.recipe.name, rootRdir.recipe.type.toDepKind);
+    const rootInfo = RecipeInfo(rootRdir.recipe.name, rootRdir.recipe.type.toDepProvider);
 
     doPackVersion(rootInfo, root, root.compatVersions[0]);
 
@@ -1198,7 +1184,7 @@ in (root.nodes.length == 1)
             if (dep.resolvedNode)
                 continue;
 
-            auto service = services[dep.kind];
+            auto service = services[dep.provider];
 
             if (dep.superPack && dep.superPack.resolvedNode)
             {
@@ -1207,7 +1193,7 @@ in (root.nodes.length == 1)
                 auto rn = dep.getNode(resolved);
                 assert(rn, "Version discrepancy between submodule and its super-package");
                 string revision = dep.superPack.resolvedNode.revision;
-                if (!revision.length && dep.kind.isDop)
+                if (!revision.length && dep.provider.isDop)
                 {
                     auto rdir = service.packRecipe(dep.superPack.name, rn.aver);
                     revision = rdir.recipe.revision;
@@ -1223,7 +1209,7 @@ in (root.nodes.length == 1)
                 const resolved = heuristics.chooseVersion(dep.name, consideredVersions);
                 auto rn = dep.getNode(resolved);
                 assert(rn);
-                if (dep.kind.isDop && !resolved.location.isSystem)
+                if (dep.provider.isDop && !resolved.location.isSystem)
                 {
                     auto rdir = service.packRecipe(dep.name, rn.aver);
                     rn._revision = rdir.recipe.revision;
