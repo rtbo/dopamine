@@ -179,12 +179,13 @@ class AuthApi
                     break;
             }
 
-            // insert new user if email is not in database
+            // upsert user in database
             const userRow = db.execRow!UserRow(
                 `
                     INSERT INTO "user" (pseudo, email, name, avatar_url)
                     VALUES ($1, $2, $3, $4)
-                    ON CONFLICT(email) DO NOTHING
+                    ON CONFLICT(email) DO UPDATE
+                        SET pseudo=EXCLUDED.pseudo, name=EXCLUDED.name, avatar_url=EXCLUDED.avatar_url
                     RETURNING id, pseudo, email, name, avatar_url
                 `, userResp.pseudo, userResp.email, userResp.name, userResp.avatarUrl
             );
