@@ -391,6 +391,35 @@ class PgConn
     }
 
     /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
+    /// expecting either a single or no row result.
+    /// Result row is converted to the provided struct type.
+    MayBe!R getMayBeRow(R)() @trusted if (isRow!R)
+    {
+        auto res = getLastResult();
+        scope (exit)
+            PQclear(res);
+        scope (exit)
+            lastSql = null;
+
+        const status = PQresultStatus(res);
+        if (status.isError)
+            badExecution(res, lastSql);
+
+        if (PQntuples(res) == 0)
+            return MayBe!R(null);
+        if (PQntuples(res) > 1)
+            badResultLayout("Expected a single row", res);
+
+        mixin(generateColIndexStruct!R());
+        _ColIndices colInds = void;
+        fillColIndices!R(res, colInds);
+
+        auto row = convRow!R(colInds, 0, res);
+
+        return MayBe!R(row);
+    }
+
+    /// Wait for completion of a previously sent query (with `send` or `sendDyn`)
     /// expecting zero or many rows result.
     /// Result rows are converted to the provided struct type.
     R[] getRows(R)() @trusted if (isRow!R)
@@ -598,6 +627,15 @@ class PgConn
         sendPriv!true(sql, args);
         pollResult();
         return getRow!R();
+    }
+
+    /// Execute a SQL statement expecting a single row result.
+    /// Result row is converted to the provided struct type.
+    MayBe!R execMayBeRow(R, Args...)(string sql, Args args) scope @trusted if (isRow!R)
+    {
+        sendPriv!true(sql, args);
+        pollResult();
+        return getMayBeRow!R();
     }
 
     /// Execute a SQL statement expecting a zero or many row result.
